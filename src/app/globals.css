@@ -1,26 +1,245 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:is(.dark *));
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #000000;
+  --foreground: #f1f5f9;
+  --card: rgba(20, 20, 20, 0.85);
+  --card-foreground: #f1f5f9;
+  --popover: rgba(20, 20, 20, 0.85);
+  --popover-foreground: #f1f5f9;
+  --primary: #3b82f6;
+  --primary-foreground: #ffffff;
+  --secondary: #1e40af;
+  --secondary-foreground: #f1f5f9;
+  --muted: #1a1a1a;
+  --muted-foreground: #94a3b8;
+  --accent: #2563eb;
+  --accent-foreground: #ffffff;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #333333;
+  --input: #333333;
+  --ring: #3b82f6;
+  --radius: 0.5rem;
+  --sidebar: #000000;
+  --sidebar-foreground: #f1f5f9;
+  --sidebar-primary: #3b82f6;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1e40af;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #333333;
+  --sidebar-ring: #3b82f6;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --font-sans: var(--font-inter), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-inter), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.dark {
+  --background: #000000;
+  --foreground: #f1f5f9;
+  --card: rgba(20, 20, 20, 0.85);
+  --card-foreground: #f1f5f9;
+  --popover: rgba(20, 20, 20, 0.85);
+  --popover-foreground: #f1f5f9;
+  --primary: #3b82f6;
+  --primary-foreground: #ffffff;
+  --secondary: #1e40af;
+  --secondary-foreground: #f1f5f9;
+  --muted: #1a1a1a;
+  --muted-foreground: #94a3b8;
+  --accent: #2563eb;
+  --accent-foreground: #ffffff;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #333333;
+  --input: #333333;
+  --ring: #3b82f6;
+  --sidebar: #000000;
+  --sidebar-foreground: #f1f5f9;
+  --sidebar-primary: #3b82f6;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1e40af;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #333333;
+  --sidebar-ring: #3b82f6;
+}
+
+:root:not(.dark) {
+  --background: #f5f5f7;
+  --foreground: #1a1a1a;
+  --card: rgba(255, 255, 255, 0.85);
+  --card-foreground: #1a1a1a;
+  --popover: rgba(255, 255, 255, 0.95);
+  --popover-foreground: #1a1a1a;
+  --primary: #3b82f6;
+  --primary-foreground: #ffffff;
+  --secondary: #1e40af;
+  --secondary-foreground: #ffffff;
+  --muted: #e5e5e7;
+  --muted-foreground: #6b7280;
+  --accent: #2563eb;
+  --accent-foreground: #ffffff;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #d1d5db;
+  --input: #e5e7eb;
+  --ring: #3b82f6;
+  --sidebar: #fafafa;
+  --sidebar-foreground: #1a1a1a;
+  --sidebar-primary: #3b82f6;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1e40af;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #e5e7eb;
+  --sidebar-ring: #3b82f6;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  *:focus-visible {
+    outline-color: color-mix(in srgb, var(--ring) 50%, transparent);
+  }
+  html,
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    /* Hide scrollbars globally while maintaining scroll functionality */
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar {
+    display: none;  /* Chrome, Safari and Opera */
+  }
+  /* Hide scrollbars on all elements (universal) */
+  *::-webkit-scrollbar {
+    display: none;  /* Chrome, Safari and Opera */
+  }
+  * {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+}
+
+@layer utilities {
+  /* Hide scrollbar but keep scrolling functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;  /* Chrome, Safari and Opera */
+  }
+  
+  /* Ensure sidebar text is completely hidden when collapsed - even on hover */
+  .sidebar-collapsed [data-sidebar="menu-button"] > span,
+  .sidebar-collapsed [data-sidebar="menu-button"]:hover > span,
+  .sidebar-collapsed [data-sidebar="menu-button"]:focus > span,
+  .sidebar-collapsed [data-sidebar="menu-button"]:active > span,
+  .sidebar-collapsed [data-sidebar="menu-item"]:hover [data-sidebar="menu-button"] > span,
+  .sidebar-collapsed [data-sidebar="menu-item"]:focus [data-sidebar="menu-button"] > span,
+  .sidebar-collapsed [data-sidebar="menu-sub-button"] > span,
+  .sidebar-collapsed [data-sidebar="menu-sub-button"]:hover > span,
+  .sidebar-collapsed [data-sidebar="menu-sub"] {
+    display: none !important;
+    width: 0 !important;
+    max-width: 0 !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    overflow: hidden !important;
+    position: absolute !important;
+    visibility: hidden !important;
+    font-size: 0 !important;
+    line-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  
+  .sidebar-collapsed [data-sidebar="group-label"],
+  .sidebar-collapsed [data-sidebar="group-label"]:hover {
+    display: none !important;
+    opacity: 0 !important;
+    margin-top: -2rem !important;
+    height: 0 !important;
+    overflow: hidden !important;
+    visibility: hidden !important;
+  }
+  
+  /* Also target by data-collapsed attribute for extra safety */
+  [data-collapsed="true"] [data-sidebar="menu-button"] > span,
+  [data-collapsed="true"] [data-sidebar="menu-button"]:hover > span,
+  [data-collapsed="true"] [data-sidebar="menu-button"]:focus > span,
+  [data-collapsed="true"] [data-sidebar="menu-button"]:active > span,
+  [data-collapsed="true"] [data-sidebar="menu-item"]:hover [data-sidebar="menu-button"] > span,
+  [data-collapsed="true"] [data-sidebar="menu-item"]:focus [data-sidebar="menu-button"] > span,
+  [data-collapsed="true"] [data-sidebar="menu-sub-button"] > span,
+  [data-collapsed="true"] [data-sidebar="menu-sub-button"]:hover > span,
+  [data-collapsed="true"] [data-sidebar="menu-sub"] {
+    display: none !important;
+    width: 0 !important;
+    max-width: 0 !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    overflow: hidden !important;
+    position: absolute !important;
+    visibility: hidden !important;
+    font-size: 0 !important;
+    line-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  
+  [data-collapsed="true"] [data-sidebar="group-label"],
+  [data-collapsed="true"] [data-sidebar="group-label"]:hover {
+    display: none !important;
+    opacity: 0 !important;
+    margin-top: -2rem !important;
+    height: 0 !important;
+    overflow: hidden !important;
+    visibility: hidden !important;
+  }
 }
