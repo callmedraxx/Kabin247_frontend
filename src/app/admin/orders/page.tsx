@@ -204,6 +204,9 @@ interface Caterer {
   caterer_name: string
   caterer_email: string | null
   caterer_number: string | null
+  airport_code_iata?: string | null
+  airport_code_icao?: string | null
+  time_zone?: string | null
 }
 
 interface Airport {
@@ -420,10 +423,20 @@ function OrdersContent() {
   }, [clients])
 
   const catererOptions = React.useMemo(() => {
-    return caterers.map((caterer) => ({
+  return caterers.map((caterer) => {
+    const airportCode = caterer.airport_code_iata || caterer.airport_code_icao
+    const label = airportCode
+      ? `${airportCode} - ${caterer.caterer_name}`
+      : caterer.caterer_name
+
+    return {
       value: caterer.caterer_name,
-      label: caterer.caterer_name,
-    }))
+      label,
+      searchText: airportCode
+        ? `${caterer.caterer_name.toLowerCase()} ${airportCode.toLowerCase()}`
+        : caterer.caterer_name.toLowerCase(),
+    }
+  })
   }, [caterers])
 
   const airportOptions = React.useMemo(() => {
