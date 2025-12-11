@@ -18,6 +18,9 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 
+// Maximum items to show initially to prevent rendering lag
+const MAX_INITIAL_ITEMS = 50
+
 interface ComboboxProps {
   options: { value: string; label: string; searchText?: string }[]
   value?: string
@@ -29,6 +32,7 @@ interface ComboboxProps {
   addNewLabel?: string
   onSearchChange?: (search: string) => void
   isLoading?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
 export function Combobox({
@@ -42,9 +46,12 @@ export function Combobox({
   addNewLabel = "Add New",
   onSearchChange,
   isLoading = false,
+  onOpenChange,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
   const [search, setSearch] = React.useState("")
+  // Track if the list is ready to render (for deferred rendering)
+  const [isListReady, setIsListReady] = React.useState(false)
 
   const selectedOption = options.find((option) => option.value === value)
 
@@ -60,6 +67,32 @@ export function Combobox({
       return option.label.toLowerCase().includes(query)
     })
   }, [options, search])
+  
+  // Limit displayed options to prevent rendering lag
+  // Show all when searching, limit when showing full list
+  const displayedOptions = React.useMemo(() => {
+    if (search.trim()) {
+      // When searching, show all filtered results (usually much smaller)
+      return filteredOptions
+    }
+    // When not searching, limit to MAX_INITIAL_ITEMS
+    return filteredOptions.slice(0, MAX_INITIAL_ITEMS)
+  }, [filteredOptions, search])
+  
+  const hasMoreItems = !search.trim() && filteredOptions.length > MAX_INITIAL_ITEMS
+  
+  // Defer list rendering to allow popover to open immediately
+  React.useEffect(() => {
+    if (open) {
+      // Reset ready state when opening
+      setIsListReady(false)
+      // Use requestAnimationFrame to defer rendering after popover is visible
+      const frame = requestAnimationFrame(() => {
+        setIsListReady(true)
+      })
+      return () => cancelAnimationFrame(frame)
+    }
+  }, [open])
 
   // Debounce search change callback to prevent too many API calls
   React.useEffect(() => {
@@ -84,6 +117,8 @@ export function Combobox({
       if (!newOpen) {
         setSearch("")
       }
+      // Call the onOpenChange callback if provided
+      onOpenChange?.(newOpen)
     }}>
       <PopoverTrigger asChild>
         <Button
@@ -98,14 +133,8 @@ export function Combobox({
             open && "border-primary/50 ring-2 ring-primary/20 shadow-md",
             !selectedOption && "text-muted-foreground"
           )}
-          disabled={isLoading}
         >
-          {isLoading ? (
-            <span className="flex items-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading...
-            </span>
-          ) : selectedOption ? (
+          {selectedOption ? (
             <span className="truncate text-foreground">{selectedOption.label}</span>
           ) : (
             <span>{placeholder}</span>
@@ -147,12 +176,12 @@ export function Combobox({
             />
           </div>
           <CommandList className="max-h-[280px] overflow-y-auto scrollbar-hide">
-            {isLoading ? (
+            {isLoading || !isListReady ? (
               <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Loading options...
               </div>
-            ) : filteredOptions.length === 0 ? (
+            ) : displayedOptions.length === 0 ? (
               <CommandEmpty>
                 <div className="py-6 text-center">
                   <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted/50 mx-auto mb-3">
@@ -177,7 +206,7 @@ export function Combobox({
               </CommandEmpty>
             ) : (
               <CommandGroup className="p-1.5">
-                {filteredOptions.map((option, index) => (
+                {displayedOptions.map((option) => (
                   <CommandItem
                     key={option.value}
                     value={option.searchText || option.label}
@@ -192,9 +221,7 @@ export function Combobox({
                       "hover:bg-muted hover:text-foreground",
                       "data-[selected=true]:bg-primary/10 data-[selected=true]:text-primary",
                       value === option.value && "bg-primary/10 text-primary font-medium",
-                      "animate-in fade-in-0 slide-in-from-left-1",
                     )}
-                    style={{ animationDelay: `${index * 20}ms` }}
                   >
                     <div className={cn(
                       "flex h-5 w-5 items-center justify-center rounded-md transition-all duration-150",
@@ -210,6 +237,11 @@ export function Combobox({
                     <span className="truncate">{option.label}</span>
                   </CommandItem>
                 ))}
+                {hasMoreItems && (
+                  <div className="px-3 py-2 text-xs text-muted-foreground text-center border-t border-border/30 mt-1.5">
+                    Showing {MAX_INITIAL_ITEMS} of {filteredOptions.length} • Type to search for more
+                  </div>
+                )}
                 {onAddNew && (
                   <>
                     <div className="my-1.5 h-px bg-border/30" />

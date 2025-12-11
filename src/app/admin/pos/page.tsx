@@ -413,17 +413,27 @@ function POSContent() {
       const data: CaterersResponse = await response.json()
       setCaterersData(data.caterers || [])
       
-      // Format for combobox with search text (name + airport codes)
+      // Format for combobox with airport code prefix (same format as airports)
       const options = (data.caterers || []).map((caterer) => {
         const airportCodes = [
           caterer.airport_code_iata,
           caterer.airport_code_icao,
-        ].filter(Boolean).join(", ")
+        ].filter(Boolean).join("/")
+        
+        // Display format: "CODE - Caterer Name" or "Caterer Name" if no codes
+        let label = ""
+        if (airportCodes) {
+          label = `${airportCodes} - ${caterer.caterer_name}`
+        } else {
+          label = caterer.caterer_name
+        }
+        
+        // Search text includes both name and codes
         const searchText = `${caterer.caterer_name} ${airportCodes}`.toLowerCase()
         
         return {
           value: caterer.id.toString(),
-          label: caterer.caterer_name,
+          label,
           searchText,
         }
       })
@@ -558,11 +568,11 @@ function POSContent() {
     }
   }, [])
   
-  // Initial fetch on mount
+  // Initial fetch on mount - show loading indicators for better UX
   React.useEffect(() => {
     fetchClients()
-    fetchCaterers()
-    fetchAirports()
+    fetchCaterers(undefined, true) // Show loading indicator
+    fetchAirports(undefined, true) // Show loading indicator
     fetchMenuItems()
   }, [fetchClients, fetchCaterers, fetchAirports, fetchMenuItems])
   
@@ -605,6 +615,19 @@ function POSContent() {
       return () => clearTimeout(timer)
     }
   }, [menuItemSearch, fetchMenuItems])
+  
+  // Handlers for combobox open events - fetch data if empty
+  const handleCatererComboboxOpen = React.useCallback((open: boolean) => {
+    if (open && catererOptions.length === 0 && !isLoadingCaterers) {
+      fetchCaterers(undefined, true)
+    }
+  }, [catererOptions.length, isLoadingCaterers, fetchCaterers])
+  
+  const handleAirportComboboxOpen = React.useCallback((open: boolean) => {
+    if (open && airportOptions.length === 0 && !isLoadingAirports) {
+      fetchAirports(undefined, true)
+    }
+  }, [airportOptions.length, isLoadingAirports, fetchAirports])
   
   // Filter options based on search (for client-side filtering when server-side search is not enough)
   // Note: Server-side search is already done via fetchCaterers/fetchAirports, but we also filter
@@ -1287,6 +1310,7 @@ function POSContent() {
                                         addNewLabel="Add New Caterer"
                                         onSearchChange={setCatererSearch}
                                         isLoading={isLoadingCaterers}
+                                        onOpenChange={handleCatererComboboxOpen}
                                       />
                                     </FormControl>
                                     <FormMessage />
@@ -1311,6 +1335,8 @@ function POSContent() {
                                         onAddNew={() => setAirportDialogOpen(true)}
                                         addNewLabel="Add New Airport"
                                         onSearchChange={setAirportSearch}
+                                        isLoading={isLoadingAirports}
+                                        onOpenChange={handleAirportComboboxOpen}
                                       />
                                     </FormControl>
                                     <FormMessage />
