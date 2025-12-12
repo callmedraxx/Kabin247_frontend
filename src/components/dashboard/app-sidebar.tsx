@@ -128,6 +128,10 @@ const navMain = [
         title: "Airports",
         url: "/admin/airports",
       },
+      {
+        title: "FBOs",
+        url: "/admin/fbos",
+      },
     ],
   },
 ]

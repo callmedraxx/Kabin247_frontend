@@ -47,7 +47,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Combobox } from "@/components/ui/combobox"
 import {
   Plus,
   Edit,
@@ -55,7 +54,7 @@ import {
   Download,
   Upload,
   MoreHorizontal,
-  ChefHat,
+  Building2,
   Phone,
   Mail,
   Code,
@@ -69,7 +68,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ArrowUpDown,
-  Clock,
+  Plane,
 } from "lucide-react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -86,31 +85,22 @@ import { toast } from "sonner"
 
 import { API_BASE_URL } from "@/lib/api-config"
 
-// Caterer data structure matching API response
-interface Caterer {
+// FBO data structure matching API response
+interface FBO {
   id: number
-  caterer_name: string
-  caterer_number: string
-  caterer_email: string | null
+  fbo_name: string
+  fbo_email: string | null
+  fbo_phone: string | null
   airport_code_iata: string | null
   airport_code_icao: string | null
-  time_zone: string | null
+  airport_name: string | null
   created_at: string
   updated_at: string
 }
 
-// Airport data structure matching API response
-interface Airport {
-  id: number
-  airport_name: string
-  fbo_name: string
-  airport_code_iata: string | null
-  airport_code_icao: string | null
-}
-
 // API Response types
-interface CaterersResponse {
-  caterers: Caterer[]
+interface FBOsResponse {
+  fbos: FBO[]
   total: number
   page?: number
   limit: number
@@ -128,33 +118,18 @@ interface BulkDeleteResponse {
   deleted: number
 }
 
-interface AirportsResponse {
-  airports: Airport[]
-  total: number
-}
-
 // Form schema
-const catererSchema = z.object({
-  caterer_name: z.string().min(1, "Caterer name is required"),
-  caterer_number: z.string().min(1, "Caterer number is required"),
-  caterer_email: z.string().email("Invalid email address").optional().or(z.literal("")),
-  airport_code_iata: z.string().length(3, "IATA code must be exactly 3 characters").optional().or(z.literal("")),
-  airport_code_icao: z.string().length(4, "ICAO code must be exactly 4 characters").optional().or(z.literal("")),
-  time_zone: z.string().optional(),
+const fboSchema = z.object({
+  fbo_name: z.string().min(1, "FBO name is required"),
+  fbo_email: z.string().email("Invalid email address").optional().or(z.literal("")),
+  fbo_phone: z.string().optional(),
 })
 
-type CatererFormValues = z.infer<typeof catererSchema>
+type FBOFormValues = z.infer<typeof fboSchema>
 
-// Helper function to decode HTML entities
-const decodeHtmlEntities = (text: string): string => {
-  const textarea = document.createElement("textarea")
-  textarea.innerHTML = text
-  return textarea.value
-}
-
-function CaterersContent() {
-  const [caterers, setCaterers] = React.useState<Caterer[]>([])
-  const [selectedCaterers, setSelectedCaterers] = React.useState<Set<number>>(new Set())
+function FBOsContent() {
+  const [fbos, setFBOs] = React.useState<FBO[]>([])
+  const [selectedFBOs, setSelectedFBOs] = React.useState<Set<number>>(new Set())
   const [searchQuery, setSearchQuery] = React.useState("")
   const [isLoading, setIsLoading] = React.useState(true)
   const [isDeleting, setIsDeleting] = React.useState(false)
@@ -171,36 +146,26 @@ function CaterersContent() {
   
   // Dialog states
   const [dialogOpen, setDialogOpen] = React.useState(false)
-  const [editingCaterer, setEditingCaterer] = React.useState<Caterer | null>(null)
+  const [editingFBO, setEditingFBO] = React.useState<FBO | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
-  const [catererToDelete, setCatererToDelete] = React.useState<Caterer | null>(null)
+  const [fboToDelete, setFboToDelete] = React.useState<FBO | null>(null)
   const [viewDrawerOpen, setViewDrawerOpen] = React.useState(false)
-  const [viewingCaterer, setViewingCaterer] = React.useState<Caterer | null>(null)
+  const [viewingFBO, setViewingFBO] = React.useState<FBO | null>(null)
   const [importDialogOpen, setImportDialogOpen] = React.useState(false)
   const [importErrors, setImportErrors] = React.useState<string[]>([])
   const fileInputRef = React.useRef<HTMLInputElement>(null)
-  
-  // Airport selection state
-  const [airportsData, setAirportsData] = React.useState<Airport[]>([])
-  const [airportOptions, setAirportOptions] = React.useState<{ value: string; label: string; searchText?: string }[]>([])
-  const [selectedAirport, setSelectedAirport] = React.useState<number | undefined>(undefined)
-  const [airportSearch, setAirportSearch] = React.useState("")
-  const [isLoadingAirports, setIsLoadingAirports] = React.useState(false)
 
-  const form = useForm<CatererFormValues>({
-    resolver: zodResolver(catererSchema),
+  const form = useForm<FBOFormValues>({
+    resolver: zodResolver(fboSchema),
     defaultValues: {
-      caterer_name: "",
-      caterer_number: "",
-      caterer_email: "",
-      airport_code_iata: "",
-      airport_code_icao: "",
-      time_zone: "",
+      fbo_name: "",
+      fbo_email: "",
+      fbo_phone: "",
     },
   })
 
-  // Fetch caterers from API
-  const fetchCaterers = React.useCallback(async () => {
+  // Fetch FBOs from API
+  const fetchFBOs = React.useCallback(async () => {
     setIsLoading(true)
     setError(null)
     
@@ -214,20 +179,20 @@ function CaterersContent() {
       params.append("page", page.toString())
       params.append("limit", limit.toString())
 
-      const response = await fetch(`${API_BASE_URL}/caterers?${params.toString()}`)
+      const response = await fetch(`${API_BASE_URL}/fbos?${params.toString()}`)
       
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch caterers" }))
+        const errorData = await response.json().catch(() => ({ error: "Failed to fetch FBOs" }))
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
       }
 
-      const data: CaterersResponse = await response.json()
-      setCaterers(data.caterers)
+      const data: FBOsResponse = await response.json()
+      setFBOs(data.fbos)
       setTotal(data.total)
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to fetch caterers"
+      const errorMessage = err instanceof Error ? err.message : "Failed to fetch FBOs"
       setError(errorMessage)
-      toast.error("Error loading caterers", {
+      toast.error("Error loading FBOs", {
         description: errorMessage,
       })
     } finally {
@@ -235,123 +200,16 @@ function CaterersContent() {
     }
   }, [searchQuery, sortBy, sortOrder, page, limit])
 
-  // Fetch airports from API
-  const fetchAirports = React.useCallback(async (search?: string, showLoading = false) => {
-    if (showLoading) setIsLoadingAirports(true)
-    try {
-      const params = new URLSearchParams()
-      if (search?.trim()) {
-        params.append("search", search.trim())
-      }
-      params.append("limit", "1000")
-      
-      const response = await fetch(`${API_BASE_URL}/airports?${params.toString()}`)
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch airports" }))
-        toast.error("Failed to load airports", {
-          description: errorData.error || `HTTP error! status: ${response.status}`,
-        })
-        return
-      }
-      
-      const data: AirportsResponse = await response.json()
-      setAirportsData(data.airports || [])
-      
-      // Format for combobox - codes first, then airport name
-      const options = (data.airports || []).map((airport) => {
-        const codes = [
-          airport.airport_code_iata,
-          airport.airport_code_icao,
-        ].filter(Boolean).join("/")
-        
-        // Decode HTML entities in airport name
-        const decodedAirportName = decodeHtmlEntities(airport.airport_name)
-        
-        // Display format: "CODE - Airport Name" or "Airport Name" if no codes
-        let label = ""
-        if (codes) {
-          label = `${codes} - ${decodedAirportName}`
-        } else {
-          label = decodedAirportName
-        }
-        
-        // Search text includes codes and decoded airport name
-        const searchText = `${codes} ${decodedAirportName}`.toLowerCase()
-        
-        return {
-          value: airport.id.toString(),
-          label,
-          searchText,
-        }
-      })
-      
-      // Sort: airports with codes first
-      options.sort((a, b) => {
-        const aHasCode = a.searchText?.includes("/") || false
-        const bHasCode = b.searchText?.includes("/") || false
-        if (aHasCode && !bHasCode) return -1
-        if (!aHasCode && bHasCode) return 1
-        return 0
-      })
-      
-      setAirportOptions(options)
-    } catch (err) {
-      // Handle network errors gracefully
-      if (err instanceof TypeError && (err.message === "Failed to fetch" || err.message.includes("fetch"))) {
-        console.warn(`Network error fetching airports from ${API_BASE_URL}/airports - this may be expected if backend is not running`)
-      } else {
-        console.error("Unexpected error fetching airports:", err)
-      }
-    } finally {
-      if (showLoading) setIsLoadingAirports(false)
-    }
-  }, [])
-
-  // Fetch caterers on mount and when dependencies change
+  // Fetch FBOs on mount and when dependencies change
   React.useEffect(() => {
-    fetchCaterers()
-  }, [fetchCaterers])
-  
-  // Fetch airports when dialog opens
-  React.useEffect(() => {
-    if (dialogOpen && airportOptions.length === 0 && !isLoadingAirports) {
-      fetchAirports(undefined, true)
-    }
-  }, [dialogOpen, airportOptions.length, isLoadingAirports, fetchAirports])
-  
-  // Handle airport search
-  React.useEffect(() => {
-    if (airportSearch.trim()) {
-      const timer = setTimeout(() => {
-        fetchAirports(airportSearch, true)
-      }, 300)
-      return () => clearTimeout(timer)
-    } else if (airportSearch === "") {
-      fetchAirports(undefined, false)
-    }
-  }, [airportSearch, fetchAirports])
-  
-  // Filter airport options based on search
-  const filteredAirportOptions = React.useMemo(() => {
-    if (!airportSearch.trim()) return airportOptions
-    const query = airportSearch.toLowerCase()
-    return airportOptions.filter((option) =>
-      option.searchText?.includes(query) || option.label.toLowerCase().includes(query)
-    )
-  }, [airportOptions, airportSearch])
-  
-  // Handle airport combobox open
-  const handleAirportComboboxOpen = React.useCallback((open: boolean) => {
-    if (open && airportOptions.length === 0 && !isLoadingAirports) {
-      fetchAirports(undefined, true)
-    }
-  }, [airportOptions.length, isLoadingAirports, fetchAirports])
+    fetchFBOs()
+  }, [fetchFBOs])
 
   // Debounce search
   React.useEffect(() => {
     const timer = setTimeout(() => {
       setPage(1) // Reset to first page on search
-      fetchCaterers()
+      fetchFBOs()
     }, 500)
 
     return () => clearTimeout(timer)
@@ -360,79 +218,64 @@ function CaterersContent() {
   // Handle select all
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedCaterers(new Set(caterers.map((c) => c.id)))
+      setSelectedFBOs(new Set(fbos.map((f) => f.id)))
     } else {
-      setSelectedCaterers(new Set())
+      setSelectedFBOs(new Set())
     }
   }
 
   // Handle individual selection
   const handleSelect = (id: number, checked: boolean) => {
-    const newSelected = new Set(selectedCaterers)
+    const newSelected = new Set(selectedFBOs)
     if (checked) {
       newSelected.add(id)
     } else {
       newSelected.delete(id)
     }
-    setSelectedCaterers(newSelected)
+    setSelectedFBOs(newSelected)
   }
 
   // Open add dialog
   const handleAdd = () => {
-    setEditingCaterer(null)
-    setSelectedAirport(undefined)
+    setEditingFBO(null)
     form.reset({
-      caterer_name: "",
-      caterer_number: "",
-      caterer_email: "",
-      airport_code_iata: "",
-      airport_code_icao: "",
-      time_zone: "",
+      fbo_name: "",
+      fbo_email: "",
+      fbo_phone: "",
     })
     setDialogOpen(true)
   }
 
   // Open edit dialog
-  const handleEdit = (caterer: Caterer) => {
-    setEditingCaterer(caterer)
-    setSelectedAirport(undefined) // Reset airport selection on edit
+  const handleEdit = (fbo: FBO) => {
+    setEditingFBO(fbo)
     form.reset({
-      caterer_name: caterer.caterer_name,
-      caterer_number: caterer.caterer_number,
-      caterer_email: caterer.caterer_email || "",
-      airport_code_iata: caterer.airport_code_iata || "",
-      airport_code_icao: caterer.airport_code_icao || "",
-      time_zone: caterer.time_zone || "",
+      fbo_name: fbo.fbo_name,
+      fbo_email: fbo.fbo_email || "",
+      fbo_phone: fbo.fbo_phone || "",
     })
     setDialogOpen(true)
   }
 
   // Handle save (create or update)
-  const handleSave = async (values: CatererFormValues) => {
+  const handleSave = async (values: FBOFormValues) => {
     try {
-      const url = editingCaterer
-        ? `${API_BASE_URL}/caterers/${editingCaterer.id}`
-        : `${API_BASE_URL}/caterers`
+      const url = editingFBO
+        ? `${API_BASE_URL}/fbos/${editingFBO.id}`
+        : `${API_BASE_URL}/fbos`
 
-      const method = editingCaterer ? "PUT" : "POST"
+      const method = editingFBO ? "PUT" : "POST"
 
-      // Prepare body - only include non-empty optional fields
+      // Prepare body - only include the required fields
       const body: any = {
-        caterer_name: values.caterer_name,
-        caterer_number: values.caterer_number,
+        fbo_name: values.fbo_name,
       }
       
-      if (values.caterer_email && values.caterer_email.trim()) {
-        body.caterer_email = values.caterer_email.trim()
+      if (values.fbo_email && values.fbo_email.trim()) {
+        body.fbo_email = values.fbo_email.trim()
       }
-      if (values.airport_code_iata && values.airport_code_iata.trim()) {
-        body.airport_code_iata = values.airport_code_iata.trim().toUpperCase()
-      }
-      if (values.airport_code_icao && values.airport_code_icao.trim()) {
-        body.airport_code_icao = values.airport_code_icao.trim().toUpperCase()
-      }
-      if (values.time_zone && values.time_zone.trim()) {
-        body.time_zone = values.time_zone.trim()
+      if (values.fbo_phone && values.fbo_phone.trim()) {
+        body.fbo_phone = values.fbo_phone.trim()
       }
 
       const response = await fetch(url, {
@@ -444,23 +287,22 @@ function CaterersContent() {
       })
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to save caterer" }))
+        const errorData = await response.json().catch(() => ({ error: "Failed to save FBO" }))
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
       }
 
-      const data: Caterer = await response.json()
+      const data: FBO = await response.json()
       
-      toast.success(editingCaterer ? "Caterer updated" : "Caterer created", {
-        description: `${data.caterer_name} has been ${editingCaterer ? "updated" : "created"} successfully.`,
+      toast.success(editingFBO ? "FBO updated" : "FBO created", {
+        description: `${data.fbo_name} has been ${editingFBO ? "updated" : "created"} successfully.`,
       })
 
       setDialogOpen(false)
-      setEditingCaterer(null)
-      setSelectedAirport(undefined)
+      setEditingFBO(null)
       form.reset()
-      fetchCaterers()
+      fetchFBOs()
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to save caterer"
+      const errorMessage = err instanceof Error ? err.message : "Failed to save FBO"
       toast.error("Error", {
         description: errorMessage,
       })
@@ -468,20 +310,20 @@ function CaterersContent() {
   }
 
   // Handle view details
-  const handleView = async (caterer: Caterer) => {
+  const handleView = async (fbo: FBO) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/caterers/${caterer.id}`)
+      const response = await fetch(`${API_BASE_URL}/fbos/${fbo.id}`)
       
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch caterer details" }))
+        const errorData = await response.json().catch(() => ({ error: "Failed to fetch FBO details" }))
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
       }
 
-      const data: Caterer = await response.json()
-      setViewingCaterer(data)
+      const data: FBO = await response.json()
+      setViewingFBO(data)
       setViewDrawerOpen(true)
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to fetch caterer details"
+      const errorMessage = err instanceof Error ? err.message : "Failed to fetch FBO details"
       toast.error("Error", {
         description: errorMessage,
       })
@@ -489,18 +331,18 @@ function CaterersContent() {
   }
 
   // Handle delete
-  const handleDelete = (caterer: Caterer) => {
-    setCatererToDelete(caterer)
+  const handleDelete = (fbo: FBO) => {
+    setFboToDelete(fbo)
     setDeleteDialogOpen(true)
   }
 
   // Confirm delete
   const confirmDelete = async () => {
-    if (!catererToDelete) return
+    if (!fboToDelete) return
 
     setIsDeleting(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/caterers/${catererToDelete.id}`, {
+      const response = await fetch(`${API_BASE_URL}/fbos/${fboToDelete.id}`, {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",
@@ -508,24 +350,24 @@ function CaterersContent() {
       })
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to delete caterer" }))
+        const errorData = await response.json().catch(() => ({ error: "Failed to delete FBO" }))
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
       }
 
-      toast.success("Caterer deleted", {
-        description: `${catererToDelete.caterer_name} has been deleted successfully.`,
+      toast.success("FBO deleted", {
+        description: `${fboToDelete.fbo_name} has been deleted successfully.`,
       })
 
       setDeleteDialogOpen(false)
-      setCatererToDelete(null)
-      setSelectedCaterers((prev) => {
+      setFboToDelete(null)
+      setSelectedFBOs((prev) => {
         const newSet = new Set(prev)
-        newSet.delete(catererToDelete.id)
+        newSet.delete(fboToDelete.id)
         return newSet
       })
-      fetchCaterers()
+      fetchFBOs()
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to delete caterer"
+      const errorMessage = err instanceof Error ? err.message : "Failed to delete FBO"
       toast.error("Error", {
         description: errorMessage,
       })
@@ -536,35 +378,35 @@ function CaterersContent() {
 
   // Handle bulk delete
   const handleBulkDelete = async () => {
-    if (selectedCaterers.size === 0) return
+    if (selectedFBOs.size === 0) return
 
     setIsDeleting(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/caterers`, {
+      const response = await fetch(`${API_BASE_URL}/fbos`, {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          ids: Array.from(selectedCaterers),
+          ids: Array.from(selectedFBOs),
         }),
       })
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to delete caterers" }))
+        const errorData = await response.json().catch(() => ({ error: "Failed to delete FBOs" }))
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
       }
 
-      const data: BulkDeleteResponse = await response.json()
+      const data = await response.json()
       
-      toast.success("Caterers deleted", {
-        description: `${data.deleted || selectedCaterers.size} caterer(s) have been deleted successfully.`,
+      toast.success("FBOs deleted", {
+        description: `${data.deleted || selectedFBOs.size} FBO(s) have been deleted successfully.`,
       })
 
-      setSelectedCaterers(new Set())
-      fetchCaterers()
+      setSelectedFBOs(new Set())
+      fetchFBOs()
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to delete caterers"
+      const errorMessage = err instanceof Error ? err.message : "Failed to delete FBOs"
       toast.error("Error", {
         description: errorMessage,
       })
@@ -577,10 +419,10 @@ function CaterersContent() {
   const handleExport = async () => {
     setIsExporting(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/caterers/export`)
+      const response = await fetch(`${API_BASE_URL}/fbos/export`)
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to export caterers" }))
+        const errorData = await response.json().catch(() => ({ error: "Failed to export FBOs" }))
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
       }
 
@@ -588,17 +430,17 @@ function CaterersContent() {
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement("a")
       link.href = url
-      link.download = `caterers_${new Date().toISOString().split("T")[0]}.xlsx`
+      link.download = `fbos_${new Date().toISOString().split("T")[0]}.xlsx`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
 
       toast.success("Export successful", {
-        description: "Caterers have been exported to Excel file.",
+        description: "FBOs have been exported to Excel file.",
       })
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to export caterers"
+      const errorMessage = err instanceof Error ? err.message : "Failed to export FBOs"
       toast.error("Error", {
         description: errorMessage,
       })
@@ -616,15 +458,16 @@ function CaterersContent() {
     const validTypes = [
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "application/vnd.ms-excel",
+      "text/csv",
     ]
-    const validExtensions = [".xlsx", ".xls"]
+    const validExtensions = [".xlsx", ".xls", ".csv"]
 
     const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf("."))
     const isValidType = validTypes.includes(file.type) || validExtensions.includes(fileExtension)
 
     if (!isValidType) {
       toast.error("Invalid file type", {
-        description: "Please upload an Excel file (.xlsx, .xls).",
+        description: "Please upload an Excel file (.xlsx, .xls) or CSV file.",
       })
       if (fileInputRef.current) {
         fileInputRef.current.value = ""
@@ -648,37 +491,33 @@ function CaterersContent() {
       const formData = new FormData()
       formData.append("file", file)
 
-      const response = await fetch(`${API_BASE_URL}/caterers/import`, {
+      const response = await fetch(`${API_BASE_URL}/fbos/import`, {
         method: "POST",
         body: formData,
       })
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to import caterers" }))
+        const errorData = await response.json().catch(() => ({ error: "Failed to import FBOs" }))
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
       }
 
       const data: ImportResponse = await response.json()
 
-      // Always refresh the table after import, even if there are errors
-      // because some records may have been successfully imported
-      fetchCaterers()
-
       if (data.errors && data.errors.length > 0) {
         setImportErrors(data.errors)
-        setImportDialogOpen(true)
         toast.warning("Import completed with errors", {
-          description: `${data.success} caterer(s) imported successfully, but ${data.errors.length} error(s) occurred.`,
+          description: `${data.success} FBO(s) imported successfully, but ${data.errors.length} error(s) occurred.`,
           duration: 5000,
         })
       } else {
         toast.success("Import successful", {
-          description: `${data.success} caterer(s) have been imported successfully.`,
+          description: `${data.success} FBO(s) have been imported successfully.`,
         })
         setImportDialogOpen(false)
+        fetchFBOs()
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to import caterers"
+      const errorMessage = err instanceof Error ? err.message : "Failed to import FBOs"
       toast.error("Error", {
         description: errorMessage,
       })
@@ -694,8 +533,6 @@ function CaterersContent() {
   const handleImportCancel = () => {
     setImportDialogOpen(false)
     setImportErrors([])
-    // Refresh table to show any successfully imported records
-    fetchCaterers()
   }
 
   // Handle sort
@@ -708,8 +545,8 @@ function CaterersContent() {
     }
   }
 
-  const allSelected = caterers.length > 0 && selectedCaterers.size === caterers.length
-  const someSelected = selectedCaterers.size > 0 && selectedCaterers.size < caterers.length
+  const allSelected = fbos.length > 0 && selectedFBOs.size === fbos.length
+  const someSelected = selectedFBOs.size > 0 && selectedFBOs.size < fbos.length
   const totalPages = Math.ceil(total / limit)
 
   return (
@@ -717,7 +554,7 @@ function CaterersContent() {
       <SidebarProvider>
         <AppSidebar />
         <SidebarInset>
-          <HeaderNav title="Caterers" />
+          <HeaderNav title="FBOs" />
           <div className="flex flex-1 flex-col gap-4 p-4 md:p-6 lg:p-8">
             {/* Header Card */}
             <Card className="border-border/50 bg-gradient-to-br from-card/50 to-card/30 backdrop-blur-sm shadow-lg">
@@ -725,14 +562,14 @@ function CaterersContent() {
                 <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                   <div>
                     <CardTitle className="text-2xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-                      Caterer Management
+                      FBO Management
                     </CardTitle>
                     <CardDescription className="mt-1.5">
-                      Manage caterers, contact information, and airport codes
+                      Manage FBOs, contact information, and airport codes
                     </CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
-                    {selectedCaterers.size > 0 && (
+                    {selectedFBOs.size > 0 && (
                       <Button
                         variant="destructive"
                         size="sm"
@@ -745,13 +582,13 @@ function CaterersContent() {
                         ) : (
                           <Trash2 className="h-4 w-4" />
                         )}
-                        Delete Selected ({selectedCaterers.size})
+                        Delete Selected ({selectedFBOs.size})
                       </Button>
                     )}
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept=".xlsx,.xls"
+                      accept=".xlsx,.xls,.csv"
                       onChange={handleFileSelect}
                       className="hidden"
                       id="file-import"
@@ -789,7 +626,7 @@ function CaterersContent() {
                       className="gap-2 bg-gradient-to-r from-primary to-primary/90 shadow-md hover:shadow-lg transition-all"
                     >
                       <Plus className="h-4 w-4" />
-                      Add Caterer
+                      Add FBO
                     </Button>
                   </div>
                 </div>
@@ -799,7 +636,7 @@ function CaterersContent() {
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
-                    placeholder="Search caterers, emails, or codes..."
+                    placeholder="Search FBOs, emails, or codes..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-9 pr-9 h-10 bg-background/50 border-border/50 focus:bg-background transition-colors"
@@ -824,13 +661,13 @@ function CaterersContent() {
                 <CardContent className="pt-6">
                   <div className="flex items-center gap-2 text-destructive">
                     <AlertCircle className="h-5 w-5" />
-                    <p className="font-medium">Error loading caterers</p>
+                    <p className="font-medium">Error loading FBOs</p>
                   </div>
                   <p className="text-sm text-muted-foreground mt-2">{error}</p>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={fetchCaterers}
+                    onClick={fetchFBOs}
                     className="mt-4"
                   >
                     <Loader2 className="h-4 w-4 mr-2" />
@@ -860,29 +697,13 @@ function CaterersContent() {
                             variant="ghost"
                             size="sm"
                             className="h-8 -ml-3 hover:bg-transparent"
-                            onClick={() => handleSort("caterer_name")}
+                            onClick={() => handleSort("fbo_name")}
                           >
                             <div className="flex items-center gap-2">
-                              <ChefHat className="h-4 w-4 text-muted-foreground" />
-                              Caterer Name
+                              <Building2 className="h-4 w-4 text-muted-foreground" />
+                              FBO Name
                             </div>
-                            {sortBy === "caterer_name" && (
-                              <ArrowUpDown className="ml-2 h-3 w-3" />
-                            )}
-                          </Button>
-                        </TableHead>
-                        <TableHead className="font-semibold">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 -ml-3 hover:bg-transparent"
-                            onClick={() => handleSort("caterer_number")}
-                          >
-                            <div className="flex items-center gap-2">
-                              <Phone className="h-4 w-4 text-muted-foreground" />
-                              Caterer Number
-                            </div>
-                            {sortBy === "caterer_number" && (
+                            {sortBy === "fbo_name" && (
                               <ArrowUpDown className="ml-2 h-3 w-3" />
                             )}
                           </Button>
@@ -890,25 +711,13 @@ function CaterersContent() {
                         <TableHead className="font-semibold">
                           <div className="flex items-center gap-2">
                             <Mail className="h-4 w-4 text-muted-foreground" />
-                            Caterer Email
+                            Email
                           </div>
                         </TableHead>
                         <TableHead className="font-semibold">
                           <div className="flex items-center gap-2">
-                            <Code className="h-4 w-4 text-muted-foreground" />
-                            IATA
-                          </div>
-                        </TableHead>
-                        <TableHead className="font-semibold">
-                          <div className="flex items-center gap-2">
-                            <Code className="h-4 w-4 text-muted-foreground" />
-                            ICAO
-                          </div>
-                        </TableHead>
-                        <TableHead className="font-semibold">
-                          <div className="flex items-center gap-2">
-                            <Clock className="h-4 w-4 text-muted-foreground" />
-                            Time Zone
+                            <Phone className="h-4 w-4 text-muted-foreground" />
+                            Phone
                           </div>
                         </TableHead>
                         <TableHead className="w-12 text-right font-semibold">Actions</TableHead>
@@ -926,16 +735,7 @@ function CaterersContent() {
                               <Skeleton className="h-4 w-[200px]" />
                             </TableCell>
                             <TableCell>
-                              <Skeleton className="h-4 w-[150px]" />
-                            </TableCell>
-                            <TableCell>
                               <Skeleton className="h-4 w-[200px]" />
-                            </TableCell>
-                            <TableCell>
-                              <Skeleton className="h-4 w-[60px]" />
-                            </TableCell>
-                            <TableCell>
-                              <Skeleton className="h-4 w-[60px]" />
                             </TableCell>
                             <TableCell>
                               <Skeleton className="h-4 w-[150px]" />
@@ -945,87 +745,64 @@ function CaterersContent() {
                             </TableCell>
                           </TableRow>
                         ))
-                      ) : caterers.length === 0 ? (
+                      ) : fbos.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={8} className="h-24 text-center">
+                          <TableCell colSpan={5} className="h-24 text-center">
                             <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
-                              <ChefHat className="h-8 w-8 opacity-50" />
-                              <p className="text-sm font-medium">No caterers found</p>
+                              <Building2 className="h-8 w-8 opacity-50" />
+                              <p className="text-sm font-medium">No FBOs found</p>
                               <p className="text-xs">
-                                {searchQuery ? "Try adjusting your search query" : "Get started by adding your first caterer"}
+                                {searchQuery ? "Try adjusting your search query" : "Get started by adding your first FBO"}
                               </p>
                             </div>
                           </TableCell>
                         </TableRow>
                       ) : (
-                        caterers.map((caterer) => (
+                        fbos.map((fbo) => (
                           <TableRow
-                            key={caterer.id}
+                            key={fbo.id}
                             className="group hover:bg-muted/30 transition-colors border-b border-border/30"
                           >
                             <TableCell>
                               <Checkbox
-                                checked={selectedCaterers.has(caterer.id)}
+                                checked={selectedFBOs.has(fbo.id)}
                                 onCheckedChange={(checked) =>
-                                  handleSelect(caterer.id, checked as boolean)
+                                  handleSelect(fbo.id, checked as boolean)
                                 }
-                                aria-label={`Select ${caterer.caterer_name}`}
+                                aria-label={`Select ${fbo.fbo_name}`}
                                 className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                               />
                             </TableCell>
                             <TableCell className="font-medium max-w-[200px]">
-                              <div className="truncate" title={caterer.caterer_name}>
-                                {caterer.caterer_name}
+                              <div className="truncate" title={fbo.fbo_name}>
+                                {fbo.fbo_name}
                               </div>
-                            </TableCell>
-                            <TableCell className="max-w-[150px]">
-                              {caterer.caterer_number ? (
-                                <a
-                                  href={`tel:${caterer.caterer_number}`}
-                                  className="text-primary hover:underline transition-colors truncate block"
-                                  title={caterer.caterer_number}
-                                >
-                                  {caterer.caterer_number}
-                                </a>
-                              ) : (
-                                <span className="text-muted-foreground">—</span>
-                              )}
                             </TableCell>
                             <TableCell className="max-w-[200px]">
-                              {caterer.caterer_email ? (
+                              {fbo.fbo_email ? (
                                 <a
-                                  href={`mailto:${caterer.caterer_email}`}
+                                  href={`mailto:${fbo.fbo_email}`}
                                   className="text-primary hover:underline transition-colors truncate block"
-                                  title={caterer.caterer_email}
+                                  title={fbo.fbo_email}
                                 >
-                                  {caterer.caterer_email}
+                                  {fbo.fbo_email}
                                 </a>
                               ) : (
                                 <span className="text-muted-foreground">—</span>
                               )}
                             </TableCell>
-                            <TableCell>
-                              {caterer.airport_code_iata ? (
-                                <span className="inline-flex items-center px-2 py-1 rounded-md bg-primary/10 text-primary text-xs font-medium">
-                                  {caterer.airport_code_iata}
-                                </span>
+                            <TableCell className="max-w-[150px]">
+                              {fbo.fbo_phone ? (
+                                <a
+                                  href={`tel:${fbo.fbo_phone}`}
+                                  className="text-primary hover:underline transition-colors truncate block"
+                                  title={fbo.fbo_phone}
+                                >
+                                  {fbo.fbo_phone}
+                                </a>
                               ) : (
                                 <span className="text-muted-foreground">—</span>
                               )}
-                            </TableCell>
-                            <TableCell>
-                              {caterer.airport_code_icao ? (
-                                <span className="inline-flex items-center px-2 py-1 rounded-md bg-secondary/50 text-foreground text-xs font-medium">
-                                  {caterer.airport_code_icao}
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground">—</span>
-                              )}
-                            </TableCell>
-                            <TableCell className="max-w-[180px]">
-                              <div className="truncate" title={caterer.time_zone || ""}>
-                                {caterer.time_zone || <span className="text-muted-foreground">—</span>}
-                              </div>
                             </TableCell>
                             <TableCell>
                               <DropdownMenu>
@@ -1043,21 +820,21 @@ function CaterersContent() {
                                   <DropdownMenuLabel>Actions</DropdownMenuLabel>
                                   <DropdownMenuSeparator />
                                   <DropdownMenuItem
-                                    onClick={() => handleView(caterer)}
+                                    onClick={() => handleView(fbo)}
                                     className="cursor-pointer"
                                   >
                                     <Eye className="mr-2 h-4 w-4" />
                                     View Details
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
-                                    onClick={() => handleEdit(caterer)}
+                                    onClick={() => handleEdit(fbo)}
                                     className="cursor-pointer"
                                   >
                                     <Edit className="mr-2 h-4 w-4" />
                                     Edit
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
-                                    onClick={() => handleDelete(caterer)}
+                                    onClick={() => handleDelete(fbo)}
                                     className="cursor-pointer text-destructive focus:text-destructive"
                                   >
                                     <Trash2 className="mr-2 h-4 w-4" />
@@ -1077,7 +854,7 @@ function CaterersContent() {
                 {!isLoading && totalPages > 1 && (
                   <div className="flex items-center justify-between border-t border-border/50 px-4 py-4">
                     <div className="text-sm text-muted-foreground">
-                      Showing {((page - 1) * limit) + 1} to {Math.min(page * limit, total)} of {total} caterers
+                      Showing {((page - 1) * limit) + 1} to {Math.min(page * limit, total)} of {total} FBOs
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
@@ -1108,33 +885,26 @@ function CaterersContent() {
             </Card>
 
             {/* Add/Edit Dialog */}
-            <Dialog open={dialogOpen} onOpenChange={(open) => {
-              setDialogOpen(open)
-              if (!open) {
-                setSelectedAirport(undefined)
-                setEditingCaterer(null)
-                form.reset()
-              }
-            }}>
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogContent className="sm:max-w-2xl lg:max-w-3xl max-h-[90vh] overflow-y-auto scrollbar-hide border-0 bg-card shadow-2xl shadow-black/50 ring-1 ring-white/[0.05]">
-                <div className="absolute inset-0 bg-gradient-to-br from-violet-500/[0.05] via-transparent to-transparent rounded-lg pointer-events-none" />
-                <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-violet-500/30 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/[0.05] via-transparent to-transparent rounded-lg pointer-events-none" />
+                <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-blue-500/30 to-transparent" />
                 <DialogHeader className="relative pb-4 border-b border-border/30">
                   <div className="flex items-center gap-4">
                     <div className="relative">
-                      <div className="absolute inset-0 bg-violet-500/20 rounded-xl blur-lg" />
-                      <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-violet-600 shadow-lg shadow-violet-500/25">
-                        <ChefHat className="h-6 w-6 text-white" />
+                      <div className="absolute inset-0 bg-blue-500/20 rounded-xl blur-lg" />
+                      <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-lg shadow-blue-500/25">
+                        <Building2 className="h-6 w-6 text-white" />
                       </div>
                     </div>
                     <div>
                       <DialogTitle className="text-xl font-bold">
-                        {editingCaterer ? "Edit Caterer" : "Add New Caterer"}
+                        {editingFBO ? "Edit FBO" : "Add New FBO"}
                       </DialogTitle>
                       <DialogDescription className="text-sm">
-                        {editingCaterer
-                          ? "Update the caterer information below"
-                          : "Enter the caterer information to add to the system"}
+                        {editingFBO
+                          ? "Update the FBO information below"
+                          : "Enter the FBO information to add to the system"}
                       </DialogDescription>
                     </div>
                   </div>
@@ -1143,64 +913,22 @@ function CaterersContent() {
                   <form onSubmit={form.handleSubmit(handleSave)} className="relative space-y-5 py-6">
                     <div className="space-y-4">
                       <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                        <span className="flex h-5 w-5 items-center justify-center rounded bg-violet-500/10 text-violet-400">1</span>
-                        Basic Information
-                      </div>
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <FormField
-                          control={form.control}
-                          name="caterer_name"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs font-medium text-muted-foreground">
-                                Caterer Name *
-                              </FormLabel>
-                              <FormControl>
-                                <Input
-                                  placeholder="Enter caterer name..."
-                                  {...field}
-                                  className="h-11 bg-muted/30 border-border/40 focus:border-violet-500/50 focus:ring-violet-500/20"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={form.control}
-                          name="caterer_number"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs font-medium text-muted-foreground">
-                                Caterer Number *
-                              </FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="tel"
-                                  placeholder="Enter phone number..."
-                                  {...field}
-                                  className="h-11 bg-muted/30 border-border/40 focus:border-violet-500/50 focus:ring-violet-500/20"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
+                        <span className="flex h-5 w-5 items-center justify-center rounded bg-blue-500/10 text-blue-400">1</span>
+                        FBO Information
                       </div>
                       <FormField
                         control={form.control}
-                        name="caterer_email"
+                        name="fbo_name"
                         render={({ field }) => (
-                          <FormItem className="sm:max-w-md">
+                          <FormItem>
                             <FormLabel className="text-xs font-medium text-muted-foreground">
-                              Caterer Email
+                              FBO Name *
                             </FormLabel>
                             <FormControl>
                               <Input
-                                type="email"
-                                placeholder="Enter email address..."
+                                placeholder="Enter FBO name..."
                                 {...field}
-                                className="h-11 bg-muted/30 border-border/40 focus:border-violet-500/50 focus:ring-violet-500/20"
+                                className="h-11 bg-muted/30 border-border/40 focus:border-blue-500/50 focus:ring-blue-500/20"
                               />
                             </FormControl>
                             <FormMessage />
@@ -1211,56 +939,24 @@ function CaterersContent() {
                     
                     <div className="space-y-4 pt-2">
                       <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                        <span className="flex h-5 w-5 items-center justify-center rounded bg-violet-500/10 text-violet-400">2</span>
-                        Airport Information
-                      </div>
-                      <div className="space-y-2">
-                        <FormLabel className="text-xs font-medium text-muted-foreground">Select Airport</FormLabel>
-                        <Combobox
-                          options={filteredAirportOptions}
-                          value={selectedAirport?.toString() || ""}
-                          onValueChange={(value) => {
-                            if (value) {
-                              const airportId = parseInt(value)
-                              setSelectedAirport(airportId)
-                              const airport = airportsData.find((a) => a.id === airportId)
-                              if (airport) {
-                                form.setValue("airport_code_iata", airport.airport_code_iata || "")
-                                form.setValue("airport_code_icao", airport.airport_code_icao || "")
-                              }
-                            } else {
-                              setSelectedAirport(undefined)
-                              form.setValue("airport_code_iata", "")
-                              form.setValue("airport_code_icao", "")
-                            }
-                          }}
-                          placeholder="Select airport to auto-fill codes..."
-                          searchPlaceholder="Search airports..."
-                          emptyMessage="No airports found."
-                          onSearchChange={setAirportSearch}
-                          isLoading={isLoadingAirports}
-                          onOpenChange={handleAirportComboboxOpen}
-                        />
+                        <span className="flex h-5 w-5 items-center justify-center rounded bg-blue-500/10 text-blue-400">2</span>
+                        Contact Information
                       </div>
                       <div className="grid gap-4 sm:grid-cols-2">
                         <FormField
                           control={form.control}
-                          name="airport_code_iata"
+                          name="fbo_email"
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel className="text-xs font-medium text-muted-foreground">
-                                Airport Code IATA
+                                Email
                               </FormLabel>
                               <FormControl>
                                 <Input
-                                  placeholder="e.g., JFK"
-                                  maxLength={3}
+                                  type="email"
+                                  placeholder="Enter FBO email..."
                                   {...field}
-                                  readOnly={!!selectedAirport}
-                                  onChange={(e) => {
-                                    field.onChange(e.target.value.toUpperCase())
-                                  }}
-                                  className={`h-11 bg-muted/30 border-border/40 focus:border-violet-500/50 focus:ring-violet-500/20 font-mono uppercase ${selectedAirport ? "cursor-not-allowed opacity-60" : ""}`}
+                                  className="h-11 bg-muted/30 border-border/40 focus:border-blue-500/50 focus:ring-blue-500/20"
                                 />
                               </FormControl>
                               <FormMessage />
@@ -1269,22 +965,18 @@ function CaterersContent() {
                         />
                         <FormField
                           control={form.control}
-                          name="airport_code_icao"
+                          name="fbo_phone"
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel className="text-xs font-medium text-muted-foreground">
-                                Airport Code ICAO
+                                Phone
                               </FormLabel>
                               <FormControl>
                                 <Input
-                                  placeholder="e.g., KJFK"
-                                  maxLength={4}
+                                  type="tel"
+                                  placeholder="Enter FBO phone..."
                                   {...field}
-                                  readOnly={!!selectedAirport}
-                                  onChange={(e) => {
-                                    field.onChange(e.target.value.toUpperCase())
-                                  }}
-                                  className={`h-11 bg-muted/30 border-border/40 focus:border-violet-500/50 focus:ring-violet-500/20 font-mono uppercase ${selectedAirport ? "cursor-not-allowed opacity-60" : ""}`}
+                                  className="h-11 bg-muted/30 border-border/40 focus:border-blue-500/50 focus:ring-blue-500/20"
                                 />
                               </FormControl>
                               <FormMessage />
@@ -1292,30 +984,6 @@ function CaterersContent() {
                           )}
                         />
                       </div>
-                      {selectedAirport && (
-                        <p className="text-xs text-muted-foreground">
-                          Airport codes are auto-filled from selected airport. Clear selection to enter manually.
-                        </p>
-                      )}
-                      <FormField
-                        control={form.control}
-                        name="time_zone"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs font-medium text-muted-foreground">
-                              Time Zone
-                            </FormLabel>
-                            <FormControl>
-                              <Input
-                                placeholder="e.g., America/New_York"
-                                {...field}
-                                className="h-11 bg-muted/30 border-border/40 focus:border-violet-500/50 focus:ring-violet-500/20 sm:max-w-md"
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
                     </div>
                     <DialogFooter className="relative pt-4 border-t border-border/30 gap-3">
                       <Button
@@ -1324,8 +992,7 @@ function CaterersContent() {
                         className="text-muted-foreground hover:text-foreground"
                         onClick={() => {
                           setDialogOpen(false)
-                          setEditingCaterer(null)
-                          setSelectedAirport(undefined)
+                          setEditingFBO(null)
                           form.reset()
                         }}
                       >
@@ -1333,17 +1000,17 @@ function CaterersContent() {
                       </Button>
                       <Button 
                         type="submit" 
-                        className="bg-gradient-to-r from-violet-600 to-violet-500 hover:from-violet-500 hover:to-violet-400 shadow-lg shadow-violet-500/25 text-white px-6"
+                        className="bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 shadow-lg shadow-blue-500/25 text-white px-6"
                       >
-                        {editingCaterer ? (
+                        {editingFBO ? (
                           <>
                             <CheckCircle2 className="mr-2 h-4 w-4" />
-                            Update Caterer
+                            Update FBO
                           </>
                         ) : (
                           <>
                             <Plus className="mr-2 h-4 w-4" />
-                            Add Caterer
+                            Add FBO
                           </>
                         )}
                       </Button>
@@ -1360,86 +1027,39 @@ function CaterersContent() {
                   <DrawerHeader className="flex-shrink-0">
                     <div className="flex items-center gap-4">
                       <div className="relative">
-                        <div className="absolute inset-0 bg-violet-500/20 rounded-xl blur-lg" />
-                        <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-violet-600 shadow-lg shadow-violet-500/25">
-                          <ChefHat className="h-6 w-6 text-white" />
+                        <div className="absolute inset-0 bg-blue-500/20 rounded-xl blur-lg" />
+                        <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-lg shadow-blue-500/25">
+                          <Building2 className="h-6 w-6 text-white" />
                         </div>
                       </div>
                       <div className="flex-1">
                         <DrawerTitle>
-                          {viewingCaterer?.caterer_name}
+                          {viewingFBO?.fbo_name}
                         </DrawerTitle>
                         <DrawerDescription>
-                          Complete caterer information and details
+                          Complete FBO information and details
                         </DrawerDescription>
                       </div>
                     </div>
                   </DrawerHeader>
-                  {viewingCaterer && (
+                  {viewingFBO && (
                     <div className="flex-1 overflow-y-auto scrollbar-hide px-6 py-4">
                       <div className="space-y-4">
-                        {/* Caterer Information Card */}
+                        {/* FBO Information Card */}
                         <Card className="rounded-xl border border-border/30 bg-muted/20 shadow-sm">
                           <CardHeader className="pb-3">
                             <CardTitle className="text-lg flex items-center gap-2">
-                              <ChefHat className="h-5 w-5 text-primary" />
-                              Caterer Information
+                              <Building2 className="h-5 w-5 text-primary" />
+                              FBO Information
                             </CardTitle>
                           </CardHeader>
                           <CardContent className="space-y-4">
-                            <div className="grid gap-4 md:grid-cols-2">
-                              <div>
-                                <Label className="text-xs text-muted-foreground mb-1.5 block">
-                                  Caterer Name
-                                </Label>
-                                <p className="text-sm font-medium break-words">
-                                  {viewingCaterer.caterer_name}
-                                </p>
-                              </div>
-                              <div>
-                                <Label className="text-xs text-muted-foreground mb-1.5 block">
-                                  Caterer Number
-                                </Label>
-                                <p className="text-sm font-medium break-words">
-                                  {viewingCaterer.caterer_number || "Not provided"}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="grid gap-4 md:grid-cols-2">
-                              <div>
-                                <Label className="text-xs text-muted-foreground mb-1.5 block flex items-center gap-1">
-                                  <Code className="h-3 w-3" />
-                                  IATA Code
-                                </Label>
-                                {viewingCaterer.airport_code_iata ? (
-                                  <span className="inline-flex items-center px-3 py-1.5 rounded-md bg-primary/10 text-primary text-sm font-medium">
-                                    {viewingCaterer.airport_code_iata}
-                                  </span>
-                                ) : (
-                                  <span className="text-sm text-muted-foreground">Not provided</span>
-                                )}
-                              </div>
-                              <div>
-                                <Label className="text-xs text-muted-foreground mb-1.5 block flex items-center gap-1">
-                                  <Code className="h-3 w-3" />
-                                  ICAO Code
-                                </Label>
-                                {viewingCaterer.airport_code_icao ? (
-                                  <span className="inline-flex items-center px-3 py-1.5 rounded-md bg-secondary/50 text-foreground text-sm font-medium">
-                                    {viewingCaterer.airport_code_icao}
-                                  </span>
-                                ) : (
-                                  <span className="text-sm text-muted-foreground">Not provided</span>
-                                )}
-                              </div>
-                            </div>
                             <div>
-                              <Label className="text-xs text-muted-foreground mb-1.5 block flex items-center gap-1">
-                                <Clock className="h-3 w-3" />
-                                Time Zone
+                              <Label className="text-xs text-muted-foreground mb-1.5 block">
+                                FBO Name
                               </Label>
                               <p className="text-sm font-medium break-words">
-                                {viewingCaterer.time_zone || "Not provided"}
+                                {viewingFBO.fbo_name}
                               </p>
                             </div>
                           </CardContent>
@@ -1449,22 +1069,22 @@ function CaterersContent() {
                         <Card className="rounded-xl border border-border/30 bg-muted/20 shadow-sm">
                           <CardHeader className="pb-3">
                             <CardTitle className="text-lg flex items-center gap-2">
-                              <Phone className="h-5 w-5 text-primary" />
+                              <Building2 className="h-5 w-5 text-primary" />
                               Contact Information
                             </CardTitle>
                           </CardHeader>
                           <CardContent className="space-y-4">
                             <div>
                               <Label className="text-xs text-muted-foreground mb-1.5 block flex items-center gap-1">
-                                <Phone className="h-3 w-3" />
-                                Phone Number
+                                <Mail className="h-3 w-3" />
+                                Email Address
                               </Label>
-                              {viewingCaterer.caterer_number ? (
+                              {viewingFBO.fbo_email ? (
                                 <a
-                                  href={`tel:${viewingCaterer.caterer_number}`}
+                                  href={`mailto:${viewingFBO.fbo_email}`}
                                   className="text-sm font-medium text-primary hover:underline break-all"
                                 >
-                                  {viewingCaterer.caterer_number}
+                                  {viewingFBO.fbo_email}
                                 </a>
                               ) : (
                                 <p className="text-sm text-muted-foreground">Not provided</p>
@@ -1472,15 +1092,15 @@ function CaterersContent() {
                             </div>
                             <div>
                               <Label className="text-xs text-muted-foreground mb-1.5 block flex items-center gap-1">
-                                <Mail className="h-3 w-3" />
-                                Email Address
+                                <Phone className="h-3 w-3" />
+                                Phone Number
                               </Label>
-                              {viewingCaterer.caterer_email ? (
+                              {viewingFBO.fbo_phone ? (
                                 <a
-                                  href={`mailto:${viewingCaterer.caterer_email}`}
+                                  href={`tel:${viewingFBO.fbo_phone}`}
                                   className="text-sm font-medium text-primary hover:underline break-all"
                                 >
-                                  {viewingCaterer.caterer_email}
+                                  {viewingFBO.fbo_phone}
                                 </a>
                               ) : (
                                 <p className="text-sm text-muted-foreground">Not provided</p>
@@ -1496,15 +1116,15 @@ function CaterersContent() {
                       <Button
                         variant="outline"
                         onClick={() => {
-                          if (viewingCaterer) {
-                            handleEdit(viewingCaterer)
+                          if (viewingFBO) {
+                            handleEdit(viewingFBO)
                             setViewDrawerOpen(false)
                           }
                         }}
                         className="flex-1 gap-2"
                       >
                         <Edit className="h-4 w-4" />
-                        Edit Caterer
+                        Edit FBO
                       </Button>
                       <DrawerClose asChild>
                         <Button className="flex-1">Close</Button>
@@ -1558,12 +1178,12 @@ function CaterersContent() {
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2 text-destructive">
                     <AlertCircle className="h-5 w-5" />
-                    Delete Caterer
+                    Delete FBO
                   </DialogTitle>
                   <DialogDescription>
                     Are you sure you want to delete{" "}
                     <span className="font-semibold text-foreground">
-                      {catererToDelete?.caterer_name}
+                      {fboToDelete?.fbo_name}
                     </span>
                     ? This action cannot be undone.
                   </DialogDescription>
@@ -1573,7 +1193,7 @@ function CaterersContent() {
                     variant="outline"
                     onClick={() => {
                       setDeleteDialogOpen(false)
-                      setCatererToDelete(null)
+                      setFboToDelete(null)
                     }}
                     disabled={isDeleting}
                   >
@@ -1602,6 +1222,6 @@ function CaterersContent() {
   )
 }
 
-export default function CaterersPage() {
-  return <CaterersContent />
+export default function FBOsPage() {
+  return <FBOsContent />
 }

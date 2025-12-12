@@ -142,11 +142,15 @@ interface OrderCaterer {
 interface OrderAirport {
   id: number
   airport_name: string
+  airport_code_iata: string | null
+  airport_code_icao: string | null
+}
+
+interface OrderFBO {
+  id: number
   fbo_name: string
   fbo_email: string | null
   fbo_phone: string | null
-  airport_code_iata: string | null
-  airport_code_icao: string | null
 }
 
 interface Order {
@@ -155,6 +159,7 @@ interface Order {
   client_id: number
   caterer_id: number
   airport_id: number
+  fbo_id?: number | null
   aircraft_tail_number: string | null
   delivery_date: string
   delivery_time: string
@@ -175,6 +180,7 @@ interface Order {
   client?: OrderClient
   caterer_details?: OrderCaterer
   airport_details?: OrderAirport
+  fbo?: OrderFBO
   created_at: string
   updated_at: string
   completed_at?: string | null
@@ -227,6 +233,14 @@ const orderSchema = z.object({
 })
 
 type OrderFormValues = z.infer<typeof orderSchema>
+
+// Helper function to decode HTML entities
+const decodeHtmlEntities = (text: string): string => {
+  if (!text) return ""
+  const textarea = document.createElement("textarea")
+  textarea.innerHTML = text
+  return textarea.value
+}
 
 function OrdersContent() {
   const router = useRouter()
@@ -1118,12 +1132,20 @@ function OrdersContent() {
                               </div>
                             </TableCell>
                             <TableCell className="max-w-[180px]">
-                              <div className="truncate" title={order.airport_details?.airport_name || "—"}>
-                                <span>{order.airport_details?.airport_name || "—"}</span>
-                                {order.airport_details?.airport_code_icao && (
-                                  <span className="ml-1.5 text-xs font-mono text-muted-foreground">
-                                    ({order.airport_details.airport_code_icao})
-                                  </span>
+                              <div className="flex flex-col gap-0.5">
+                                <div className="truncate" title={order.airport_details?.airport_name ? decodeHtmlEntities(order.airport_details.airport_name) : "—"}>
+                                  <span>{order.airport_details?.airport_name ? decodeHtmlEntities(order.airport_details.airport_name) : "—"}</span>
+                                  {order.airport_details?.airport_code_icao && (
+                                    <span className="ml-1.5 text-xs font-mono text-muted-foreground">
+                                      ({order.airport_details.airport_code_icao})
+                                    </span>
+                                  )}
+                                </div>
+                                {order.fbo?.fbo_name && (
+                                  <div className="text-xs text-muted-foreground truncate" title={order.fbo.fbo_name}>
+                                    <Building2 className="h-3 w-3 inline mr-1" />
+                                    {order.fbo.fbo_name}
+                                  </div>
                                 )}
                               </div>
                             </TableCell>
@@ -1497,84 +1519,54 @@ function OrdersContent() {
                                   <Label className="text-xs text-muted-foreground mb-1.5 block">
                                     Airport Name
                                   </Label>
-                                  <p className="text-sm font-medium">{viewingOrder.airport_details.airport_name}</p>
+                                  <p className="text-sm font-medium">{decodeHtmlEntities(viewingOrder.airport_details.airport_name)}</p>
                                 </div>
                                 <div>
                                   <Label className="text-xs text-muted-foreground mb-1.5 block">
-                                    FBO Name
+                                    Airport Codes
                                   </Label>
-                                  <p className="text-sm font-medium">{viewingOrder.airport_details.fbo_name}</p>
-                                </div>
-                                <div>
-                                  <Label className="text-xs text-muted-foreground mb-1.5 block">
-                                    FBO Email
-                                  </Label>
-                                  <p className="text-sm font-medium">{viewingOrder.airport_details.fbo_email || "—"}</p>
-                                </div>
-                                <div>
-                                  <Label className="text-xs text-muted-foreground mb-1.5 block">
-                                    FBO Phone
-                                  </Label>
-                                  <p className="text-sm font-medium">{viewingOrder.airport_details.fbo_phone || "—"}</p>
-                                </div>
-                              </div>
-                              <div>
-                                <Label className="text-xs text-muted-foreground mb-1.5 block">
-                                  Airport Codes
-                                </Label>
-                                <div className="flex gap-2">
-                                  {viewingOrder.airport_details.airport_code_iata && (
-                                    <Badge variant="outline">{viewingOrder.airport_details.airport_code_iata}</Badge>
-                                  )}
-                                  {viewingOrder.airport_details.airport_code_icao && (
-                                    <Badge variant="secondary">{viewingOrder.airport_details.airport_code_icao}</Badge>
-                                  )}
+                                  <div className="flex gap-2">
+                                    {viewingOrder.airport_details.airport_code_iata && (
+                                      <Badge variant="outline">{viewingOrder.airport_details.airport_code_iata}</Badge>
+                                    )}
+                                    {viewingOrder.airport_details.airport_code_icao && (
+                                      <Badge variant="secondary">{viewingOrder.airport_details.airport_code_icao}</Badge>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             </CardContent>
                           </Card>
                         )}
 
-                        {/* Order Items Card */}
-                        {viewingOrder.items && viewingOrder.items.length > 0 && (
+                        {/* FBO Information Card */}
+                        {viewingOrder.fbo && (
                           <Card className="rounded-xl border border-border/30 bg-muted/20 shadow-sm">
                             <CardHeader className="pb-3">
                               <CardTitle className="text-lg flex items-center gap-2">
-                                <UtensilsCrossed className="h-5 w-5 text-emerald-500" />
-                                Order Items ({viewingOrder.items.length})
+                                <Building2 className="h-5 w-5 text-amber-500" />
+                                FBO Information
                               </CardTitle>
                             </CardHeader>
-                            <CardContent>
-                              <div className="space-y-3">
-                                {viewingOrder.items.map((item, index) => (
-                                  <div key={item.id || index} className="flex justify-between items-center p-3 border border-border/50 rounded-lg">
-                                    <div>
-                                      <p className="text-sm font-medium">{item.item_name}</p>
-                                      <div className="flex items-center gap-2 mt-1">
-                                        <Badge variant="outline" className="text-xs">Qty: {item.portion_size}</Badge>
-                                        {item.item_description && (
-                                          <span className="text-xs text-muted-foreground">{item.item_description}</span>
-                                        )}
-                                      </div>
-                                    </div>
-                                    <p className="text-sm font-medium">${parseFloat(String(item.price)).toFixed(2)}</p>
-                                  </div>
-                                ))}
-                                <div className="mt-4 pt-4 border-t border-border/50 space-y-2">
-                                  <div className="flex justify-between text-sm">
-                                    <span className="text-muted-foreground">Subtotal:</span>
-                                    <span className="font-medium">${parseFloat(String(viewingOrder.subtotal)).toFixed(2)}</span>
-                                  </div>
-                                  {parseFloat(String(viewingOrder.service_charge)) > 0 && (
-                                    <div className="flex justify-between text-sm">
-                                      <span className="text-muted-foreground">Service Charge:</span>
-                                      <span className="font-medium">${parseFloat(String(viewingOrder.service_charge)).toFixed(2)}</span>
-                                    </div>
-                                  )}
-                                  <div className="flex justify-between text-lg font-bold pt-2 border-t border-border/50">
-                                    <span>Total:</span>
-                                    <span className="text-primary">${parseFloat(String(viewingOrder.total)).toFixed(2)}</span>
-                                  </div>
+                            <CardContent className="space-y-4">
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <Label className="text-xs text-muted-foreground mb-1.5 block">
+                                    FBO Name
+                                  </Label>
+                                  <p className="text-sm font-medium">{viewingOrder.fbo.fbo_name}</p>
+                                </div>
+                                <div>
+                                  <Label className="text-xs text-muted-foreground mb-1.5 block">
+                                    FBO Email
+                                  </Label>
+                                  <p className="text-sm font-medium">{viewingOrder.fbo.fbo_email || "—"}</p>
+                                </div>
+                                <div>
+                                  <Label className="text-xs text-muted-foreground mb-1.5 block">
+                                    FBO Phone
+                                  </Label>
+                                  <p className="text-sm font-medium">{viewingOrder.fbo.fbo_phone || "—"}</p>
                                 </div>
                               </div>
                             </CardContent>
@@ -1635,6 +1627,52 @@ function OrdersContent() {
                                   <p className="text-sm font-medium break-words">{viewingOrder.dietary_restrictions}</p>
                                 </div>
                               )}
+                            </CardContent>
+                          </Card>
+                        )}
+
+                        {/* Order Items Card */}
+                        {viewingOrder.items && viewingOrder.items.length > 0 && (
+                          <Card className="rounded-xl border border-border/30 bg-muted/20 shadow-sm">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-lg flex items-center gap-2">
+                                <UtensilsCrossed className="h-5 w-5 text-emerald-500" />
+                                Order Items ({viewingOrder.items.length})
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="space-y-3">
+                                {viewingOrder.items.map((item, index) => (
+                                  <div key={item.id || index} className="flex justify-between items-center p-3 border border-border/50 rounded-lg">
+                                    <div>
+                                      <p className="text-sm font-medium">{item.item_name}</p>
+                                      <div className="flex items-center gap-2 mt-1">
+                                        <Badge variant="outline" className="text-xs">Qty: {item.portion_size}</Badge>
+                                        {item.item_description && (
+                                          <span className="text-xs text-muted-foreground">{item.item_description}</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <p className="text-sm font-medium">${parseFloat(String(item.price)).toFixed(2)}</p>
+                                  </div>
+                                ))}
+                                <div className="mt-4 pt-4 border-t border-border/50 space-y-2">
+                                  <div className="flex justify-between text-sm">
+                                    <span className="text-muted-foreground">Subtotal:</span>
+                                    <span className="font-medium">${parseFloat(String(viewingOrder.subtotal)).toFixed(2)}</span>
+                                  </div>
+                                  {parseFloat(String(viewingOrder.service_charge)) > 0 && (
+                                    <div className="flex justify-between text-sm">
+                                      <span className="text-muted-foreground">Service Charge:</span>
+                                      <span className="font-medium">${parseFloat(String(viewingOrder.service_charge)).toFixed(2)}</span>
+                                    </div>
+                                  )}
+                                  <div className="flex justify-between text-lg font-bold pt-2 border-t border-border/50">
+                                    <span>Total:</span>
+                                    <span className="text-primary">${parseFloat(String(viewingOrder.total)).toFixed(2)}</span>
+                                  </div>
+                                </div>
+                              </div>
                             </CardContent>
                           </Card>
                         )}

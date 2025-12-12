@@ -123,9 +123,6 @@ interface ImportResponse {
 // Form schema
 const airportSchema = z.object({
   airport_name: z.string().min(1, "Airport name is required"),
-  fbo_name: z.string().min(1, "FBO name is required"),
-  fbo_email: z.string().email("Invalid email address").optional().or(z.literal("")),
-  fbo_phone: z.string().optional(),
   airport_code_iata: z.string().length(3, "IATA code must be exactly 3 characters").optional().or(z.literal("")),
   airport_code_icao: z.string().length(4, "ICAO code must be exactly 4 characters").optional().or(z.literal("")),
 })
@@ -165,9 +162,6 @@ function AirportsContent() {
     resolver: zodResolver(airportSchema),
     defaultValues: {
       airport_name: "",
-      fbo_name: "",
-      fbo_email: "",
-      fbo_phone: "",
       airport_code_iata: "",
       airport_code_icao: "",
     },
@@ -249,9 +243,6 @@ function AirportsContent() {
     setEditingAirport(null)
     form.reset({
       airport_name: "",
-      fbo_name: "",
-      fbo_email: "",
-      fbo_phone: "",
       airport_code_iata: "",
       airport_code_icao: "",
     })
@@ -263,9 +254,6 @@ function AirportsContent() {
     setEditingAirport(airport)
     form.reset({
       airport_name: airport.airport_name,
-      fbo_name: airport.fbo_name,
-      fbo_email: airport.fbo_email || "",
-      fbo_phone: airport.fbo_phone || "",
       airport_code_iata: airport.airport_code_iata || "",
       airport_code_icao: airport.airport_code_icao || "",
     })
@@ -281,12 +269,19 @@ function AirportsContent() {
 
       const method = editingAirport ? "PUT" : "POST"
 
+      // Prepare payload - exclude FBO fields
+      const payload = {
+        airport_name: values.airport_name,
+        airport_code_iata: values.airport_code_iata || null,
+        airport_code_icao: values.airport_code_icao || null,
+      }
+
       const response = await fetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(values),
+        body: JSON.stringify(payload),
       })
 
       if (!response.ok) {
@@ -716,34 +711,6 @@ function AirportsContent() {
                           </Button>
                         </TableHead>
                         <TableHead className="font-semibold">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 -ml-3 hover:bg-transparent"
-                            onClick={() => handleSort("fbo_name")}
-                          >
-                            <div className="flex items-center gap-2">
-                              <Building2 className="h-4 w-4 text-muted-foreground" />
-                              FBO Name
-                            </div>
-                            {sortBy === "fbo_name" && (
-                              <ArrowUpDown className="ml-2 h-3 w-3" />
-                            )}
-                          </Button>
-                        </TableHead>
-                        <TableHead className="font-semibold">
-                          <div className="flex items-center gap-2">
-                            <Mail className="h-4 w-4 text-muted-foreground" />
-                            FBO Email
-                          </div>
-                        </TableHead>
-                        <TableHead className="font-semibold">
-                          <div className="flex items-center gap-2">
-                            <Phone className="h-4 w-4 text-muted-foreground" />
-                            FBO Phone
-                          </div>
-                        </TableHead>
-                        <TableHead className="font-semibold">
                           <div className="flex items-center gap-2">
                             <Code className="h-4 w-4 text-muted-foreground" />
                             IATA
@@ -770,15 +737,6 @@ function AirportsContent() {
                               <Skeleton className="h-4 w-[200px]" />
                             </TableCell>
                             <TableCell>
-                              <Skeleton className="h-4 w-[180px]" />
-                            </TableCell>
-                            <TableCell>
-                              <Skeleton className="h-4 w-[200px]" />
-                            </TableCell>
-                            <TableCell>
-                              <Skeleton className="h-4 w-[150px]" />
-                            </TableCell>
-                            <TableCell>
                               <Skeleton className="h-4 w-[60px]" />
                             </TableCell>
                             <TableCell>
@@ -791,7 +749,7 @@ function AirportsContent() {
                         ))
                       ) : airports.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={8} className="h-24 text-center">
+                          <TableCell colSpan={5} className="h-24 text-center">
                             <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
                               <Plane className="h-8 w-8 opacity-50" />
                               <p className="text-sm font-medium">No airports found</p>
@@ -821,37 +779,6 @@ function AirportsContent() {
                               <div className="truncate" title={airport.airport_name}>
                                 {airport.airport_name}
                               </div>
-                            </TableCell>
-                            <TableCell className="max-w-[180px]">
-                              <div className="truncate" title={airport.fbo_name}>
-                                {airport.fbo_name}
-                              </div>
-                            </TableCell>
-                            <TableCell className="max-w-[200px]">
-                              {airport.fbo_email ? (
-                                <a
-                                  href={`mailto:${airport.fbo_email}`}
-                                  className="text-primary hover:underline transition-colors truncate block"
-                                  title={airport.fbo_email}
-                                >
-                                  {airport.fbo_email}
-                                </a>
-                              ) : (
-                                <span className="text-muted-foreground">—</span>
-                              )}
-                            </TableCell>
-                            <TableCell className="max-w-[150px]">
-                              {airport.fbo_phone ? (
-                                <a
-                                  href={`tel:${airport.fbo_phone}`}
-                                  className="text-primary hover:underline transition-colors truncate block"
-                                  title={airport.fbo_phone}
-                                >
-                                  {airport.fbo_phone}
-                                </a>
-                              ) : (
-                                <span className="text-muted-foreground">—</span>
-                              )}
                             </TableCell>
                             <TableCell>
                               {airport.airport_code_iata ? (
@@ -1003,80 +930,12 @@ function AirportsContent() {
                             </FormItem>
                           )}
                         />
-                        <FormField
-                          control={form.control}
-                          name="fbo_name"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs font-medium text-muted-foreground">
-                                FBO Name *
-                              </FormLabel>
-                              <FormControl>
-                                <Input
-                                  placeholder="Enter FBO name..."
-                                  {...field}
-                                  className="h-11 bg-muted/30 border-border/40 focus:border-cyan-500/50 focus:ring-cyan-500/20"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
                       </div>
                     </div>
                     
                     <div className="space-y-4 pt-2">
                       <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                         <span className="flex h-5 w-5 items-center justify-center rounded bg-cyan-500/10 text-cyan-400">2</span>
-                        FBO Contact
-                      </div>
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <FormField
-                          control={form.control}
-                          name="fbo_email"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs font-medium text-muted-foreground">
-                                FBO Email
-                              </FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="email"
-                                  placeholder="Enter FBO email..."
-                                  {...field}
-                                  className="h-11 bg-muted/30 border-border/40 focus:border-cyan-500/50 focus:ring-cyan-500/20"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={form.control}
-                          name="fbo_phone"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs font-medium text-muted-foreground">
-                                FBO Phone
-                              </FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="tel"
-                                  placeholder="Enter FBO phone..."
-                                  {...field}
-                                  className="h-11 bg-muted/30 border-border/40 focus:border-cyan-500/50 focus:ring-cyan-500/20"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-4 pt-2">
-                      <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                        <span className="flex h-5 w-5 items-center justify-center rounded bg-cyan-500/10 text-cyan-400">3</span>
                         Airport Codes
                       </div>
                       <div className="grid gap-4 sm:grid-cols-2">
@@ -1197,23 +1056,13 @@ function AirportsContent() {
                             </CardTitle>
                           </CardHeader>
                           <CardContent className="space-y-4">
-                            <div className="grid gap-4 md:grid-cols-2">
-                              <div>
-                                <Label className="text-xs text-muted-foreground mb-1.5 block">
-                                  Airport Name
-                                </Label>
-                                <p className="text-sm font-medium break-words">
-                                  {viewingAirport.airport_name}
-                                </p>
-                              </div>
-                              <div>
-                                <Label className="text-xs text-muted-foreground mb-1.5 block">
-                                  FBO Name
-                                </Label>
-                                <p className="text-sm font-medium break-words">
-                                  {viewingAirport.fbo_name}
-                                </p>
-                              </div>
+                            <div>
+                              <Label className="text-xs text-muted-foreground mb-1.5 block">
+                                Airport Name
+                              </Label>
+                              <p className="text-sm font-medium break-words">
+                                {viewingAirport.airport_name}
+                              </p>
                             </div>
                             <div className="grid gap-4 md:grid-cols-2">
                               <div>
@@ -1246,49 +1095,6 @@ function AirportsContent() {
                           </CardContent>
                         </Card>
 
-                        {/* Contact Information Card */}
-                        <Card className="rounded-xl border border-border/30 bg-muted/20 shadow-sm">
-                          <CardHeader className="pb-3">
-                            <CardTitle className="text-lg flex items-center gap-2">
-                              <Building2 className="h-5 w-5 text-primary" />
-                              FBO Contact Information
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="space-y-4">
-                            <div>
-                              <Label className="text-xs text-muted-foreground mb-1.5 block flex items-center gap-1">
-                                <Mail className="h-3 w-3" />
-                                Email Address
-                              </Label>
-                              {viewingAirport.fbo_email ? (
-                                <a
-                                  href={`mailto:${viewingAirport.fbo_email}`}
-                                  className="text-sm font-medium text-primary hover:underline break-all"
-                                >
-                                  {viewingAirport.fbo_email}
-                                </a>
-                              ) : (
-                                <p className="text-sm text-muted-foreground">Not provided</p>
-                              )}
-                            </div>
-                            <div>
-                              <Label className="text-xs text-muted-foreground mb-1.5 block flex items-center gap-1">
-                                <Phone className="h-3 w-3" />
-                                Phone Number
-                              </Label>
-                              {viewingAirport.fbo_phone ? (
-                                <a
-                                  href={`tel:${viewingAirport.fbo_phone}`}
-                                  className="text-sm font-medium text-primary hover:underline break-all"
-                                >
-                                  {viewingAirport.fbo_phone}
-                                </a>
-                              ) : (
-                                <p className="text-sm text-muted-foreground">Not provided</p>
-                              )}
-                            </div>
-                          </CardContent>
-                        </Card>
                       </div>
                     </div>
                   )}

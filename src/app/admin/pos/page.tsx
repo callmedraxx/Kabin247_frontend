@@ -114,6 +114,16 @@ interface Airport {
   airport_code_icao: string | null
 }
 
+interface FBO {
+  id: number
+  fbo_name: string
+  fbo_email: string | null
+  fbo_phone: string | null
+  airport_code_iata: string | null
+  airport_code_icao: string | null
+  airport_name: string | null
+}
+
 interface MenuItem {
   id: number
   item_name: string
@@ -139,6 +149,11 @@ interface CaterersResponse {
 
 interface AirportsResponse {
   airports: Airport[]
+  total: number
+}
+
+interface FBOsResponse {
+  fbos: FBO[]
   total: number
 }
 
@@ -187,6 +202,7 @@ const formSchema = z.object({
   client_id: z.number({ message: "Please select a client" }).int().positive("Please select a client"),
   caterer_id: z.number({ message: "Please select a caterer" }).int().positive("Please select a caterer"),
   airport_id: z.number({ message: "Please select an airport" }).int().positive("Please select an airport"),
+  fbo_id: z.number().int().positive().optional(),
   description: z.string().optional(),
   items: z.array(itemSchema).min(1, "Please add at least one item to the order"),
   notes: z.string().optional(),
@@ -203,7 +219,7 @@ const formSchema = z.object({
   deliveryDate: z.string().min(1, "Please select a delivery date"),
   deliveryTime: z.string().min(1, "Please select a delivery time"),
   orderPriority: z.enum(["low", "normal", "high", "urgent"], { message: "Please select a priority level" }),
-  orderType: z.enum(["QE", "Serv", "Hub"], { message: "Please select an order type" }),
+  orderType: z.enum(["inflight", "qe_serv_hub", "restaurant_pickup"], { message: "Please select an order type" }),
   paymentMethod: z.enum(["card", "ACH"], { message: "Please select a payment method" }),
 })
 
@@ -256,6 +272,13 @@ const initialMenuItems = [
   { value: "item4", label: "Caesar Salad" },
 ]
 
+// Helper function to decode HTML entities
+const decodeHtmlEntities = (text: string): string => {
+  const textarea = document.createElement("textarea")
+  textarea.innerHTML = text
+  return textarea.value
+}
+
 function POSContent() {
   const searchParams = useSearchParams()
   const [previewOpen, setPreviewOpen] = React.useState(false)
@@ -265,30 +288,35 @@ function POSContent() {
   const [clientsData, setClientsData] = React.useState<Client[]>([])
   const [caterersData, setCaterersData] = React.useState<Caterer[]>([])
   const [airportsData, setAirportsData] = React.useState<Airport[]>([])
+  const [fbosData, setFBOsData] = React.useState<FBO[]>([])
   const [menuItemsData, setMenuItemsData] = React.useState<MenuItem[]>([])
   
   // Loading states (only for search operations, not initial load)
   const [isLoadingClients, setIsLoadingClients] = React.useState(false)
   const [isLoadingCaterers, setIsLoadingCaterers] = React.useState(false)
   const [isLoadingAirports, setIsLoadingAirports] = React.useState(false)
+  const [isLoadingFBOs, setIsLoadingFBOs] = React.useState(false)
   const [isLoadingMenuItems, setIsLoadingMenuItems] = React.useState(false)
   
   // Search states for comboboxes
   const [clientSearch, setClientSearch] = React.useState("")
   const [catererSearch, setCatererSearch] = React.useState("")
   const [airportSearch, setAirportSearch] = React.useState("")
+  const [fboSearch, setFboSearch] = React.useState("")
   const [menuItemSearch, setMenuItemSearch] = React.useState("")
   
   // Options for comboboxes (formatted for display)
   const [clientOptions, setClientOptions] = React.useState<{ value: string; label: string }[]>([])
   const [catererOptions, setCatererOptions] = React.useState<{ value: string; label: string; searchText?: string }[]>([])
   const [airportOptions, setAirportOptions] = React.useState<{ value: string; label: string; searchText?: string }[]>([])
+  const [fboOptions, setFboOptions] = React.useState<{ value: string; label: string; searchText?: string }[]>([])
   const [menuItemOptions, setMenuItemOptions] = React.useState<{ value: string; label: string }[]>([])
   
   // Dialog states
   const [clientDialogOpen, setClientDialogOpen] = React.useState(false)
   const [catererDialogOpen, setCatererDialogOpen] = React.useState(false)
   const [airportDialogOpen, setAirportDialogOpen] = React.useState(false)
+  const [fboDialogOpen, setFboDialogOpen] = React.useState(false)
   const [menuItemDialogOpen, setMenuItemDialogOpen] = React.useState(false)
   const [currentItemIndex, setCurrentItemIndex] = React.useState<number | undefined>(undefined)
   
@@ -303,6 +331,8 @@ function POSContent() {
   const [newCatererEmail, setNewCatererEmail] = React.useState("")
   const [newCatererAirportIata, setNewCatererAirportIata] = React.useState("")
   const [newCatererAirportIcao, setNewCatererAirportIcao] = React.useState("")
+  const [newCatererTimezone, setNewCatererTimezone] = React.useState("")
+  const [selectedCatererAirport, setSelectedCatererAirport] = React.useState<number | undefined>(undefined)
   
   const [newAirportName, setNewAirportName] = React.useState("")
   const [newFboName, setNewFboName] = React.useState("")
@@ -310,6 +340,11 @@ function POSContent() {
   const [newAirportIcao, setNewAirportIcao] = React.useState("")
   const [newFboEmail, setNewFboEmail] = React.useState("")
   const [newFboPhone, setNewFboPhone] = React.useState("")
+  
+  // FBO standalone form fields (separate from airport FBO fields)
+  const [newStandaloneFboName, setNewStandaloneFboName] = React.useState("")
+  const [newStandaloneFboEmail, setNewStandaloneFboEmail] = React.useState("")
+  const [newStandaloneFboPhone, setNewStandaloneFboPhone] = React.useState("")
   
   const [newMenuItemName, setNewMenuItemName] = React.useState("")
   
@@ -337,6 +372,7 @@ function POSContent() {
   const [isSavingClient, setIsSavingClient] = React.useState(false)
   const [isSavingCaterer, setIsSavingCaterer] = React.useState(false)
   const [isSavingAirport, setIsSavingAirport] = React.useState(false)
+  const [isSavingFBO, setIsSavingFBO] = React.useState(false)
   const [isSavingMenuItem, setIsSavingMenuItem] = React.useState(false)
   
   const { state, isMobile } = useSidebar()
@@ -475,23 +511,26 @@ function POSContent() {
       const data: AirportsResponse = await response.json()
       setAirportsData(data.airports || [])
       
-      // Format for combobox - codes first, then FBO name, then airport name
+      // Format for combobox - codes first, then airport name
       const options = (data.airports || []).map((airport) => {
         const codes = [
           airport.airport_code_iata,
           airport.airport_code_icao,
         ].filter(Boolean).join("/")
         
-        // Display format: "CODE - FBO Name - Airport Name" or "FBO Name - Airport Name" if no codes
+        // Decode HTML entities in airport name
+        const decodedAirportName = decodeHtmlEntities(airport.airport_name)
+        
+        // Display format: "CODE - Airport Name" or "Airport Name" if no codes
         let label = ""
         if (codes) {
-          label = `${codes} - ${airport.fbo_name} - ${airport.airport_name}`
+          label = `${codes} - ${decodedAirportName}`
         } else {
-          label = `${airport.fbo_name} - ${airport.airport_name}`
+          label = decodedAirportName
         }
         
-        // Search text includes all fields
-        const searchText = `${codes} ${airport.fbo_name} ${airport.airport_name}`.toLowerCase()
+        // Search text includes codes and decoded airport name
+        const searchText = `${codes} ${decodedAirportName}`.toLowerCase()
         
         return {
           value: airport.id.toString(),
@@ -522,6 +561,68 @@ function POSContent() {
       }
     } finally {
       if (showLoading) setIsLoadingAirports(false)
+    }
+  }, [])
+  
+  // Fetch FBOs from API
+  const fetchFBOs = React.useCallback(async (search?: string, showLoading = false) => {
+    if (showLoading) setIsLoadingFBOs(true)
+    try {
+      const params = new URLSearchParams()
+      if (search?.trim()) {
+        params.append("search", search.trim())
+      }
+      params.append("limit", "1000")
+      
+      const response = await fetch(`${API_BASE_URL}/fbos?${params.toString()}`)
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Failed to fetch FBOs" }))
+        toast.error("Failed to load FBOs", {
+          description: errorData.error || `HTTP error! status: ${response.status}`,
+        })
+        return
+      }
+      
+      const data: FBOsResponse = await response.json()
+      setFBOsData(data.fbos || [])
+      
+      // Format for combobox with airport code prefix (same format as caterers)
+      const options = (data.fbos || []).map((fbo) => {
+        const airportCodes = [
+          fbo.airport_code_iata,
+          fbo.airport_code_icao,
+        ].filter(Boolean).join("/")
+        
+        // Display format: "CODE - FBO Name" or "FBO Name" if no codes
+        let label = ""
+        if (airportCodes) {
+          label = `${airportCodes} - ${fbo.fbo_name}`
+        } else {
+          label = fbo.fbo_name
+        }
+        
+        // Search text includes both name and codes
+        const searchText = `${fbo.fbo_name} ${airportCodes} ${fbo.airport_name || ""}`.toLowerCase()
+        
+        return {
+          value: fbo.id.toString(),
+          label,
+          searchText,
+        }
+      })
+      setFboOptions(options)
+    } catch (err) {
+      // Handle network errors gracefully - these are expected in some scenarios (offline, CORS, etc.)
+      if (err instanceof TypeError && (err.message === "Failed to fetch" || err.message.includes("fetch"))) {
+        // Network error - log as warn instead of error since it's not necessarily a problem
+        // This can happen if backend is not running, CORS issues, or network problems
+        console.warn(`Network error fetching FBOs from ${API_BASE_URL}/fbos - this may be expected if backend is not running`)
+      } else {
+        // Other unexpected errors
+        console.error("Unexpected error fetching FBOs:", err)
+      }
+    } finally {
+      if (showLoading) setIsLoadingFBOs(false)
     }
   }, [])
   
@@ -573,8 +674,9 @@ function POSContent() {
     fetchClients()
     fetchCaterers(undefined, true) // Show loading indicator
     fetchAirports(undefined, true) // Show loading indicator
+    fetchFBOs(undefined, true) // Show loading indicator
     fetchMenuItems()
-  }, [fetchClients, fetchCaterers, fetchAirports, fetchMenuItems])
+  }, [fetchClients, fetchCaterers, fetchAirports, fetchFBOs, fetchMenuItems])
   
   // Debounced search for clients (only show loading during search, not initial load)
   React.useEffect(() => {
@@ -606,6 +708,16 @@ function POSContent() {
     }
   }, [airportSearch, fetchAirports])
 
+  // Debounced search for FBOs (only show loading during search, not initial load)
+  React.useEffect(() => {
+    if (fboSearch.trim()) {
+      const timer = setTimeout(() => {
+        fetchFBOs(fboSearch, true)
+      }, 300)
+      return () => clearTimeout(timer)
+    }
+  }, [fboSearch, fetchFBOs])
+
   // Debounced search for menu items (only show loading during search, not initial load)
   React.useEffect(() => {
     if (menuItemSearch.trim()) {
@@ -629,6 +741,12 @@ function POSContent() {
     }
   }, [airportOptions.length, isLoadingAirports, fetchAirports])
   
+  const handleFboComboboxOpen = React.useCallback((open: boolean) => {
+    if (open && fboOptions.length === 0 && !isLoadingFBOs) {
+      fetchFBOs(undefined, true)
+    }
+  }, [fboOptions.length, isLoadingFBOs, fetchFBOs])
+  
   // Filter options based on search (for client-side filtering when server-side search is not enough)
   // Note: Server-side search is already done via fetchCaterers/fetchAirports, but we also filter
   // client-side to support multi-field search (name + airport for caterers, code + FBO + name for airports)
@@ -650,12 +768,22 @@ function POSContent() {
     )
   }, [airportOptions, airportSearch])
   
+  const filteredFboOptions = React.useMemo(() => {
+    if (!fboSearch.trim()) return fboOptions
+    
+    const query = fboSearch.toLowerCase()
+    return fboOptions.filter((option) => 
+      option.searchText?.includes(query) || option.label.toLowerCase().includes(query)
+    )
+  }, [fboOptions, fboSearch])
+  
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema) as any,
     defaultValues: {
       client_id: undefined,
       caterer_id: undefined,
       airport_id: undefined,
+      fbo_id: undefined,
       description: "",
       items: [
         {
@@ -692,6 +820,7 @@ function POSContent() {
   const selectedClient = form.watch("client_id")
   const selectedCaterer = form.watch("caterer_id")
   const selectedAirport = form.watch("airport_id")
+  const selectedFBO = form.watch("fbo_id")
 
   const priorityBadgeClass = React.useMemo(() => {
     switch (watchedPriority) {
@@ -721,14 +850,27 @@ function POSContent() {
 
   const orderTypeBadgeClass = React.useMemo(() => {
     switch (watchedOrderType) {
-      case "QE":
+      case "inflight":
         return "border-purple-500/40 text-purple-300 bg-purple-500/10"
-      case "Serv":
+      case "qe_serv_hub":
         return "border-teal-500/40 text-teal-300 bg-teal-500/10"
-      case "Hub":
+      case "restaurant_pickup":
         return "border-orange-500/40 text-orange-300 bg-orange-500/10"
       default:
         return "border-border/60 text-muted-foreground bg-muted/30"
+    }
+  }, [watchedOrderType])
+
+  const orderTypeDisplayName = React.useMemo(() => {
+    switch (watchedOrderType) {
+      case "inflight":
+        return "Inflight order"
+      case "qe_serv_hub":
+        return "QE Serv Hub Order"
+      case "restaurant_pickup":
+        return "Restaurant Pickup Order"
+      default:
+        return watchedOrderType || "—"
     }
   }, [watchedOrderType])
 
@@ -746,6 +888,7 @@ function POSContent() {
             client_id: duplicateData.client_id || undefined,
             caterer_id: duplicateData.caterer_id || undefined,
             airport_id: duplicateData.airport_id || undefined,
+            fbo_id: duplicateData.fbo_id || undefined,
             description: duplicateData.description || "",
             items: duplicateData.items?.length > 0 ? duplicateData.items : [{
               itemName: "",
@@ -793,6 +936,7 @@ function POSContent() {
       const price = Number.isFinite(priceNum) ? priceNum : 0
 
       totalQuantity += quantity
+      // Calculate subtotal: price per item * quantity
       subtotal += price * quantity
     })
 
@@ -822,9 +966,17 @@ function POSContent() {
     [filteredCatererOptions, selectedCaterer, caterersData]
   )
 
-  const selectedAirportLabel = React.useMemo(
-    () => filteredAirportOptions.find((o) => o.value === selectedAirport?.toString())?.label || airportsData.find((a) => a.id === selectedAirport)?.airport_name || "Not selected",
-    [filteredAirportOptions, selectedAirport, airportsData]
+  const selectedAirportLabel = React.useMemo(() => {
+    const option = filteredAirportOptions.find((o) => o.value === selectedAirport?.toString())
+    if (option) return option.label
+    const airport = airportsData.find((a) => a.id === selectedAirport)
+    if (airport) return decodeHtmlEntities(airport.airport_name)
+    return "Not selected"
+  }, [filteredAirportOptions, selectedAirport, airportsData])
+
+  const selectedFBOLabel = React.useMemo(
+    () => filteredFboOptions.find((o) => o.value === selectedFBO?.toString())?.label || fbosData.find((f) => f.id === selectedFBO)?.fbo_name || "Not selected",
+    [filteredFboOptions, selectedFBO, fbosData]
   )
 
   const { fields, append, remove } = useFieldArray({
@@ -917,6 +1069,9 @@ function POSContent() {
       if (newCatererAirportIcao.trim()) {
         body.airport_code_icao = newCatererAirportIcao.trim()
       }
+      if (newCatererTimezone.trim()) {
+        body.time_zone = newCatererTimezone.trim()
+      }
       
       const response = await fetch(`${API_BASE_URL}/caterers`, {
         method: "POST",
@@ -947,6 +1102,7 @@ function POSContent() {
       setNewCatererEmail("")
       setNewCatererAirportIata("")
       setNewCatererAirportIcao("")
+      setSelectedCatererAirport(undefined)
       setCatererDialogOpen(false)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to create caterer"
@@ -960,8 +1116,8 @@ function POSContent() {
 
   // Handle add airport - save to backend API
   const handleAddAirport = async () => {
-    if (!newAirportName.trim() || !newFboName.trim()) {
-      toast.error("Please fill in all required fields")
+    if (!newAirportName.trim()) {
+      toast.error("Please fill in airport name")
       return
     }
     
@@ -969,7 +1125,6 @@ function POSContent() {
     try {
       const body: any = {
         airport_name: newAirportName.trim(),
-        fbo_name: newFboName.trim(),
       }
       
       if (newAirportIata.trim()) {
@@ -977,12 +1132,6 @@ function POSContent() {
       }
       if (newAirportIcao.trim()) {
         body.airport_code_icao = newAirportIcao.trim()
-      }
-      if (newFboEmail.trim()) {
-        body.fbo_email = newFboEmail.trim()
-      }
-      if (newFboPhone.trim()) {
-        body.fbo_phone = newFboPhone.trim()
       }
       
       const response = await fetch(`${API_BASE_URL}/airports`, {
@@ -1010,11 +1159,8 @@ function POSContent() {
       
       // Reset form fields
       setNewAirportName("")
-      setNewFboName("")
       setNewAirportIata("")
       setNewAirportIcao("")
-      setNewFboEmail("")
-      setNewFboPhone("")
       setAirportDialogOpen(false)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to create airport"
@@ -1023,6 +1169,64 @@ function POSContent() {
       })
     } finally {
       setIsSavingAirport(false)
+    }
+  }
+
+  // Handle add FBO - save to backend API
+  const handleAddFBO = async () => {
+    if (!newStandaloneFboName.trim()) {
+      toast.error("Please fill in FBO name")
+      return
+    }
+
+    setIsSavingFBO(true)
+    try {
+      const body: any = {
+        fbo_name: newStandaloneFboName.trim(),
+      }
+
+      if (newStandaloneFboEmail.trim()) {
+        body.fbo_email = newStandaloneFboEmail.trim()
+      }
+      if (newStandaloneFboPhone.trim()) {
+        body.fbo_phone = newStandaloneFboPhone.trim()
+      }
+
+      const response = await fetch(`${API_BASE_URL}/fbos`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Failed to create FBO" }))
+        throw new Error(errorData.error || "Failed to create FBO")
+      }
+
+      const newFBO: FBO = await response.json()
+
+      toast.success("FBO created successfully")
+
+      // Refresh FBOs list
+      await fetchFBOs()
+
+      // Set the form value to the new FBO
+      form.setValue("fbo_id", newFBO.id)
+
+      // Reset form fields
+      setNewStandaloneFboName("")
+      setNewStandaloneFboEmail("")
+      setNewStandaloneFboPhone("")
+      setFboDialogOpen(false)
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to create FBO"
+      toast.error("Error creating FBO", {
+        description: errorMessage,
+      })
+    } finally {
+      setIsSavingFBO(false)
     }
   }
 
@@ -1175,14 +1379,15 @@ function POSContent() {
         client_id: formData.client_id,
         caterer_id: formData.caterer_id,
         airport_id: formData.airport_id,
+        fbo_id: formData.fbo_id || null,
         aircraft_tail_number: formData.aircraftTailNumber || null,
         delivery_date: formData.deliveryDate,
         delivery_time: formData.deliveryTime,
         order_priority: formData.orderPriority,
         order_type: formData.orderType,
         payment_method: formData.paymentMethod,
-        service_charge: formData.serviceCharge ? parseFloat(formData.serviceCharge) : null,
-        delivery_fee: formData.deliveryFee ? parseFloat(formData.deliveryFee) : null,
+        service_charge: formData.serviceCharge && formData.serviceCharge.trim() ? parseFloat(formData.serviceCharge) : 0,
+        delivery_fee: formData.deliveryFee && formData.deliveryFee.trim() ? parseFloat(formData.deliveryFee) : 0,
         description: formData.description || null,
         notes: formData.notes || null,
         reheating_instructions: formData.reheatingInstructions || null,
@@ -1196,6 +1401,8 @@ function POSContent() {
         })),
       }
 
+      console.log("Order payload being sent:", JSON.stringify(orderPayload, null, 2))
+      
       const response = await fetch(`${API_BASE_URL}/orders`, {
         method: "POST",
         headers: {
@@ -1206,16 +1413,27 @@ function POSContent() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.message || `Failed to create order: ${response.statusText}`)
+        console.error("Order creation error response:", {
+          status: response.status,
+          statusText: response.statusText,
+          errorData,
+        })
+        const errorMessage = errorData.message || errorData.error || `Failed to create order: ${response.statusText} (${response.status})`
+        throw new Error(errorMessage)
       }
 
       const result = await response.json()
+      console.log("Order created successfully:", result)
       toast.success("Order created successfully!")
       setPreviewOpen(false)
       form.reset()
     } catch (error) {
       console.error("Error creating order:", error)
-      toast.error(error instanceof Error ? error.message : "Failed to create order. Please try again.")
+      const errorMessage = error instanceof Error ? error.message : "Failed to create order. Please try again."
+      toast.error("Order Creation Failed", {
+        description: errorMessage,
+        duration: 5000,
+      })
     }
   }
 
@@ -1337,6 +1555,32 @@ function POSContent() {
                                         onSearchChange={setAirportSearch}
                                         isLoading={isLoadingAirports}
                                         onOpenChange={handleAirportComboboxOpen}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={form.control}
+                                name="fbo_id"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-xs font-medium text-muted-foreground">FBO</FormLabel>
+                                    <FormControl>
+                                      <Combobox
+                                        options={filteredFboOptions}
+                                        value={field.value?.toString() || ""}
+                                        onValueChange={(value) => field.onChange(value ? parseInt(value) : undefined)}
+                                        placeholder="Select FBO..."
+                                        searchPlaceholder="Search FBOs..."
+                                        emptyMessage="No FBOs found."
+                                        onAddNew={() => setFboDialogOpen(true)}
+                                        addNewLabel="Add New FBO"
+                                        onSearchChange={setFboSearch}
+                                        isLoading={isLoadingFBOs}
+                                        onOpenChange={handleFboComboboxOpen}
                                       />
                                     </FormControl>
                                     <FormMessage />
@@ -1477,9 +1721,9 @@ function POSContent() {
                                         </SelectTrigger>
                                       </FormControl>
                                       <SelectContent>
-                                        <SelectItem value="QE">QE</SelectItem>
-                                        <SelectItem value="Serv">Serv</SelectItem>
-                                        <SelectItem value="Hub">Hub</SelectItem>
+                                        <SelectItem value="inflight">Inflight order</SelectItem>
+                                        <SelectItem value="qe_serv_hub">QE Serv Hub Order</SelectItem>
+                                        <SelectItem value="restaurant_pickup">Restaurant Pickup Order</SelectItem>
                                       </SelectContent>
                                     </Select>
                                     <FormMessage />
@@ -1538,176 +1782,6 @@ function POSContent() {
                                   </FormItem>
                                 )}
                               />
-                            </section>
-
-                            {/* Items Section */}
-                            <section className="space-y-4">
-                              <div className="flex items-center justify-between pb-3">
-                                <div className="flex items-center gap-3">
-                                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 ring-1 ring-emerald-500/20">
-                                    <UtensilsCrossed className="h-4 w-4 text-emerald-400" />
-                                  </div>
-                                  <h2 className="text-sm font-semibold tracking-wide text-foreground">Order Items</h2>
-                                  <Badge variant="secondary" className="rounded-full px-2.5 py-0.5 text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
-                                    {fields.length} item{fields.length !== 1 ? 's' : ''}
-                                  </Badge>
-                                  <div className="flex-1 h-px bg-gradient-to-r from-border/50 to-transparent" />
-                                </div>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  className="h-8 gap-1.5 text-xs bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white shadow-lg shadow-emerald-500/20 border-0"
-                                  onClick={() =>
-                                    append({
-                                      itemName: "",
-                                      itemDescription: "",
-                                      portionSize: "",
-                                      price: "",
-                                    })
-                                  }
-                                >
-                                  <Plus className="h-3.5 w-3.5" />
-                                  Add Item
-                                </Button>
-                              </div>
-
-                              {fields.map((field, index) => (
-                                <div 
-                                  key={field.id} 
-                                  className="group relative p-5 rounded-xl border border-border/30 bg-gradient-to-b from-muted/30 to-muted/10 space-y-4 hover:border-primary/20 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300"
-                                >
-                                  <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-border/50 to-transparent" />
-                                  {/* Item Header */}
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-3">
-                                      <div className="relative">
-                                        <div className="absolute inset-0 bg-emerald-500/20 rounded-lg blur-sm group-hover:blur-md transition-all" />
-                                        <span className="relative flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 text-xs font-bold text-white shadow-md">
-                                          {index + 1}
-                                        </span>
-                                      </div>
-                                      <div>
-                                        <span className="text-sm font-semibold">Item {index + 1}</span>
-                                        <p className="text-[11px] text-muted-foreground">Add menu item details</p>
-                                      </div>
-                                    </div>
-                                    {fields.length > 1 && (
-                                      <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => remove(index)}
-                                        className="h-8 w-8 p-0 text-muted-foreground hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                                      >
-                                        <X className="h-4 w-4" />
-                                      </Button>
-                                    )}
-                                  </div>
-
-                                  {/* Item Fields */}
-                                  <div className="grid gap-4 sm:grid-cols-2">
-                                    <FormField
-                                      control={form.control}
-                                      name={`items.${index}.itemName`}
-                                      render={({ field }) => (
-                                        <FormItem>
-                                          <FormLabel className="text-xs font-medium text-muted-foreground">Menu Item *</FormLabel>
-                                          <FormControl>
-                                            <Combobox
-                                              options={menuItemOptions}
-                                              value={field.value}
-                                              onValueChange={(value) => {
-                                                field.onChange(value)
-                                                if (value) {
-                                                  const selectedItem = menuItemsData.find((item) => item.id.toString() === value)
-                                                  if (selectedItem) {
-                                                    const price = selectedItem.variants && selectedItem.variants.length > 0
-                                                      ? selectedItem.variants[0].price
-                                                      : undefined
-                                                    if (price !== undefined) {
-                                                      form.setValue(`items.${index}.price`, price.toString())
-                                                    }
-                                                    if (selectedItem.item_description) {
-                                                      form.setValue(`items.${index}.itemDescription`, selectedItem.item_description)
-                                                    }
-                                                  }
-                                                }
-                                              }}
-                                              placeholder="Select item..."
-                                              searchPlaceholder="Search items..."
-                                              emptyMessage="No items found."
-                                              onAddNew={() => {
-                                                setCurrentItemIndex(index)
-                                                setMenuItemDialogOpen(true)
-                                              }}
-                                              addNewLabel="Add New Item"
-                                              onSearchChange={setMenuItemSearch}
-                                              isLoading={isLoadingMenuItems}
-                                            />
-                                          </FormControl>
-                                          <FormMessage />
-                                        </FormItem>
-                                      )}
-                                    />
-
-                                    <div className="grid grid-cols-2 gap-3">
-                                      <FormField
-                                        control={form.control}
-                                        name={`items.${index}.portionSize`}
-                                        render={({ field }) => (
-                                          <FormItem>
-                                            <FormLabel className="text-xs font-medium text-muted-foreground">Qty *</FormLabel>
-                                            <FormControl>
-                                              <Input placeholder="1" {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                          </FormItem>
-                                        )}
-                                      />
-
-                                      <FormField
-                                        control={form.control}
-                                        name={`items.${index}.price`}
-                                        render={({ field }) => (
-                                          <FormItem>
-                                            <FormLabel className="text-xs font-medium text-muted-foreground">Price *</FormLabel>
-                                            <FormControl>
-                                              <div className="relative">
-                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
-                                                <Input type="number" step="0.01" placeholder="0.00" className="pl-7" {...field} />
-                                              </div>
-                                            </FormControl>
-                                            <FormMessage />
-                                          </FormItem>
-                                        )}
-                                      />
-                                    </div>
-                                  </div>
-
-                                  <FormField
-                                    control={form.control}
-                                    name={`items.${index}.itemDescription`}
-                                    render={({ field }) => (
-                                      <FormItem>
-                                        <FormLabel className="text-xs font-medium text-muted-foreground">Notes</FormLabel>
-                                        <FormControl>
-                                          <Textarea
-                                            placeholder="Special instructions or notes..."
-                                            className="min-h-[60px] resize-none text-sm"
-                                            {...field}
-                                          />
-                                        </FormControl>
-                                        <FormMessage />
-                                      </FormItem>
-                                    )}
-                                  />
-                                </div>
-                              ))}
-                              {form.formState.errors.items && (
-                                <p className="text-sm text-destructive">
-                                  {form.formState.errors.items.message}
-                                </p>
-                              )}
                             </section>
 
                             {/* Instructions Section */}
@@ -1793,6 +1867,178 @@ function POSContent() {
                                 />
                               </div>
                             </section>
+
+                            {/* Items Section */}
+                            <section className="space-y-4">
+                              <div className="flex items-center justify-between pb-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 ring-1 ring-emerald-500/20">
+                                    <UtensilsCrossed className="h-4 w-4 text-emerald-400" />
+                                  </div>
+                                  <h2 className="text-sm font-semibold tracking-wide text-foreground">Order Items</h2>
+                                  <Badge variant="secondary" className="rounded-full px-2.5 py-0.5 text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                                    {fields.length} item{fields.length !== 1 ? 's' : ''}
+                                  </Badge>
+                                  <div className="flex-1 h-px bg-gradient-to-r from-border/50 to-transparent" />
+                                </div>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  className="h-8 gap-1.5 text-xs bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white shadow-lg shadow-emerald-500/20 border-0"
+                                  onClick={() =>
+                                    append({
+                                      itemName: "",
+                                      itemDescription: "",
+                                      portionSize: "",
+                                      price: "",
+                                    })
+                                  }
+                                >
+                                  <Plus className="h-3.5 w-3.5" />
+                                  Add Item
+                                </Button>
+                              </div>
+
+                              {fields.map((field, index) => (
+                                <div 
+                                  key={field.id} 
+                                  className="group relative p-5 rounded-xl border border-border/30 bg-gradient-to-b from-muted/30 to-muted/10 space-y-4 hover:border-primary/20 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300"
+                                >
+                                  <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-border/50 to-transparent" />
+                                  {/* Item Header */}
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                      <div className="relative">
+                                        <div className="absolute inset-0 bg-emerald-500/20 rounded-lg blur-sm group-hover:blur-md transition-all" />
+                                        <span className="relative flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 text-xs font-bold text-white shadow-md">
+                                          {index + 1}
+                                        </span>
+                                      </div>
+                                      <div>
+                                        <span className="text-sm font-semibold">Item {index + 1}</span>
+                                        <p className="text-[11px] text-muted-foreground">Add menu item details</p>
+                                      </div>
+                                    </div>
+                                    {fields.length > 1 && (
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => remove(index)}
+                                        className="h-8 w-8 p-0 text-muted-foreground hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </Button>
+                                    )}
+                                  </div>
+
+                                  {/* Item Fields */}
+                                  <div className="grid gap-4 sm:grid-cols-2">
+                                    <FormField
+                                      control={form.control}
+                                      name={`items.${index}.itemName`}
+                                      render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel className="text-xs font-medium text-muted-foreground">Menu Item *</FormLabel>
+                                          <FormControl>
+                                            <Combobox
+                                              options={menuItemOptions}
+                                              value={field.value}
+                                              onValueChange={(value) => {
+                                                field.onChange(value)
+                                                if (value) {
+                                                  const selectedItem = menuItemsData.find((item) => item.id.toString() === value)
+                                                  if (selectedItem) {
+                                                    // Auto-populate price if available (from variants or direct price field)
+                                                    const price = (selectedItem.variants && selectedItem.variants.length > 0)
+                                                      ? selectedItem.variants[0].price
+                                                      : (selectedItem as any).price
+                                                    if (price !== undefined && price !== null) {
+                                                      form.setValue(`items.${index}.price`, price.toString())
+                                                    }
+                                                    // Auto-populate description if available
+                                                    if (selectedItem.item_description) {
+                                                      form.setValue(`items.${index}.itemDescription`, selectedItem.item_description)
+                                                    }
+                                                  }
+                                                }
+                                              }}
+                                              placeholder="Select item..."
+                                              searchPlaceholder="Search items..."
+                                              emptyMessage="No items found."
+                                              onAddNew={() => {
+                                                setCurrentItemIndex(index)
+                                                setMenuItemDialogOpen(true)
+                                              }}
+                                              addNewLabel="Add New Item"
+                                              onSearchChange={setMenuItemSearch}
+                                              isLoading={isLoadingMenuItems}
+                                            />
+                                          </FormControl>
+                                          <FormMessage />
+                                        </FormItem>
+                                      )}
+                                    />
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                      <FormField
+                                        control={form.control}
+                                        name={`items.${index}.portionSize`}
+                                        render={({ field }) => (
+                                          <FormItem>
+                                            <FormLabel className="text-xs font-medium text-muted-foreground">Qty *</FormLabel>
+                                            <FormControl>
+                                              <Input placeholder="1" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                          </FormItem>
+                                        )}
+                                      />
+
+                                      <FormField
+                                        control={form.control}
+                                        name={`items.${index}.price`}
+                                        render={({ field }) => (
+                                          <FormItem>
+                                            <FormLabel className="text-xs font-medium text-muted-foreground">Price *</FormLabel>
+                                            <FormControl>
+                                              <div className="relative">
+                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                                                <Input type="number" step="0.01" placeholder="0.00" className="pl-7" {...field} />
+                                              </div>
+                                            </FormControl>
+                                            <FormMessage />
+                                          </FormItem>
+                                        )}
+                                      />
+                                    </div>
+                                  </div>
+
+                                  <FormField
+                                    control={form.control}
+                                    name={`items.${index}.itemDescription`}
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel className="text-xs font-medium text-muted-foreground">Notes</FormLabel>
+                                        <FormControl>
+                                          <Textarea
+                                            placeholder="Special instructions or notes..."
+                                            className="min-h-[60px] resize-none text-sm"
+                                            {...field}
+                                          />
+                                        </FormControl>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+                                </div>
+                              ))}
+                              {form.formState.errors.items && (
+                                <p className="text-sm text-destructive">
+                                  {form.formState.errors.items.message}
+                                </p>
+                              )}
+                            </section>
                             </form>
                           </Form>
                         </CardContent>
@@ -1846,6 +2092,15 @@ function POSContent() {
                                 <div className="flex-1 min-w-0">
                                   <p className="text-[11px] text-muted-foreground">Airport</p>
                                   <p className="text-sm font-medium truncate">{selectedAirportLabel}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-blue-500/5 to-transparent border border-blue-500/10">
+                                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500/10">
+                                  <Building2 className="h-4 w-4 text-blue-400" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-[11px] text-muted-foreground">FBO</p>
+                                  <p className="text-sm font-medium truncate">{selectedFBOLabel}</p>
                                 </div>
                               </div>
                             </div>
@@ -2045,10 +2300,20 @@ function POSContent() {
                                       </div>
                                       <div className="min-w-0 flex-1">
                                         <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Airport</p>
-                                        <p className="font-semibold truncate" title={airportOptions.find((a) => a.value === formValues.airport_id?.toString())?.label || airportsData.find((a) => a.id === formValues.airport_id)?.airport_name || "Not selected"}>
-                                          {airportOptions.find((a) => a.value === formValues.airport_id?.toString())?.label || 
-                                           airportsData.find((a) => a.id === formValues.airport_id)?.airport_name || 
-                                           "Not selected"}
+                                        <p className="font-semibold truncate" title={(() => {
+                                          const option = airportOptions.find((a) => a.value === formValues.airport_id?.toString())
+                                          if (option) return option.label
+                                          const airport = airportsData.find((a) => a.id === formValues.airport_id)
+                                          if (airport) return decodeHtmlEntities(airport.airport_name)
+                                          return "Not selected"
+                                        })()}>
+                                          {(() => {
+                                            const option = airportOptions.find((a) => a.value === formValues.airport_id?.toString())
+                                            if (option) return option.label
+                                            const airport = airportsData.find((a) => a.id === formValues.airport_id)
+                                            if (airport) return decodeHtmlEntities(airport.airport_name)
+                                            return "Not selected"
+                                          })()}
                                         </p>
                                       </div>
                                     </div>
@@ -2106,11 +2371,14 @@ function POSContent() {
                                     </div>
                                     {formValues.orderType ? (
                                       <Badge variant="outline" className={`text-[10px] px-2 py-0.5 ${
-                                        formValues.orderType === "QE" ? "border-purple-500/30 bg-purple-500/10 text-purple-400" :
-                                        formValues.orderType === "Serv" ? "border-teal-500/30 bg-teal-500/10 text-teal-400" :
+                                        formValues.orderType === "inflight" ? "border-purple-500/30 bg-purple-500/10 text-purple-400" :
+                                        formValues.orderType === "qe_serv_hub" ? "border-teal-500/30 bg-teal-500/10 text-teal-400" :
                                         "border-orange-500/30 bg-orange-500/10 text-orange-400"
                                       }`}>
-                                        {formValues.orderType}
+                                        {formValues.orderType === "inflight" ? "Inflight order" :
+                                         formValues.orderType === "qe_serv_hub" ? "QE Serv Hub Order" :
+                                         formValues.orderType === "restaurant_pickup" ? "Restaurant Pickup Order" :
+                                         formValues.orderType}
                                       </Badge>
                                     ) : <span className="text-sm text-muted-foreground">—</span>}
                                   </div>
@@ -2121,6 +2389,44 @@ function POSContent() {
                                   <div className="p-4 rounded-xl bg-muted/20 border border-border/30">
                                     <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Description</p>
                                     <p className="text-sm">{formValues.description}</p>
+                                  </div>
+                                )}
+
+                                {/* Special Instructions */}
+                                {(formValues.reheatingInstructions || formValues.packagingInstructions || formValues.dietaryRestrictions || formValues.notes) && (
+                                  <div className="space-y-3">
+                                    <div className="flex items-center gap-3">
+                                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-amber-500/20 to-amber-600/10 ring-1 ring-amber-500/20">
+                                        <FileText className="h-4 w-4 text-amber-400" />
+                                      </div>
+                                      <h3 className="font-semibold">Special Instructions</h3>
+                                    </div>
+                                    <div className="grid gap-3 sm:grid-cols-2">
+                                      {formValues.reheatingInstructions && (
+                                        <div className="p-3 rounded-xl bg-muted/20 border border-border/30">
+                                          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Reheating</p>
+                                          <p className="text-sm">{formValues.reheatingInstructions}</p>
+                                        </div>
+                                      )}
+                                      {formValues.packagingInstructions && (
+                                        <div className="p-3 rounded-xl bg-muted/20 border border-border/30">
+                                          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Packaging</p>
+                                          <p className="text-sm">{formValues.packagingInstructions}</p>
+                                        </div>
+                                      )}
+                                      {formValues.dietaryRestrictions && (
+                                        <div className="p-3 rounded-xl bg-muted/20 border border-border/30">
+                                          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Dietary</p>
+                                          <p className="text-sm">{formValues.dietaryRestrictions}</p>
+                                        </div>
+                                      )}
+                                      {formValues.notes && (
+                                        <div className="p-3 rounded-xl bg-muted/20 border border-border/30">
+                                          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Notes</p>
+                                          <p className="text-sm">{formValues.notes}</p>
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
                                 )}
 
@@ -2168,7 +2474,11 @@ function POSContent() {
                                     <div className="flex justify-between items-center text-sm">
                                       <span className="text-muted-foreground">Subtotal</span>
                                       <span className="font-medium">
-                                        ${formValues.items.reduce((sum, item) => sum + (parseFloat(item.price) || 0), 0).toFixed(2)}
+                                        ${formValues.items.reduce((sum, item) => {
+                                          const price = parseFloat(item.price || "0")
+                                          const quantity = parseFloat(item.portionSize || "1")
+                                          return sum + (price * quantity)
+                                        }, 0).toFixed(2)}
                                       </span>
                                     </div>
                                     {formValues.serviceCharge && parseFloat(formValues.serviceCharge) > 0 && (
@@ -2187,49 +2497,15 @@ function POSContent() {
                                       <span className="font-semibold">Total</span>
                                       <span className="text-2xl font-bold bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-transparent">
                                         ${(
-                                          formValues.items.reduce((sum, item) => sum + (parseFloat(item.price) || 0), 0) +
+                                          formValues.items.reduce((sum, item) => {
+                                            const price = parseFloat(item.price || "0")
+                                            const quantity = parseFloat(item.portionSize || "1")
+                                            return sum + (price * quantity)
+                                          }, 0) +
                                           (parseFloat(formValues.serviceCharge || "0")) +
                                           (parseFloat(formValues.deliveryFee || "0"))
                                         ).toFixed(2)}
                                       </span>
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Special Instructions */}
-                                {(formValues.reheatingInstructions || formValues.packagingInstructions || formValues.dietaryRestrictions || formValues.notes) && (
-                                  <div className="space-y-3">
-                                    <div className="flex items-center gap-3">
-                                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-amber-500/20 to-amber-600/10 ring-1 ring-amber-500/20">
-                                        <FileText className="h-4 w-4 text-amber-400" />
-                                      </div>
-                                      <h3 className="font-semibold">Special Instructions</h3>
-                                    </div>
-                                    <div className="grid gap-3 sm:grid-cols-2">
-                                      {formValues.reheatingInstructions && (
-                                        <div className="p-3 rounded-xl bg-muted/20 border border-border/30">
-                                          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Reheating</p>
-                                          <p className="text-sm">{formValues.reheatingInstructions}</p>
-                                        </div>
-                                      )}
-                                      {formValues.packagingInstructions && (
-                                        <div className="p-3 rounded-xl bg-muted/20 border border-border/30">
-                                          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Packaging</p>
-                                          <p className="text-sm">{formValues.packagingInstructions}</p>
-                                        </div>
-                                      )}
-                                      {formValues.dietaryRestrictions && (
-                                        <div className="p-3 rounded-xl bg-muted/20 border border-border/30">
-                                          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Dietary</p>
-                                          <p className="text-sm">{formValues.dietaryRestrictions}</p>
-                                        </div>
-                                      )}
-                                      {formValues.notes && (
-                                        <div className="p-3 rounded-xl bg-muted/20 border border-border/30">
-                                          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Notes</p>
-                                          <p className="text-sm">{formValues.notes}</p>
-                                        </div>
-                                      )}
                                     </div>
                                   </div>
                                 )}
@@ -2472,11 +2748,39 @@ function POSContent() {
                           </div>
                         </div>
                         
-                        {/* Airport Codes Section */}
+                        {/* Airport Selection Section */}
                         <div className="space-y-4 pt-2">
                           <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                             <span className="flex h-5 w-5 items-center justify-center rounded bg-violet-500/10 text-violet-400">2</span>
-                            Airport Codes
+                            Airport Information
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="caterer-airport" className="text-xs font-medium text-muted-foreground">Select Airport</Label>
+                            <Combobox
+                              options={filteredAirportOptions}
+                              value={selectedCatererAirport?.toString() || ""}
+                              onValueChange={(value) => {
+                                if (value) {
+                                  const airportId = parseInt(value)
+                                  setSelectedCatererAirport(airportId)
+                                  const airport = airportsData.find((a) => a.id === airportId)
+                                  if (airport) {
+                                    setNewCatererAirportIata(airport.airport_code_iata || "")
+                                    setNewCatererAirportIcao(airport.airport_code_icao || "")
+                                  }
+                                } else {
+                                  setSelectedCatererAirport(undefined)
+                                  setNewCatererAirportIata("")
+                                  setNewCatererAirportIcao("")
+                                }
+                              }}
+                              placeholder="Select airport to auto-fill codes..."
+                              searchPlaceholder="Search airports..."
+                              emptyMessage="No airports found."
+                              onSearchChange={setAirportSearch}
+                              isLoading={isLoadingAirports}
+                              onOpenChange={handleAirportComboboxOpen}
+                            />
                           </div>
                           <div className="grid gap-4 sm:grid-cols-2">
                             <div className="space-y-2">
@@ -2487,7 +2791,8 @@ function POSContent() {
                                 value={newCatererAirportIata}
                                 onChange={(e) => setNewCatererAirportIata(e.target.value.toUpperCase())}
                                 maxLength={3}
-                                className="h-11 bg-muted/30 border-border/40 focus:border-violet-500/50 focus:ring-violet-500/20 font-mono uppercase"
+                                readOnly={!!selectedCatererAirport}
+                                className={`h-11 bg-muted/30 border-border/40 focus:border-violet-500/50 focus:ring-violet-500/20 font-mono uppercase ${selectedCatererAirport ? "cursor-not-allowed opacity-60" : ""}`}
                               />
                             </div>
                             <div className="space-y-2">
@@ -2498,9 +2803,36 @@ function POSContent() {
                                 value={newCatererAirportIcao}
                                 onChange={(e) => setNewCatererAirportIcao(e.target.value.toUpperCase())}
                                 maxLength={4}
-                                className="h-11 bg-muted/30 border-border/40 focus:border-violet-500/50 focus:ring-violet-500/20 font-mono uppercase"
+                                readOnly={!!selectedCatererAirport}
+                                className={`h-11 bg-muted/30 border-border/40 focus:border-violet-500/50 focus:ring-violet-500/20 font-mono uppercase ${selectedCatererAirport ? "cursor-not-allowed opacity-60" : ""}`}
                               />
                             </div>
+                          </div>
+                          {selectedCatererAirport && (
+                            <p className="text-xs text-muted-foreground">
+                              Airport codes are auto-filled from selected airport. Clear selection to enter manually.
+                            </p>
+                          )}
+                        </div>
+                        
+                        {/* Time Zone Section */}
+                        <div className="space-y-4 pt-2">
+                          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                            <span className="flex h-5 w-5 items-center justify-center rounded bg-violet-500/10 text-violet-400">3</span>
+                            Time Zone
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="caterer-timezone" className="text-xs font-medium text-muted-foreground flex items-center gap-2">
+                              <Clock className="h-3.5 w-3.5" />
+                              Time Zone
+                            </Label>
+                            <Input
+                              id="caterer-timezone"
+                              placeholder="e.g., America/New_York"
+                              value={newCatererTimezone}
+                              onChange={(e) => setNewCatererTimezone(e.target.value)}
+                              className="h-11 bg-muted/30 border-border/40 focus:border-violet-500/50 focus:ring-violet-500/20 sm:max-w-md"
+                            />
                           </div>
                         </div>
                       </div>
@@ -2515,6 +2847,8 @@ function POSContent() {
                             setNewCatererEmail("")
                             setNewCatererAirportIata("")
                             setNewCatererAirportIcao("")
+                            setNewCatererTimezone("")
+                            setSelectedCatererAirport(undefined)
                           }}
                         >
                           Cancel
@@ -2566,29 +2900,17 @@ function POSContent() {
                         <div className="space-y-4">
                           <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                             <span className="flex h-5 w-5 items-center justify-center rounded bg-cyan-500/10 text-cyan-400">1</span>
-                            Airport & FBO Information
+                            Airport Information
                           </div>
-                          <div className="grid gap-4 sm:grid-cols-2">
-                            <div className="space-y-2">
-                              <Label htmlFor="airport-name" className="text-xs font-medium text-muted-foreground">Airport Name *</Label>
-                              <Input
-                                id="airport-name"
-                                placeholder="Enter airport name..."
-                                value={newAirportName}
-                                onChange={(e) => setNewAirportName(e.target.value)}
-                                className="h-11 bg-muted/30 border-border/40 focus:border-cyan-500/50 focus:ring-cyan-500/20"
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="fbo-name" className="text-xs font-medium text-muted-foreground">FBO Name *</Label>
-                              <Input
-                                id="fbo-name"
-                                placeholder="Enter FBO name..."
-                                value={newFboName}
-                                onChange={(e) => setNewFboName(e.target.value)}
-                                className="h-11 bg-muted/30 border-border/40 focus:border-cyan-500/50 focus:ring-cyan-500/20"
-                              />
-                            </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="airport-name" className="text-xs font-medium text-muted-foreground">Airport Name *</Label>
+                            <Input
+                              id="airport-name"
+                              placeholder="Enter airport name..."
+                              value={newAirportName}
+                              onChange={(e) => setNewAirportName(e.target.value)}
+                              className="h-11 bg-muted/30 border-border/40 focus:border-cyan-500/50 focus:ring-cyan-500/20"
+                            />
                           </div>
                         </div>
                         
@@ -2623,37 +2945,6 @@ function POSContent() {
                             </div>
                           </div>
                         </div>
-                        
-                        {/* Contact Section */}
-                        <div className="space-y-4 pt-2">
-                          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                            <span className="flex h-5 w-5 items-center justify-center rounded bg-cyan-500/10 text-cyan-400">3</span>
-                            FBO Contact
-                          </div>
-                          <div className="grid gap-4 sm:grid-cols-2">
-                            <div className="space-y-2">
-                              <Label htmlFor="fbo-email" className="text-xs font-medium text-muted-foreground">FBO Email</Label>
-                              <Input
-                                id="fbo-email"
-                                type="email"
-                                placeholder="Enter FBO email..."
-                                value={newFboEmail}
-                                onChange={(e) => setNewFboEmail(e.target.value)}
-                                className="h-11 bg-muted/30 border-border/40 focus:border-cyan-500/50 focus:ring-cyan-500/20"
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="fbo-phone" className="text-xs font-medium text-muted-foreground">FBO Phone</Label>
-                              <Input
-                                id="fbo-phone"
-                                placeholder="Enter FBO phone..."
-                                value={newFboPhone}
-                                onChange={(e) => setNewFboPhone(e.target.value)}
-                                className="h-11 bg-muted/30 border-border/40 focus:border-cyan-500/50 focus:ring-cyan-500/20"
-                              />
-                            </div>
-                          </div>
-                        </div>
                       </div>
                       <DialogFooter className="relative pt-4 border-t border-border/30 gap-3">
                         <Button 
@@ -2662,18 +2953,15 @@ function POSContent() {
                           onClick={() => {
                             setAirportDialogOpen(false)
                             setNewAirportName("")
-                            setNewFboName("")
                             setNewAirportIata("")
                             setNewAirportIcao("")
-                            setNewFboEmail("")
-                            setNewFboPhone("")
                           }}
                         >
                           Cancel
                         </Button>
                         <Button 
                           onClick={handleAddAirport} 
-                          disabled={isSavingAirport || !newAirportName.trim() || !newFboName.trim()}
+                          disabled={isSavingAirport || !newAirportName.trim()}
                           className="bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 shadow-lg shadow-cyan-500/25 text-white px-6"
                         >
                           {isSavingAirport ? (
@@ -2692,9 +2980,115 @@ function POSContent() {
                     </DialogContent>
                   </Dialog>
 
+                  {/* Add FBO Dialog */}
+                  <Dialog open={fboDialogOpen} onOpenChange={setFboDialogOpen}>
+                    <DialogContent className="sm:max-w-2xl lg:max-w-3xl max-h-[90vh] overflow-y-auto scrollbar-hide border-0 bg-card shadow-2xl shadow-black/50 ring-1 ring-white/[0.05]">
+                      <div className="absolute inset-0 bg-gradient-to-br from-blue-500/[0.05] via-transparent to-transparent rounded-lg pointer-events-none" />
+                      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-blue-500/30 to-transparent" />
+                      <DialogHeader className="relative pb-4 border-b border-border/30">
+                        <div className="flex items-center gap-4">
+                          <div className="relative">
+                            <div className="absolute inset-0 bg-blue-500/20 rounded-xl blur-lg" />
+                            <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-lg shadow-blue-500/25">
+                              <Building2 className="h-6 w-6 text-white" />
+                            </div>
+                          </div>
+                          <div>
+                            <DialogTitle className="text-xl font-bold">Add New FBO</DialogTitle>
+                            <DialogDescription className="text-sm">
+                              Enter the details of the new FBO to add to the system
+                            </DialogDescription>
+                          </div>
+                        </div>
+                      </DialogHeader>
+                      <div className="relative space-y-5 py-6">
+                        {/* FBO Information Section */}
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                            <span className="flex h-5 w-5 items-center justify-center rounded bg-blue-500/10 text-blue-400">1</span>
+                            FBO Information
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="standalone-fbo-name" className="text-xs font-medium text-muted-foreground">FBO Name *</Label>
+                            <Input
+                              id="standalone-fbo-name"
+                              placeholder="Enter FBO name..."
+                              value={newStandaloneFboName}
+                              onChange={(e) => setNewStandaloneFboName(e.target.value)}
+                              className="h-11 bg-muted/30 border-border/40 focus:border-blue-500/50 focus:ring-blue-500/20"
+                            />
+                          </div>
+                        </div>
+                        
+                        {/* Contact Information Section */}
+                        <div className="space-y-4 pt-2">
+                          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                            <span className="flex h-5 w-5 items-center justify-center rounded bg-blue-500/10 text-blue-400">2</span>
+                            Contact Information
+                          </div>
+                          <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="space-y-2">
+                              <Label htmlFor="standalone-fbo-email" className="text-xs font-medium text-muted-foreground">Email Address</Label>
+                              <Input
+                                id="standalone-fbo-email"
+                                type="email"
+                                placeholder="Enter FBO email..."
+                                value={newStandaloneFboEmail}
+                                onChange={(e) => setNewStandaloneFboEmail(e.target.value)}
+                                className="h-11 bg-muted/30 border-border/40 focus:border-blue-500/50 focus:ring-blue-500/20"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="standalone-fbo-phone" className="text-xs font-medium text-muted-foreground">Phone Number</Label>
+                              <Input
+                                id="standalone-fbo-phone"
+                                type="tel"
+                                placeholder="Enter FBO phone..."
+                                value={newStandaloneFboPhone}
+                                onChange={(e) => setNewStandaloneFboPhone(e.target.value)}
+                                className="h-11 bg-muted/30 border-border/40 focus:border-blue-500/50 focus:ring-blue-500/20"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <DialogFooter className="relative pt-4 border-t border-border/30 gap-3">
+                        <Button 
+                          variant="ghost" 
+                          className="text-muted-foreground hover:text-foreground"
+                          onClick={() => {
+                            setFboDialogOpen(false)
+                            setNewStandaloneFboName("")
+                            setNewStandaloneFboEmail("")
+                            setNewStandaloneFboPhone("")
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button 
+                          onClick={handleAddFBO} 
+                          disabled={isSavingFBO || !newStandaloneFboName.trim()}
+                          className="bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 shadow-lg shadow-blue-500/25 text-white px-6"
+                        >
+                          {isSavingFBO ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Saving...
+                            </>
+                          ) : (
+                            <>
+                              <Plus className="mr-2 h-4 w-4" />
+                              Add FBO
+                            </>
+                          )}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+
                   {/* Add Menu Item Dialog */}
-                  <Dialog 
-                    open={menuItemDialogOpen} 
+                  <Dialog
+                    open={menuItemDialogOpen}
                     onOpenChange={(open) => {
                       setMenuItemDialogOpen(open)
                       if (!open) {
