@@ -1047,15 +1047,22 @@ function OrdersContent() {
         reheating_instructions: values.reheatingInstructions || null,
         packaging_instructions: values.packagingInstructions || null,
         dietary_restrictions: values.dietaryRestrictions || null,
-        items: values.items.map((item) => ({
-          item_id: parseInt(item.itemName),
-          item_description: item.itemDescription || null,
-          portion_size: item.portionSize,
-          portion_serving: item.portionServing || null,
-          price: parseFloat(item.price),
-          category: item.category || null,
-          packaging: item.packaging || null,
-        })),
+        items: values.items.map((item) => {
+          const itemId = parseInt(item.itemName)
+          const menuItem = menuItemsData.find((mi) => mi.id === itemId)
+          const itemName = menuItem?.item_name || menuItemOptions.find((opt) => opt.value === item.itemName)?.label || ""
+          
+          return {
+            item_id: itemId,
+            item_name: itemName,
+            item_description: item.itemDescription || null,
+            portion_size: item.portionSize,
+            portion_serving: item.portionServing?.trim() || "No#",
+            price: parseFloat(item.price),
+            category: item.category || null,
+            packaging: item.packaging || null,
+          }
+        }),
       }
 
       const response = await fetch(`${API_BASE_URL}/orders/${editingOrder.id}`, {

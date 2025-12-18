@@ -1600,15 +1600,22 @@ function POSContent() {
         reheating_instructions: formData.reheatingInstructions || null,
         packaging_instructions: formData.packagingInstructions || null,
         dietary_restrictions: formData.dietaryRestrictions || null,
-        items: formData.items.map((item) => ({
-          item_id: parseInt(item.itemName),
-          item_description: item.itemDescription || null,
-          portion_size: item.portionSize,
-          portion_serving: item.portionServing || null,
-          price: parseFloat(item.price),
-          category: item.category || null,
-          packaging: item.packaging || null,
-        })),
+        items: formData.items.map((item) => {
+          const itemId = parseInt(item.itemName)
+          const menuItem = menuItemsData.find((mi) => mi.id === itemId)
+          const itemName = menuItem?.item_name || menuItemOptions.find((opt) => opt.value === item.itemName)?.label || ""
+          
+          return {
+            item_id: itemId,
+            item_name: itemName,
+            item_description: item.itemDescription || null,
+            portion_size: item.portionSize,
+            portion_serving: item.portionServing?.trim() || "No#",
+            price: parseFloat(item.price),
+            category: item.category || null,
+            packaging: item.packaging || null,
+          }
+        }),
       }
 
       console.log("Order payload being sent:", JSON.stringify(orderPayload, null, 2))
