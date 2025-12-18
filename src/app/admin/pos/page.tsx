@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useSearchParams } from "next/navigation"
+import { useSearchParams, usePathname } from "next/navigation"
 import { AppSidebar } from "@/components/dashboard/app-sidebar"
 import {
   SidebarInset,
@@ -193,9 +193,12 @@ const itemSchema = z.object({
   itemName: z.string().min(1, "Please enter an item name"),
   itemDescription: z.string().optional(),
   portionSize: z.string().min(1, "Please enter the quantity"),
+  portionServing: z.string().optional(), // Size like 500mg, 500ml, etc.
   price: z.string().min(1, "Please enter a price").refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) > 0, {
     message: "Please enter a valid price greater than 0",
   }),
+  category: z.string().optional(),
+  packaging: z.string().optional(),
 })
 
 const formSchema = z.object({
@@ -279,8 +282,47 @@ const decodeHtmlEntities = (text: string): string => {
   return textarea.value
 }
 
+// Draft persistence key
+const DRAFT_STORAGE_KEY = "pos_order_draft"
+
+// Helper functions for draft persistence
+const saveDraft = (formData: FormValues) => {
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(formData))
+    } catch (error) {
+      console.warn("Failed to save draft to localStorage:", error)
+    }
+  }
+}
+
+const loadDraft = (): FormValues | null => {
+  if (typeof window !== "undefined") {
+    try {
+      const draftData = localStorage.getItem(DRAFT_STORAGE_KEY)
+      if (draftData) {
+        return JSON.parse(draftData) as FormValues
+      }
+    } catch (error) {
+      console.warn("Failed to load draft from localStorage:", error)
+    }
+  }
+  return null
+}
+
+const clearDraft = () => {
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.removeItem(DRAFT_STORAGE_KEY)
+    } catch (error) {
+      console.warn("Failed to clear draft from localStorage:", error)
+    }
+  }
+}
+
 function POSContent() {
   const searchParams = useSearchParams()
+  const pathname = usePathname()
   const [previewOpen, setPreviewOpen] = React.useState(false)
   const [previewHtml, setPreviewHtml] = React.useState<string>("")
   
@@ -790,7 +832,10 @@ function POSContent() {
           itemName: "",
           itemDescription: "",
           portionSize: "",
+          portionServing: "",
           price: "",
+          category: "",
+          packaging: "",
         },
       ],
       notes: "",
@@ -874,8 +919,20 @@ function POSContent() {
     }
   }, [watchedOrderType])
 
-  // Load duplicate order data if coming from duplicate action
+  // Track if we've loaded initial data to prevent multiple loads
+  const [hasLoadedInitialData, setHasLoadedInitialData] = React.useState(false)
+  const [isMounted, setIsMounted] = React.useState(false)
+
+  // Mark component as mounted (client-side only)
   React.useEffect(() => {
+    setIsMounted(true)
+  }, [])
+
+  // Load duplicate order data if coming from duplicate action, or load draft on mount
+  React.useEffect(() => {
+    if (!isMounted) return // Wait for client-side mount
+    if (hasLoadedInitialData) return // Only run once
+
     const isDuplicate = searchParams.get("duplicate")
     if (isDuplicate === "true") {
       const duplicateDataStr = sessionStorage.getItem("duplicateOrder")
@@ -890,11 +947,22 @@ function POSContent() {
             airport_id: duplicateData.airport_id || undefined,
             fbo_id: duplicateData.fbo_id || undefined,
             description: duplicateData.description || "",
-            items: duplicateData.items?.length > 0 ? duplicateData.items : [{
+            items: duplicateData.items?.length > 0 ? duplicateData.items.map((item: any) => ({
+              itemName: item.itemName || item.item_id?.toString() || "",
+              itemDescription: item.itemDescription || item.item_description || "",
+              portionSize: item.portionSize || item.portion_size || "",
+              portionServing: item.portionServing || item.portion_serving || "",
+              price: item.price?.toString() || "",
+              category: item.category || "",
+              packaging: item.packaging || "",
+            })) : [{
               itemName: "",
               itemDescription: "",
               portionSize: "",
+              portionServing: "",
               price: "",
+              category: "",
+              packaging: "",
             }],
             notes: duplicateData.notes || "",
             reheatingInstructions: duplicateData.reheating_instructions || "",
@@ -916,12 +984,145 @@ function POSContent() {
           toast.success("Order duplicated", {
             description: "Please update the delivery date and time for the new order.",
           })
+          // Clear draft when duplicating an order
+          clearDraft()
+          setHasLoadedInitialData(true)
         } catch (err) {
           console.error("Error loading duplicate order:", err)
+          setHasLoadedInitialData(true)
+        }
+      } else {
+        setHasLoadedInitialData(true)
+      }
+    } else {
+      // Load draft data if not duplicating
+      const draftData = loadDraft()
+      if (draftData) {
+        try {
+          console.log("Loading draft:", draftData)
+          // Use setTimeout to ensure form is ready
+          setTimeout(() => {
+            form.reset(draftData)
+            toast.success("Draft restored", {
+              description: "Your previous order draft has been restored.",
+            })
+          }, 100)
+        } catch (err) {
+          console.error("Error loading draft:", err)
+        }
+      } else {
+        console.log("No draft found to load")
+      }
+      setHasLoadedInitialData(true)
+    }
+  }, [searchParams, form, hasLoadedInitialData, isMounted])
+
+  // Helper function to save draft if form has data
+  const saveDraftIfNeeded = React.useCallback(() => {
+    if (!hasLoadedInitialData) return
+    const isDuplicate = searchParams.get("duplicate") === "true"
+    if (isDuplicate) return
+
+    const currentValues = form.getValues()
+    // Only save if form has some meaningful data
+    const hasData = 
+      currentValues.client_id ||
+      currentValues.caterer_id ||
+      currentValues.airport_id ||
+      currentValues.items?.some(item => item.itemName) ||
+      currentValues.description ||
+      currentValues.notes ||
+      currentValues.deliveryDate ||
+      currentValues.deliveryTime
+
+    if (hasData) {
+      console.log("Saving draft:", currentValues)
+      saveDraft(currentValues)
+    } else {
+      // Clear draft if form is empty
+      clearDraft()
+    }
+  }, [form, hasLoadedInitialData, searchParams])
+
+  // Auto-save draft whenever form values change (debounced)
+  const formValues = form.watch()
+  React.useEffect(() => {
+    // Don't save draft if we haven't loaded initial data yet or if we just loaded a duplicate
+    if (!hasLoadedInitialData) return
+    const isDuplicate = searchParams.get("duplicate") === "true"
+    if (isDuplicate) return
+
+    // Debounce the save (reduced to 500ms for faster saves)
+    const timer = setTimeout(() => {
+      saveDraftIfNeeded()
+    }, 500) // Debounce for 500ms
+
+    return () => clearTimeout(timer)
+  }, [formValues, saveDraftIfNeeded])
+
+  // Save draft when navigating away (Next.js client-side navigation)
+  const prevPathname = React.useRef(pathname)
+  React.useEffect(() => {
+    // If pathname changed and we're no longer on the POS page, save draft immediately
+    if (prevPathname.current !== pathname && prevPathname.current === "/admin/pos" && pathname !== "/admin/pos") {
+      if (hasLoadedInitialData) {
+        const currentValues = form.getValues()
+        const hasData = 
+          currentValues.client_id ||
+          currentValues.caterer_id ||
+          currentValues.airport_id ||
+          currentValues.items?.some(item => item.itemName) ||
+          currentValues.description ||
+          currentValues.notes ||
+          currentValues.deliveryDate ||
+          currentValues.deliveryTime
+
+        if (hasData) {
+          console.log("Saving draft on navigation:", currentValues)
+          saveDraft(currentValues)
         }
       }
     }
-  }, [searchParams, form])
+    prevPathname.current = pathname
+  }, [pathname, form, hasLoadedInitialData])
+
+  // Save draft on component unmount (when navigating away)
+  React.useEffect(() => {
+    return () => {
+      // Save draft when component unmounts - get values directly to avoid stale closure
+      if (!hasLoadedInitialData) return
+      const isDuplicate = searchParams.get("duplicate") === "true"
+      if (isDuplicate) return
+
+      const currentValues = form.getValues()
+      const hasData = 
+        currentValues.client_id ||
+        currentValues.caterer_id ||
+        currentValues.airport_id ||
+        currentValues.items?.some(item => item.itemName) ||
+        currentValues.description ||
+        currentValues.notes ||
+        currentValues.deliveryDate ||
+        currentValues.deliveryTime
+
+      if (hasData) {
+        console.log("Saving draft on unmount:", currentValues)
+        saveDraft(currentValues)
+      }
+    }
+  }, [form, hasLoadedInitialData, searchParams])
+
+  // Save draft before page unload (for browser navigation/refresh)
+  React.useEffect(() => {
+    const handleBeforeUnload = () => {
+      saveDraftIfNeeded()
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload)
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload)
+    }
+  }, [saveDraftIfNeeded])
 
   const summary = React.useMemo(() => {
     const itemsArray = Array.isArray(watchedItems) ? watchedItems : []
@@ -983,8 +1184,6 @@ function POSContent() {
     control: form.control,
     name: "items",
   })
-
-  const formValues = form.watch()
 
   // Handle add client - save to backend API
   const handleAddClient = async () => {
@@ -1335,6 +1534,10 @@ function POSContent() {
         if (price !== undefined) {
           form.setValue(`items.${currentItemIndex}.price`, price.toString())
         }
+        // Auto-populate category if available
+        if (newMenuItem.category) {
+          form.setValue(`items.${currentItemIndex}.category`, newMenuItem.category)
+        }
       }
 
       // Reset form and close dialog
@@ -1353,6 +1556,10 @@ function POSContent() {
 
   const handleClear = () => {
     form.reset()
+    clearDraft() // Clear draft when user clicks clear
+    toast.success("Form cleared", {
+      description: "All form data has been cleared.",
+    })
   }
 
   const handlePreview = () => {
@@ -1397,7 +1604,10 @@ function POSContent() {
           item_id: parseInt(item.itemName),
           item_description: item.itemDescription || null,
           portion_size: item.portionSize,
+          portion_serving: item.portionServing || null,
           price: parseFloat(item.price),
+          category: item.category || null,
+          packaging: item.packaging || null,
         })),
       }
 
@@ -1427,6 +1637,7 @@ function POSContent() {
       toast.success("Order created successfully!")
       setPreviewOpen(false)
       form.reset()
+      clearDraft() // Clear draft after successful save
     } catch (error) {
       console.error("Error creating order:", error)
       const errorMessage = error instanceof Error ? error.message : "Failed to create order. Please try again."
@@ -1890,7 +2101,10 @@ function POSContent() {
                                       itemName: "",
                                       itemDescription: "",
                                       portionSize: "",
+                                      portionServing: "",
                                       price: "",
+                                      category: "",
+                                      packaging: "",
                                     })
                                   }
                                 >
@@ -1960,6 +2174,10 @@ function POSContent() {
                                                     if (selectedItem.item_description) {
                                                       form.setValue(`items.${index}.itemDescription`, selectedItem.item_description)
                                                     }
+                                                    // Auto-populate category if available
+                                                    if (selectedItem.category) {
+                                                      form.setValue(`items.${index}.category`, selectedItem.category)
+                                                    }
                                                   }
                                                 }
                                               }}
@@ -1980,7 +2198,7 @@ function POSContent() {
                                       )}
                                     />
 
-                                    <div className="grid grid-cols-2 gap-3">
+                                    <div className="grid grid-cols-3 gap-3">
                                       <FormField
                                         control={form.control}
                                         name={`items.${index}.portionSize`}
@@ -1989,6 +2207,20 @@ function POSContent() {
                                             <FormLabel className="text-xs font-medium text-muted-foreground">Qty *</FormLabel>
                                             <FormControl>
                                               <Input placeholder="1" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                          </FormItem>
+                                        )}
+                                      />
+
+                                      <FormField
+                                        control={form.control}
+                                        name={`items.${index}.portionServing`}
+                                        render={({ field }) => (
+                                          <FormItem>
+                                            <FormLabel className="text-xs font-medium text-muted-foreground">Serving Size</FormLabel>
+                                            <FormControl>
+                                              <Input placeholder="500ml, 250g..." {...field} />
                                             </FormControl>
                                             <FormMessage />
                                           </FormItem>
@@ -2014,15 +2246,59 @@ function POSContent() {
                                     </div>
                                   </div>
 
+                                  <div className="grid gap-4 sm:grid-cols-2">
+                                    <FormField
+                                      control={form.control}
+                                      name={`items.${index}.category`}
+                                      render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel className="text-xs font-medium text-muted-foreground">Category</FormLabel>
+                                          <FormControl>
+                                            <Input
+                                              {...field}
+                                              placeholder="Enter or select category..."
+                                              list={`category-list-${index}`}
+                                              className="text-sm"
+                                            />
+                                          </FormControl>
+                                          <datalist id={`category-list-${index}`}>
+                                            {categoryOptions.map((cat) => (
+                                              <option key={cat.value} value={cat.label} />
+                                            ))}
+                                          </datalist>
+                                          <FormMessage />
+                                        </FormItem>
+                                      )}
+                                    />
+
+                                    <FormField
+                                      control={form.control}
+                                      name={`items.${index}.itemDescription`}
+                                      render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel className="text-xs font-medium text-muted-foreground">Notes</FormLabel>
+                                          <FormControl>
+                                            <Textarea
+                                              placeholder="Special instructions or notes..."
+                                              className="min-h-[60px] resize-none text-sm"
+                                              {...field}
+                                            />
+                                          </FormControl>
+                                          <FormMessage />
+                                        </FormItem>
+                                      )}
+                                    />
+                                  </div>
+
                                   <FormField
                                     control={form.control}
-                                    name={`items.${index}.itemDescription`}
+                                    name={`items.${index}.packaging`}
                                     render={({ field }) => (
                                       <FormItem>
-                                        <FormLabel className="text-xs font-medium text-muted-foreground">Notes</FormLabel>
+                                        <FormLabel className="text-xs font-medium text-muted-foreground">Packaging</FormLabel>
                                         <FormControl>
                                           <Textarea
-                                            placeholder="Special instructions or notes..."
+                                            placeholder="Enter packaging information for this item..."
                                             className="min-h-[60px] resize-none text-sm"
                                             {...field}
                                           />
@@ -2190,7 +2466,10 @@ function POSContent() {
                                       </div>
                                       <div className="flex-1 min-w-0">
                                         <p className="text-sm font-medium truncate">{menuItemOptions.find(m => m.value === item.itemName)?.label || item.itemName || "Unnamed"}</p>
-                                        <p className="text-[11px] text-muted-foreground">Qty: {item.portionSize || "1"}</p>
+                                        <p className="text-[11px] text-muted-foreground">
+                                          Qty: {item.portionSize || "1"}
+                                          {item.portionServing && <span className="ml-2">• Size: {item.portionServing}</span>}
+                                        </p>
                                       </div>
                                       <span className="text-sm font-semibold text-primary">{formatCurrency(parseFloat(item.price || "0"))}</span>
                                     </div>
@@ -2456,10 +2735,23 @@ function POSContent() {
                                             </p>
                                             <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
                                               <span>Qty: {item.portionSize || "1"}</span>
+                                              {item.portionServing && <span>Size: {item.portionServing}</span>}
                                               <span className="font-semibold text-primary">${item.price || "0.00"}</span>
                                             </div>
+                                            {item.category && (
+                                              <div className="mt-2">
+                                                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Category: </span>
+                                                <span className="text-sm text-muted-foreground">{item.category}</span>
+                                              </div>
+                                            )}
                                             {item.itemDescription && (
                                               <p className="mt-2 text-sm text-muted-foreground">{item.itemDescription}</p>
+                                            )}
+                                            {item.packaging && (
+                                              <div className="mt-2 p-2 rounded-lg bg-muted/30 border border-border/20">
+                                                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Packaging</p>
+                                                <p className="text-sm text-muted-foreground">{item.packaging}</p>
+                                              </div>
                                             )}
                                           </div>
                                         </div>

@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Kabin247 - Let us care for your catering services.",
-  description: "Kabin247 - Let us care for your catering services.",
+  title: "Kabin247 - 24/7 Global Inflight Provision Support.",
+  description: "Kabin247 - 24/7 Global Inflight Provision Support.",
 };
 
 export default function RootLayout({

@@ -35,6 +35,9 @@ import {
   Loader2,
   AlertCircle,
   CircleDot,
+  UserCheck,
+  Edit,
+  ThumbsUp,
 } from "lucide-react"
 import { SidebarCategoryProvider } from "@/contexts/sidebar-context"
 import { API_BASE_URL } from "@/lib/api-config"
@@ -43,13 +46,16 @@ import { toast } from "sonner"
 // Order status types
 type OrderStatus = 
   | "awaiting_quote"
-  | "awaiting_caterer"
   | "quote_sent"
+  | "awaiting_client_approval"
   | "quote_approved"
+  | "awaiting_caterer"
+  | "caterer_confirmed"
   | "in_preparation"
   | "ready_for_delivery"
   | "delivered"
   | "cancelled"
+  | "order_changed"
 
 // Order data structure
 interface OrderClient {
@@ -119,23 +125,35 @@ const statusConfig: Record<OrderStatus, { label: string; color: string; bgColor:
     bgColor: "bg-yellow-500/10 border-yellow-500/20",
     icon: <Clock className="h-4 w-4" />
   },
-  awaiting_caterer: { 
-    label: "Awaiting Caterer", 
-    color: "text-blue-600", 
-    bgColor: "bg-blue-500/10 border-blue-500/20",
-    icon: <ChefHat className="h-4 w-4" />
-  },
   quote_sent: { 
     label: "Quote Sent", 
     color: "text-purple-600", 
     bgColor: "bg-purple-500/10 border-purple-500/20",
     icon: <Send className="h-4 w-4" />
   },
+  awaiting_client_approval: { 
+    label: "Awaiting Client Approval", 
+    color: "text-amber-600", 
+    bgColor: "bg-amber-500/10 border-amber-500/20",
+    icon: <UserCheck className="h-4 w-4" />
+  },
   quote_approved: { 
     label: "Quote Approved", 
     color: "text-green-600", 
     bgColor: "bg-green-500/10 border-green-500/20",
     icon: <CheckCircle2 className="h-4 w-4" />
+  },
+  awaiting_caterer: { 
+    label: "Awaiting Caterer", 
+    color: "text-blue-600", 
+    bgColor: "bg-blue-500/10 border-blue-500/20",
+    icon: <ChefHat className="h-4 w-4" />
+  },
+  caterer_confirmed: { 
+    label: "Caterer Confirmed", 
+    color: "text-teal-600", 
+    bgColor: "bg-teal-500/10 border-teal-500/20",
+    icon: <ThumbsUp className="h-4 w-4" />
   },
   in_preparation: { 
     label: "In Preparation", 
@@ -160,6 +178,12 @@ const statusConfig: Record<OrderStatus, { label: string; color: string; bgColor:
     color: "text-red-600", 
     bgColor: "bg-red-500/10 border-red-500/20",
     icon: <AlertCircle className="h-4 w-4" />
+  },
+  order_changed: { 
+    label: "Order Changed", 
+    color: "text-indigo-600", 
+    bgColor: "bg-indigo-500/10 border-indigo-500/20",
+    icon: <Edit className="h-4 w-4" />
   },
 }
 
@@ -242,14 +266,17 @@ function DashboardContent() {
     // Status breakdown
     const statusCounts: Record<OrderStatus, number> = {
       awaiting_quote: 0,
-      awaiting_caterer: 0,
       quote_sent: 0,
+      awaiting_client_approval: 0,
       quote_approved: 0,
+      awaiting_caterer: 0,
+      caterer_confirmed: 0,
       in_preparation: 0,
       ready_for_delivery: 0,
       delivered: 0,
       cancelled: 0,
-    }
+      order_changed: 0,
+    } as Record<OrderStatus, number>
     orders.forEach(o => {
       if (statusCounts[o.status] !== undefined) {
         statusCounts[o.status]++

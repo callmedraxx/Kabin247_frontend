@@ -82,7 +82,13 @@ export function HeaderNav({ title, className }: HeaderNavProps) {
   const { state } = useSidebar()
   const { selectedCategory, setSelectedCategory } = useSidebarCategory()
   const pathname = usePathname()
+  const [mounted, setMounted] = React.useState(false)
   const sidebarCollapsed = state === "collapsed"
+
+  // Ensure we only render conditional content after mount to avoid hydration mismatch
+  React.useEffect(() => {
+    setMounted(true)
+  }, [])
 
   // Find the current category based on pathname
   const currentCategory = React.useMemo(() => {
@@ -123,7 +129,7 @@ export function HeaderNav({ title, className }: HeaderNavProps) {
         <Separator orientation="vertical" className="h-4 bg-border/50 shrink-0" />
         
         {/* Show category navigation when sidebar is collapsed */}
-        {sidebarCollapsed && displayCategory ? (
+        {mounted && sidebarCollapsed && displayCategory ? (
           <div className="flex items-center gap-1 overflow-x-auto flex-1 min-w-0">
             {/* Category Icon and Title */}
             <div className="flex items-center gap-1.5 text-muted-foreground shrink-0">
