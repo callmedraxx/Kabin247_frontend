@@ -52,6 +52,7 @@ export function Combobox({
   const [search, setSearch] = React.useState("")
   // Track if the list is ready to render (for deferred rendering)
   const [isListReady, setIsListReady] = React.useState(false)
+  const commandListRef = React.useRef<HTMLDivElement>(null)
 
   const selectedOption = options.find((option) => option.value === value)
 
@@ -93,6 +94,41 @@ export function Combobox({
       return () => cancelAnimationFrame(frame)
     }
   }, [open])
+
+  // Ensure mouse wheel scrolling works on CommandList
+  React.useEffect(() => {
+    if (!open || !isListReady || !commandListRef.current) return
+
+    const commandList = commandListRef.current as HTMLElement
+    if (!commandList) return
+
+    // Ensure it can receive wheel events and scroll
+    commandList.style.pointerEvents = 'auto'
+    commandList.style.overflowY = 'auto'
+    
+    // Add wheel event listener to prevent dialog from capturing it
+    const handleWheel = (e: WheelEvent) => {
+      const canScrollUp = commandList.scrollTop > 0
+      const canScrollDown = commandList.scrollTop < (commandList.scrollHeight - commandList.clientHeight)
+      
+      // If we can scroll in the direction of the wheel, prevent propagation to dialog
+      if ((e.deltaY < 0 && canScrollUp) || (e.deltaY > 0 && canScrollDown)) {
+        e.stopPropagation()
+        e.preventDefault()
+        // Manually scroll
+        commandList.scrollTop += e.deltaY
+      } else if ((e.deltaY < 0 && !canScrollUp) || (e.deltaY > 0 && !canScrollDown)) {
+        // At the top or bottom, prevent dialog from scrolling
+        e.stopPropagation()
+      }
+    }
+    
+    commandList.addEventListener('wheel', handleWheel, { passive: false, capture: true })
+    
+    return () => {
+      commandList.removeEventListener('wheel', handleWheel, { capture: true } as any)
+    }
+  }, [open, isListReady])
 
   // Debounce search change callback to prevent too many API calls
   React.useEffect(() => {
@@ -150,13 +186,15 @@ export function Combobox({
           "w-[--radix-popover-trigger-width] p-0",
           "border-0 shadow-2xl shadow-black/40",
           "bg-popover backdrop-blur-md",
-          "ring-1 ring-white/[0.05] rounded-xl overflow-hidden",
+          "ring-1 ring-white/[0.05] rounded-xl",
           "animate-in fade-in-0 zoom-in-95 slide-in-from-top-2",
           "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:slide-out-to-top-2",
           "duration-200"
         )}
         align="start"
         sideOffset={6}
+        side="bottom"
+        collisionPadding={8}
         onOpenAutoFocus={(e) => {
           // Prevent auto-focus to keep popover open when typing
           e.preventDefault()
@@ -175,7 +213,15 @@ export function Combobox({
               className="pl-9 h-11 border-0 bg-transparent focus:ring-0"
             />
           </div>
-          <CommandList className="max-h-[280px] overflow-y-auto scrollbar-hide">
+          <CommandList 
+            ref={commandListRef}
+            className="max-h-[300px] overflow-y-auto overflow-x-hidden" 
+            style={{ 
+              height: '300px', 
+              maxHeight: '300px',
+              pointerEvents: 'auto'
+            }}
+          >
             {isLoading || !isListReady ? (
               <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />

@@ -814,30 +814,51 @@ function OrdersContent() {
     }))
   }, [categories])
 
-  // Filter options based on search (for client-side filtering)
+  // Handlers for combobox open events - fetch data if empty
+  const handleCatererComboboxOpen = React.useCallback((open: boolean) => {
+    if (open && catererOptions.length === 0 && !isLoadingCaterers) {
+      fetchCaterers(undefined, true)
+    }
+  }, [catererOptions.length, isLoadingCaterers, fetchCaterers])
+
+  const handleAirportComboboxOpen = React.useCallback((open: boolean) => {
+    if (open && airportOptions.length === 0 && !isLoadingAirports) {
+      fetchAirports(undefined, true)
+    }
+  }, [airportOptions.length, isLoadingAirports, fetchAirports])
+
+  const handleFboComboboxOpen = React.useCallback((open: boolean) => {
+    if (open && fboOptions.length === 0 && !isLoadingFBOs) {
+      fetchFBOs(undefined, true)
+    }
+  }, [fboOptions.length, isLoadingFBOs, fetchFBOs])
+
+  // Filter options based on search (for client-side filtering when server-side search is not enough)
+  // Note: Server-side search is already done via fetchCaterers/fetchAirports, but we also filter
+  // client-side to support multi-field search (name + airport for caterers, code + FBO + name for airports)
   const filteredCatererOptions = React.useMemo(() => {
     if (!catererSearch.trim()) return catererOptions
-    
+
     const query = catererSearch.toLowerCase()
-    return catererOptions.filter((option) => 
+    return catererOptions.filter((option) =>
       option.searchText?.includes(query) || option.label.toLowerCase().includes(query)
     )
   }, [catererOptions, catererSearch])
-  
+
   const filteredAirportOptions = React.useMemo(() => {
     if (!airportSearch.trim()) return airportOptions
-    
+
     const query = airportSearch.toLowerCase()
-    return airportOptions.filter((option) => 
+    return airportOptions.filter((option) =>
       option.searchText?.includes(query) || option.label.toLowerCase().includes(query)
     )
   }, [airportOptions, airportSearch])
-  
+
   const filteredFboOptions = React.useMemo(() => {
     if (!fboSearch.trim()) return fboOptions
-    
+
     const query = fboSearch.toLowerCase()
-    return fboOptions.filter((option) => 
+    return fboOptions.filter((option) =>
       option.searchText?.includes(query) || option.label.toLowerCase().includes(query)
     )
   }, [fboOptions, fboSearch])
@@ -853,6 +874,51 @@ function OrdersContent() {
       fetchCategories()
     }
   }, [dialogOpen, fetchClients, fetchCaterers, fetchAirports, fetchFBOs, fetchMenuItems, fetchCategories])
+
+  // Debounced server-side search for caterers
+  React.useEffect(() => {
+    if (!dialogOpen) return
+    
+    const timeoutId = setTimeout(() => {
+      if (catererSearch.trim()) {
+        fetchCaterers(catererSearch, false)
+      } else {
+        fetchCaterers(undefined, false)
+      }
+    }, 300)
+
+    return () => clearTimeout(timeoutId)
+  }, [catererSearch, dialogOpen, fetchCaterers])
+
+  // Debounced server-side search for airports
+  React.useEffect(() => {
+    if (!dialogOpen) return
+    
+    const timeoutId = setTimeout(() => {
+      if (airportSearch.trim()) {
+        fetchAirports(airportSearch, false)
+      } else {
+        fetchAirports(undefined, false)
+      }
+    }, 300)
+
+    return () => clearTimeout(timeoutId)
+  }, [airportSearch, dialogOpen, fetchAirports])
+
+  // Debounced server-side search for FBOs
+  React.useEffect(() => {
+    if (!dialogOpen) return
+    
+    const timeoutId = setTimeout(() => {
+      if (fboSearch.trim()) {
+        fetchFBOs(fboSearch, false)
+      } else {
+        fetchFBOs(undefined, false)
+      }
+    }, 300)
+
+    return () => clearTimeout(timeoutId)
+  }, [fboSearch, dialogOpen, fetchFBOs])
 
   // Handle select all
   const handleSelectAll = (checked: boolean) => {
@@ -2470,6 +2536,7 @@ function OrdersContent() {
                                     emptyMessage="No airports found."
                                     onSearchChange={setAirportSearch}
                                     isLoading={isLoadingAirports}
+                                    onOpenChange={handleAirportComboboxOpen}
                                   />
                                 </FormControl>
                                 <FormMessage />
@@ -2493,6 +2560,7 @@ function OrdersContent() {
                                     emptyMessage="No FBOs found."
                                     onSearchChange={setFboSearch}
                                     isLoading={isLoadingFBOs}
+                                    onOpenChange={handleFboComboboxOpen}
                                   />
                                 </FormControl>
                                 <FormMessage />
