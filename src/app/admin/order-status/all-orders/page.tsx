@@ -387,6 +387,7 @@ function OrdersContent() {
   
   const [dialogOpen, setDialogOpen] = React.useState(false)
   const [editingOrder, setEditingOrder] = React.useState<Order | null>(null)
+  const lastResetOrderId = React.useRef<number | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
   const [orderToDelete, setOrderToDelete] = React.useState<Order | null>(null)
   const [viewDrawerOpen, setViewDrawerOpen] = React.useState(false)
@@ -878,6 +879,61 @@ function OrdersContent() {
     }
   }, [dialogOpen, fetchClients, fetchCaterers, fetchAirports, fetchFBOs, fetchMenuItems, fetchCategories])
 
+  // Reset form when editingOrder and options are ready (backup in case handleEdit timing is off)
+  React.useEffect(() => {
+    if (dialogOpen && editingOrder && clientOptions.length > 0 && catererOptions.length > 0 && airportOptions.length > 0) {
+      // Only reset if we haven't already reset for this order
+      if (lastResetOrderId.current !== editingOrder.id) {
+        lastResetOrderId.current = editingOrder.id
+        
+        // Map order items to form format
+        const formItems = editingOrder.items && editingOrder.items.length > 0
+          ? editingOrder.items.map((item) => ({
+              itemName: item.item_id?.toString() || item.menu_item_id?.toString() || "",
+              itemDescription: item.item_description || "",
+              portionSize: item.portion_size || "1",
+              portionServing: item.portion_serving || "",
+              price: typeof item.price === 'number' ? item.price.toString() : (item.price || "0"),
+              category: item.category || "",
+              packaging: item.packaging || "",
+            }))
+          : [{
+              itemName: "",
+              itemDescription: "",
+              portionSize: "1",
+              portionServing: "",
+              price: "",
+              category: "",
+              packaging: "",
+            }]
+
+        // Reset form with all order data - ensure all fields are populated
+        form.reset({
+          order_number: editingOrder.order_number || "",
+          client_id: editingOrder.client_id,
+          caterer_id: editingOrder.caterer_id,
+          airport_id: editingOrder.airport_id,
+          fbo_id: editingOrder.fbo_id || undefined,
+          aircraftTailNumber: editingOrder.aircraft_tail_number || "",
+          deliveryDate: editingOrder.delivery_date || "",
+          deliveryTime: editingOrder.delivery_time || "",
+          orderPriority: (editingOrder.order_priority as "low" | "normal" | "high" | "urgent") || "normal",
+          orderType: (editingOrder.order_type as "inflight" | "qe_serv_hub" | "restaurant_pickup") || undefined,
+          status: editingOrder.status,
+          description: editingOrder.description || "",
+          notes: editingOrder.notes || "",
+          reheatingInstructions: editingOrder.reheating_instructions || "",
+          packagingInstructions: editingOrder.packaging_instructions || "",
+          dietaryRestrictions: editingOrder.dietary_restrictions || "",
+          serviceCharge: editingOrder.service_charge?.toString() || "0",
+          deliveryFee: editingOrder.delivery_fee?.toString() || "0",
+          paymentMethod: (editingOrder.payment_method as "card" | "ACH") || undefined,
+          items: formItems,
+        })
+      }
+    }
+  }, [dialogOpen, editingOrder, clientOptions.length, catererOptions.length, airportOptions.length, form])
+
   // Debounced server-side search for caterers
   React.useEffect(() => {
     if (!dialogOpen) return
@@ -1035,9 +1091,18 @@ function OrdersContent() {
       const fullOrder: Order = await response.json()
       setEditingOrder(fullOrder)
 
-      // Also fetch menu items to ensure they're available for the combobox
-      // This runs in parallel with the dialogOpen useEffect
-      await fetchMenuItems()
+      // Fetch all required data in parallel
+      await Promise.all([
+        fetchClients(),
+        fetchCaterers(undefined, true),
+        fetchAirports(undefined, true),
+        fetchFBOs(undefined, true),
+        fetchMenuItems(),
+        fetchCategories(),
+      ])
+
+      // Wait a bit for state to update with the options
+      await new Promise(resolve => setTimeout(resolve, 200))
 
       // Map order items to form format
       const formItems = fullOrder.items && fullOrder.items.length > 0
@@ -1060,9 +1125,10 @@ function OrdersContent() {
             packaging: "",
           }]
 
-      // Small delay to ensure menu items options are set in state
-      await new Promise(resolve => setTimeout(resolve, 100))
+      // Mark that we're resetting for this order
+      lastResetOrderId.current = fullOrder.id
 
+      // Reset form with all order data - ensure all fields are populated
       form.reset({
         order_number: fullOrder.order_number || "",
         client_id: fullOrder.client_id,
@@ -1070,10 +1136,10 @@ function OrdersContent() {
         airport_id: fullOrder.airport_id,
         fbo_id: fullOrder.fbo_id || undefined,
         aircraftTailNumber: fullOrder.aircraft_tail_number || "",
-        deliveryDate: fullOrder.delivery_date,
-        deliveryTime: fullOrder.delivery_time,
-        orderPriority: fullOrder.order_priority as "low" | "normal" | "high" | "urgent",
-        orderType: fullOrder.order_type as "inflight" | "qe_serv_hub" | "restaurant_pickup",
+        deliveryDate: fullOrder.delivery_date || "",
+        deliveryTime: fullOrder.delivery_time || "",
+        orderPriority: (fullOrder.order_priority as "low" | "normal" | "high" | "urgent") || "normal",
+        orderType: (fullOrder.order_type as "inflight" | "qe_serv_hub" | "restaurant_pickup") || undefined,
         status: fullOrder.status,
         description: fullOrder.description || "",
         notes: fullOrder.notes || "",
@@ -1082,7 +1148,7 @@ function OrdersContent() {
         dietaryRestrictions: fullOrder.dietary_restrictions || "",
         serviceCharge: fullOrder.service_charge?.toString() || "0",
         deliveryFee: fullOrder.delivery_fee?.toString() || "0",
-        paymentMethod: fullOrder.payment_method as "card" | "ACH",
+        paymentMethod: (fullOrder.payment_method as "card" | "ACH") || undefined,
         items: formItems,
       })
     } catch (err) {
@@ -1156,6 +1222,7 @@ function OrdersContent() {
 
       setDialogOpen(false)
       setEditingOrder(null)
+      lastResetOrderId.current = null
       form.reset()
       fetchOrders()
     } catch (err) {
@@ -2639,7 +2706,7 @@ function OrdersContent() {
                             render={({ field }) => (
                               <FormItem>
                                 <FormLabel className="text-xs font-medium text-muted-foreground">Priority *</FormLabel>
-                                <Select onValueChange={field.onChange} value={field.value}>
+                                <Select onValueChange={field.onChange} value={field.value || ""}>
                                   <FormControl>
                                     <SelectTrigger>
                                       <SelectValue placeholder="Select priority" />
@@ -2717,7 +2784,7 @@ function OrdersContent() {
                             render={({ field }) => (
                               <FormItem>
                                 <FormLabel className="text-xs font-medium text-muted-foreground">Order Type *</FormLabel>
-                                <Select onValueChange={field.onChange} value={field.value}>
+                                <Select onValueChange={field.onChange} value={field.value || ""}>
                                   <FormControl>
                                     <SelectTrigger>
                                       <SelectValue placeholder="Select type" />
@@ -2740,7 +2807,7 @@ function OrdersContent() {
                             render={({ field }) => (
                               <FormItem>
                                 <FormLabel className="text-xs font-medium text-muted-foreground">Payment *</FormLabel>
-                                <Select onValueChange={field.onChange} value={field.value}>
+                                <Select onValueChange={field.onChange} value={field.value || ""}>
                                   <FormControl>
                                     <SelectTrigger>
                                       <SelectValue placeholder="Select method" />
@@ -3136,6 +3203,7 @@ function OrdersContent() {
                     onClick={() => {
                       setDialogOpen(false)
                       setEditingOrder(null)
+                      lastResetOrderId.current = null
                       form.reset()
                     }}
                   >
