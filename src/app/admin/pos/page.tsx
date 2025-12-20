@@ -283,6 +283,76 @@ const decodeHtmlEntities = (text: string): string => {
   return textarea.value
 }
 
+// Helper function to format date for HTML date input (YYYY-MM-DD)
+const formatDateForInput = (dateString: string | null | undefined): string => {
+  if (!dateString) return ""
+  try {
+    const date = new Date(dateString)
+    if (isNaN(date.getTime())) {
+      // If it's already in YYYY-MM-DD format, return as is
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+        return dateString
+      }
+      return ""
+    }
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, "0")
+    const day = String(date.getDate()).padStart(2, "0")
+    return `${year}-${month}-${day}`
+  } catch {
+    // If it's already in YYYY-MM-DD format, return as is
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+      return dateString
+    }
+    return ""
+  }
+}
+
+// Helper function to map order type from API format to form format
+const mapOrderTypeToForm = (orderType: string | null | undefined): "inflight" | "qe_serv_hub" | "restaurant_pickup" | undefined => {
+  if (!orderType) return undefined
+  
+  const normalized = orderType.toLowerCase().trim()
+  
+  // Exact matches first
+  if (normalized === "inflight" || normalized === "in-flight" || normalized === "in flight") {
+    return "inflight"
+  }
+  if (normalized === "qe_serv_hub" || normalized === "qe serv hub" || normalized === "qe servhub") {
+    return "qe_serv_hub"
+  }
+  if (normalized === "restaurant_pickup" || normalized === "restaurant pickup" || normalized === "restaurantpickup") {
+    return "restaurant_pickup"
+  }
+  
+  // Partial matches - check for "qe" (case-insensitive)
+  if (normalized === "qe" || normalized.startsWith("qe")) {
+    return "qe_serv_hub"
+  }
+  
+  // Check for "serv" - could be "qe_serv_hub" or part of restaurant
+  if (normalized === "serv" || normalized.includes("serv hub") || normalized.includes("servhub")) {
+    return "qe_serv_hub"
+  }
+  
+  // Check for flight-related
+  if (normalized.includes("flight")) {
+    return "inflight"
+  }
+  
+  // Check for restaurant/pickup
+  if (normalized.includes("pickup") || normalized.includes("restaurant")) {
+    return "restaurant_pickup"
+  }
+  
+  // Check for hub (likely qe_serv_hub)
+  if (normalized.includes("hub")) {
+    return "qe_serv_hub"
+  }
+  
+  return undefined
+}
+
 // Draft persistence key
 const DRAFT_STORAGE_KEY = "pos_order_draft"
 
@@ -942,7 +1012,15 @@ function POSContent() {
         try {
           const duplicateData = JSON.parse(duplicateDataStr)
           
-          // Reset form with duplicate data
+          // Format delivery date if provided
+          const formattedDeliveryDate = duplicateData.delivery_date 
+            ? formatDateForInput(duplicateData.delivery_date) 
+            : ""
+          
+          // Map order type from API format to form format
+          const mappedOrderType = mapOrderTypeToForm(duplicateData.order_type)
+          
+          // Reset form with duplicate data - include all fields
           form.reset({
             order_number: "",
             client_id: duplicateData.client_id || undefined,
@@ -951,11 +1029,11 @@ function POSContent() {
             fbo_id: duplicateData.fbo_id || undefined,
             description: duplicateData.description || "",
             items: duplicateData.items?.length > 0 ? duplicateData.items.map((item: any) => ({
-              itemName: item.itemName || item.item_id?.toString() || "",
+              itemName: item.itemName || item.item_id?.toString() || item.menu_item_id?.toString() || "",
               itemDescription: item.itemDescription || item.item_description || "",
-              portionSize: item.portionSize || item.portion_size || "",
+              portionSize: item.portionSize || item.portion_size || "1",
               portionServing: item.portionServing || item.portion_serving || "",
-              price: item.price?.toString() || "",
+              price: item.price?.toString() || "0",
               category: item.category || "",
               packaging: item.packaging || "",
             })) : [{
@@ -971,15 +1049,29 @@ function POSContent() {
             reheatingInstructions: duplicateData.reheating_instructions || "",
             packagingInstructions: duplicateData.packaging_instructions || "",
             dietaryRestrictions: duplicateData.dietary_restrictions || "",
-            serviceCharge: duplicateData.service_charge?.toString() || "",
-            deliveryFee: duplicateData.delivery_fee?.toString() || "",
+            serviceCharge: duplicateData.service_charge?.toString() || "0",
+            deliveryFee: duplicateData.delivery_fee?.toString() || "0",
             aircraftTailNumber: duplicateData.aircraft_tail_number || "",
-            deliveryDate: "", // Reset delivery date for new order
-            deliveryTime: "", // Reset delivery time for new order
+            deliveryDate: formattedDeliveryDate, // Use formatted delivery date
+            deliveryTime: duplicateData.delivery_time || "", // Use delivery time from duplicate
             orderPriority: duplicateData.order_priority || "normal",
-            orderType: duplicateData.order_type || undefined,
+            orderType: mappedOrderType, // Use mapped order type
             paymentMethod: duplicateData.payment_method || undefined,
           })
+          
+          // Explicitly set delivery date and order type to ensure they're recognized
+          if (formattedDeliveryDate) {
+            form.setValue("deliveryDate", formattedDeliveryDate, { shouldValidate: false })
+          }
+          if (mappedOrderType) {
+            form.setValue("orderType", mappedOrderType, { shouldValidate: false })
+          }
+          if (duplicateData.delivery_time) {
+            form.setValue("deliveryTime", duplicateData.delivery_time, { shouldValidate: false })
+          }
+          if (duplicateData.payment_method) {
+            form.setValue("paymentMethod", duplicateData.payment_method as "card" | "ACH", { shouldValidate: false })
+          }
           
           // Clear the sessionStorage
           sessionStorage.removeItem("duplicateOrder")

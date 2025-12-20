@@ -368,6 +368,76 @@ const decodeHtmlEntities = (text: string): string => {
   return textarea.value
 }
 
+// Helper function to format date for HTML date input (YYYY-MM-DD)
+const formatDateForInput = (dateString: string | null | undefined): string => {
+  if (!dateString) return ""
+  try {
+    const date = new Date(dateString)
+    if (isNaN(date.getTime())) {
+      // If it's already in YYYY-MM-DD format, return as is
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+        return dateString
+      }
+      return ""
+    }
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, "0")
+    const day = String(date.getDate()).padStart(2, "0")
+    return `${year}-${month}-${day}`
+  } catch {
+    // If it's already in YYYY-MM-DD format, return as is
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+      return dateString
+    }
+    return ""
+  }
+}
+
+// Helper function to map order type from API format to form format
+const mapOrderTypeToForm = (orderType: string | null | undefined): "inflight" | "qe_serv_hub" | "restaurant_pickup" | undefined => {
+  if (!orderType) return undefined
+  
+  const normalized = orderType.toLowerCase().trim()
+  
+  // Exact matches first
+  if (normalized === "inflight" || normalized === "in-flight" || normalized === "in flight") {
+    return "inflight"
+  }
+  if (normalized === "qe_serv_hub" || normalized === "qe serv hub" || normalized === "qe servhub") {
+    return "qe_serv_hub"
+  }
+  if (normalized === "restaurant_pickup" || normalized === "restaurant pickup" || normalized === "restaurantpickup") {
+    return "restaurant_pickup"
+  }
+  
+  // Partial matches - check for "qe" (case-insensitive)
+  if (normalized === "qe" || normalized.startsWith("qe")) {
+    return "qe_serv_hub"
+  }
+  
+  // Check for "serv" - could be "qe_serv_hub" or part of restaurant
+  if (normalized === "serv" || normalized.includes("serv hub") || normalized.includes("servhub")) {
+    return "qe_serv_hub"
+  }
+  
+  // Check for flight-related
+  if (normalized.includes("flight")) {
+    return "inflight"
+  }
+  
+  // Check for restaurant/pickup
+  if (normalized.includes("pickup") || normalized.includes("restaurant")) {
+    return "restaurant_pickup"
+  }
+  
+  // Check for hub (likely qe_serv_hub)
+  if (normalized.includes("hub")) {
+    return "qe_serv_hub"
+  }
+  
+  return undefined
+}
+
 function OrdersContent() {
   const router = useRouter()
   const [orders, setOrders] = React.useState<Order[]>([])
@@ -907,6 +977,12 @@ function OrdersContent() {
               packaging: "",
             }]
 
+        // Format delivery date for HTML date input (YYYY-MM-DD)
+        const formattedDeliveryDate = formatDateForInput(editingOrder.delivery_date)
+        
+        // Map order type from API format to form format
+        const mappedOrderType = mapOrderTypeToForm(editingOrder.order_type)
+
         // Reset form with all order data - ensure all fields are populated
         form.reset({
           order_number: editingOrder.order_number || "",
@@ -915,10 +991,10 @@ function OrdersContent() {
           airport_id: editingOrder.airport_id,
           fbo_id: editingOrder.fbo_id || undefined,
           aircraftTailNumber: editingOrder.aircraft_tail_number || "",
-          deliveryDate: editingOrder.delivery_date || "",
+          deliveryDate: formattedDeliveryDate,
           deliveryTime: editingOrder.delivery_time || "",
           orderPriority: (editingOrder.order_priority as "low" | "normal" | "high" | "urgent") || "normal",
-          orderType: (editingOrder.order_type as "inflight" | "qe_serv_hub" | "restaurant_pickup") || undefined,
+          orderType: mappedOrderType,
           status: editingOrder.status,
           description: editingOrder.description || "",
           notes: editingOrder.notes || "",
@@ -930,6 +1006,14 @@ function OrdersContent() {
           paymentMethod: (editingOrder.payment_method as "card" | "ACH") || undefined,
           items: formItems,
         })
+
+        // Explicitly set delivery date and order type to ensure they're recognized
+        if (formattedDeliveryDate) {
+          form.setValue("deliveryDate", formattedDeliveryDate, { shouldValidate: false })
+        }
+        if (mappedOrderType) {
+          form.setValue("orderType", mappedOrderType, { shouldValidate: false })
+        }
       }
     }
   }, [dialogOpen, editingOrder, clientOptions.length, catererOptions.length, airportOptions.length, form])
@@ -1032,29 +1116,38 @@ function OrdersContent() {
 
       const fullOrder: Order = await response.json()
       
+      // Format delivery date for HTML date input (YYYY-MM-DD)
+      const formattedDeliveryDate = formatDateForInput(fullOrder.delivery_date)
+      
+      // Map order type from API format to form format
+      const mappedOrderType = mapOrderTypeToForm(fullOrder.order_type)
+      
       // Store order data in sessionStorage for the POS page to pick up
       const duplicateData = {
         order_number: "", // Clear order number for duplicate (new order will get new number)
         client_id: fullOrder.client_id,
         caterer_id: fullOrder.caterer_id,
         airport_id: fullOrder.airport_id,
-        aircraft_tail_number: fullOrder.aircraft_tail_number,
-        order_priority: fullOrder.order_priority,
-        order_type: fullOrder.order_type,
-        payment_method: fullOrder.payment_method,
-        service_charge: fullOrder.service_charge,
-        delivery_fee: fullOrder.delivery_fee,
-        description: fullOrder.description,
-        notes: fullOrder.notes,
-        reheating_instructions: fullOrder.reheating_instructions,
-        packaging_instructions: fullOrder.packaging_instructions,
-        dietary_restrictions: fullOrder.dietary_restrictions,
+        fbo_id: fullOrder.fbo_id || undefined,
+        aircraft_tail_number: fullOrder.aircraft_tail_number || "",
+        order_priority: fullOrder.order_priority || "normal",
+        order_type: mappedOrderType, // Use mapped order type
+        payment_method: fullOrder.payment_method || undefined,
+        service_charge: fullOrder.service_charge || 0,
+        delivery_fee: fullOrder.delivery_fee || 0,
+        description: fullOrder.description || "",
+        notes: fullOrder.notes || "",
+        reheating_instructions: fullOrder.reheating_instructions || "",
+        packaging_instructions: fullOrder.packaging_instructions || "",
+        dietary_restrictions: fullOrder.dietary_restrictions || "",
+        delivery_date: formattedDeliveryDate, // Include formatted delivery date
+        delivery_time: fullOrder.delivery_time || "", // Include delivery time
         items: fullOrder.items?.map(item => ({
-          itemName: item.menu_item_id?.toString() || "",
+          itemName: item.item_id?.toString() || item.menu_item_id?.toString() || "",
           itemDescription: item.item_description || "",
-          portionSize: item.portion_size,
+          portionSize: item.portion_size || "1",
           portionServing: item.portion_serving || "",
-          price: String(item.price),
+          price: typeof item.price === 'number' ? item.price.toString() : (item.price || "0"),
           category: item.category || "",
           packaging: item.packaging || "",
         })) || [],
@@ -1128,6 +1221,12 @@ function OrdersContent() {
       // Mark that we're resetting for this order
       lastResetOrderId.current = fullOrder.id
 
+      // Format delivery date for HTML date input (YYYY-MM-DD)
+      const formattedDeliveryDate = formatDateForInput(fullOrder.delivery_date)
+      
+      // Map order type from API format to form format
+      const mappedOrderType = mapOrderTypeToForm(fullOrder.order_type)
+
       // Reset form with all order data - ensure all fields are populated
       form.reset({
         order_number: fullOrder.order_number || "",
@@ -1136,10 +1235,10 @@ function OrdersContent() {
         airport_id: fullOrder.airport_id,
         fbo_id: fullOrder.fbo_id || undefined,
         aircraftTailNumber: fullOrder.aircraft_tail_number || "",
-        deliveryDate: fullOrder.delivery_date || "",
+        deliveryDate: formattedDeliveryDate,
         deliveryTime: fullOrder.delivery_time || "",
         orderPriority: (fullOrder.order_priority as "low" | "normal" | "high" | "urgent") || "normal",
-        orderType: (fullOrder.order_type as "inflight" | "qe_serv_hub" | "restaurant_pickup") || undefined,
+        orderType: mappedOrderType,
         status: fullOrder.status,
         description: fullOrder.description || "",
         notes: fullOrder.notes || "",
@@ -1151,6 +1250,15 @@ function OrdersContent() {
         paymentMethod: (fullOrder.payment_method as "card" | "ACH") || undefined,
         items: formItems,
       })
+
+      // Explicitly set delivery date and order type to ensure they're recognized
+      // This helps with timing issues where the form might not immediately reflect the reset
+      if (formattedDeliveryDate) {
+        form.setValue("deliveryDate", formattedDeliveryDate, { shouldValidate: false })
+      }
+      if (mappedOrderType) {
+        form.setValue("orderType", mappedOrderType, { shouldValidate: false })
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to fetch order details"
       toast.error("Error loading order", {
