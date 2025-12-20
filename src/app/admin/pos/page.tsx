@@ -1018,7 +1018,14 @@ function POSContent() {
             : ""
           
           // Map order type from API format to form format
-          const mappedOrderType = mapOrderTypeToForm(duplicateData.order_type)
+          // If order_type is already mapped (from handleDuplicate), use it directly
+          // Otherwise, try to map it
+          const mappedOrderType = duplicateData.order_type && 
+            (duplicateData.order_type === "inflight" || 
+             duplicateData.order_type === "qe_serv_hub" || 
+             duplicateData.order_type === "restaurant_pickup")
+            ? duplicateData.order_type
+            : mapOrderTypeToForm(duplicateData.order_type || duplicateData.order_type_original)
           
           // Reset form with duplicate data - include all fields
           form.reset({
@@ -1056,28 +1063,33 @@ function POSContent() {
             deliveryTime: duplicateData.delivery_time || "", // Use delivery time from duplicate
             orderPriority: duplicateData.order_priority || "normal",
             orderType: mappedOrderType, // Use mapped order type
-            paymentMethod: duplicateData.payment_method || undefined,
+            paymentMethod: (duplicateData.payment_method as "card" | "ACH") || undefined,
           })
           
-          // Explicitly set delivery date and order type to ensure they're recognized
-          if (formattedDeliveryDate) {
-            form.setValue("deliveryDate", formattedDeliveryDate, { shouldValidate: false })
-          }
-          if (mappedOrderType) {
-            form.setValue("orderType", mappedOrderType, { shouldValidate: false })
-          }
-          if (duplicateData.delivery_time) {
-            form.setValue("deliveryTime", duplicateData.delivery_time, { shouldValidate: false })
-          }
-          if (duplicateData.payment_method) {
-            form.setValue("paymentMethod", duplicateData.payment_method as "card" | "ACH", { shouldValidate: false })
-          }
+          // Wait a bit for form to be ready, then explicitly set values to ensure Select components recognize them
+          setTimeout(() => {
+            if (formattedDeliveryDate) {
+              form.setValue("deliveryDate", formattedDeliveryDate, { shouldValidate: false })
+            }
+            if (mappedOrderType) {
+              form.setValue("orderType", mappedOrderType, { shouldValidate: false })
+            }
+            if (duplicateData.delivery_time) {
+              form.setValue("deliveryTime", duplicateData.delivery_time, { shouldValidate: false })
+            }
+            if (duplicateData.payment_method) {
+              form.setValue("paymentMethod", duplicateData.payment_method as "card" | "ACH", { shouldValidate: false })
+            }
+            if (duplicateData.order_priority) {
+              form.setValue("orderPriority", duplicateData.order_priority as "low" | "normal" | "high" | "urgent", { shouldValidate: false })
+            }
+          }, 100)
           
           // Clear the sessionStorage
           sessionStorage.removeItem("duplicateOrder")
           
           toast.success("Order duplicated", {
-            description: "Please update the delivery date and time for the new order.",
+            description: "All fields have been copied from the original order.",
           })
           // Clear draft when duplicating an order
           clearDraft()
@@ -1967,7 +1979,7 @@ function POSContent() {
                                 render={({ field }) => (
                                   <FormItem>
                                     <FormLabel className="text-xs font-medium text-muted-foreground">Priority *</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value}>
+                                    <Select onValueChange={field.onChange} value={field.value || ""}>
                                       <FormControl>
                                         <SelectTrigger>
                                           <SelectValue placeholder="Select priority" />
@@ -2045,7 +2057,7 @@ function POSContent() {
                                 render={({ field }) => (
                                   <FormItem>
                                     <FormLabel className="text-xs font-medium text-muted-foreground">Order Type *</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value}>
+                                    <Select onValueChange={field.onChange} value={field.value || ""}>
                                       <FormControl>
                                         <SelectTrigger>
                                           <SelectValue placeholder="Select type" />
@@ -2068,7 +2080,7 @@ function POSContent() {
                                 render={({ field }) => (
                                   <FormItem>
                                     <FormLabel className="text-xs font-medium text-muted-foreground">Payment *</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value}>
+                                    <Select onValueChange={field.onChange} value={field.value || ""}>
                                       <FormControl>
                                         <SelectTrigger>
                                           <SelectValue placeholder="Select method" />

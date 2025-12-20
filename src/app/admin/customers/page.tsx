@@ -173,14 +173,18 @@ function ClientsContent() {
     setError(null)
     
     try {
+      // Ensure page and limit are valid numbers (not NaN)
+      const safePage = isNaN(page) || page < 1 ? 1 : page
+      const safeLimit = isNaN(limit) || limit < 1 ? 50 : limit
+      
       const params = new URLSearchParams()
       if (searchQuery.trim()) {
         params.append("search", searchQuery.trim())
       }
       params.append("sortBy", sortBy)
       params.append("sortOrder", sortOrder)
-      params.append("page", page.toString())
-      params.append("limit", limit.toString())
+      params.append("page", safePage.toString())
+      params.append("limit", safeLimit.toString())
 
       const response = await fetch(`${API_BASE_URL}/clients?${params.toString()}`)
       
@@ -440,7 +444,25 @@ function ClientsContent() {
   const handleExport = async () => {
     setIsExporting(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/clients/export`)
+      // Ensure we send valid query parameters to avoid NaN errors on backend
+      // Validate page and limit to ensure they're never NaN
+      const safePage = isNaN(page) || page < 1 ? 1 : page
+      const safeLimit = isNaN(limit) || limit < 1 ? 10000 : limit
+      
+      const params = new URLSearchParams()
+      params.append("page", safePage.toString())
+      params.append("limit", safeLimit.toString())
+      
+      // Include search query if present
+      if (searchQuery.trim()) {
+        params.append("search", searchQuery.trim())
+      }
+      
+      // Include sort parameters
+      params.append("sortBy", sortBy || "id")
+      params.append("sortOrder", sortOrder || "asc")
+
+      const response = await fetch(`${API_BASE_URL}/clients/export?${params.toString()}`)
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: "Failed to export clients" }))

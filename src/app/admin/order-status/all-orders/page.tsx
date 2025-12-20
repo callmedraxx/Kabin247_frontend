@@ -1123,6 +1123,7 @@ function OrdersContent() {
       const mappedOrderType = mapOrderTypeToForm(fullOrder.order_type)
       
       // Store order data in sessionStorage for the POS page to pick up
+      // Store both original and mapped values to ensure compatibility
       const duplicateData = {
         order_number: "", // Clear order number for duplicate (new order will get new number)
         client_id: fullOrder.client_id,
@@ -1131,8 +1132,9 @@ function OrdersContent() {
         fbo_id: fullOrder.fbo_id || undefined,
         aircraft_tail_number: fullOrder.aircraft_tail_number || "",
         order_priority: fullOrder.order_priority || "normal",
-        order_type: mappedOrderType, // Use mapped order type
-        payment_method: fullOrder.payment_method || undefined,
+        order_type: mappedOrderType || fullOrder.order_type || undefined, // Use mapped, fallback to original
+        order_type_original: fullOrder.order_type || undefined, // Store original for debugging
+        payment_method: (fullOrder.payment_method as "card" | "ACH") || undefined,
         service_charge: fullOrder.service_charge || 0,
         delivery_fee: fullOrder.delivery_fee || 0,
         description: fullOrder.description || "",
