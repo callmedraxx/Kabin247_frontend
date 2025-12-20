@@ -320,6 +320,7 @@ const itemSchema = z.object({
 
 // Form schema for editing orders - matching POS page schema
 const orderSchema = z.object({
+  order_number: z.string().optional(),
   client_id: z.number({ message: "Please select a client" }).int().positive("Please select a client"),
   caterer_id: z.number({ message: "Please select a caterer" }).int().positive("Please select a caterer"),
   airport_id: z.number({ message: "Please select an airport" }).int().positive("Please select an airport"),
@@ -406,6 +407,7 @@ function OrdersContent() {
   const form = useForm<OrderFormValues>({
     resolver: zodResolver(orderSchema) as any,
     defaultValues: {
+      order_number: "",
       client_id: undefined,
       caterer_id: undefined,
       airport_id: undefined,
@@ -416,6 +418,7 @@ function OrdersContent() {
           itemName: "",
           itemDescription: "",
           portionSize: "",
+          portionServing: "",
           price: "",
           category: "",
           packaging: "",
@@ -975,6 +978,7 @@ function OrdersContent() {
       
       // Store order data in sessionStorage for the POS page to pick up
       const duplicateData = {
+        order_number: "", // Clear order number for duplicate (new order will get new number)
         client_id: fullOrder.client_id,
         caterer_id: fullOrder.caterer_id,
         airport_id: fullOrder.airport_id,
@@ -1060,6 +1064,7 @@ function OrdersContent() {
       await new Promise(resolve => setTimeout(resolve, 100))
 
       form.reset({
+        order_number: fullOrder.order_number || "",
         client_id: fullOrder.client_id,
         caterer_id: fullOrder.caterer_id,
         airport_id: fullOrder.airport_id,
@@ -1095,6 +1100,7 @@ function OrdersContent() {
 
     try {
       const body: any = {
+        order_number: values.order_number?.trim() || null,
         client_id: values.client_id,
         caterer_id: values.caterer_id,
         airport_id: values.airport_id,
@@ -2474,6 +2480,23 @@ function OrdersContent() {
                           <div className="flex-1 h-px bg-gradient-to-r from-border/50 to-transparent" />
                         </div>
                         <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+                          <FormField
+                            control={form.control}
+                            name="order_number"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs font-medium text-muted-foreground">Order Number</FormLabel>
+                                <FormControl>
+                                  <Input 
+                                    placeholder="e.g., KA000001" 
+                                    {...field}
+                                    className="text-sm"
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
                           <FormField
                             control={form.control}
                             name="client_id"

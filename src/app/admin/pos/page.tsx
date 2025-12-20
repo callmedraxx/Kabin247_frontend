@@ -202,6 +202,7 @@ const itemSchema = z.object({
 })
 
 const formSchema = z.object({
+  order_number: z.string().optional(),
   client_id: z.number({ message: "Please select a client" }).int().positive("Please select a client"),
   caterer_id: z.number({ message: "Please select a caterer" }).int().positive("Please select a caterer"),
   airport_id: z.number({ message: "Please select an airport" }).int().positive("Please select an airport"),
@@ -822,6 +823,7 @@ function POSContent() {
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema) as any,
     defaultValues: {
+      order_number: "",
       client_id: undefined,
       caterer_id: undefined,
       airport_id: undefined,
@@ -942,6 +944,7 @@ function POSContent() {
           
           // Reset form with duplicate data
           form.reset({
+            order_number: "",
             client_id: duplicateData.client_id || undefined,
             caterer_id: duplicateData.caterer_id || undefined,
             airport_id: duplicateData.airport_id || undefined,
@@ -1583,6 +1586,7 @@ function POSContent() {
       
       // Prepare the order payload
       const orderPayload = {
+        order_number: formData.order_number?.trim() || null,
         client_id: formData.client_id,
         caterer_id: formData.caterer_id,
         airport_id: formData.airport_id,
@@ -1704,6 +1708,23 @@ function POSContent() {
                                 <div className="flex-1 h-px bg-gradient-to-r from-border/50 to-transparent" />
                               </div>
                               <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                              <FormField
+                                control={form.control}
+                                name="order_number"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-xs font-medium text-muted-foreground">Order Number</FormLabel>
+                                    <FormControl>
+                                      <Input 
+                                        placeholder="e.g., KA000001" 
+                                        {...field}
+                                        className="text-sm"
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
                               <FormField
                                 control={form.control}
                                 name="client_id"
