@@ -355,7 +355,15 @@ const SidebarInset = React.forwardRef<
   React.ComponentProps<"main">
 >(({ className, ...props }, ref) => {
   const { state, isMobile } = useSidebar()
-  const marginLeft = !isMobile ? (state === "collapsed" ? "4rem" : "13rem") : "0"
+  const [isMounted, setIsMounted] = React.useState(false)
+  
+  // Only calculate margin after mount to avoid hydration mismatch
+  React.useEffect(() => {
+    setIsMounted(true)
+  }, [])
+  
+  // Use default margin on server (expanded state) to match initial render
+  const marginLeft = isMounted && !isMobile ? (state === "collapsed" ? "4rem" : "13rem") : (!isMobile ? "13rem" : "0")
   
   return (
     <main

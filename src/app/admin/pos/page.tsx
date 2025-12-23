@@ -131,8 +131,14 @@ interface MenuItem {
   category: string
   variants: Array<{
     id: number
+    menu_item_id?: number
     portion_size: string
-    price: number
+    price: number // Base/default price
+    sort_order?: number
+    caterer_prices?: Array<{
+      caterer_id: number
+      price: number
+    }>
   }>
 }
 
@@ -308,6 +314,30 @@ const formatDateForInput = (dateString: string | null | undefined): string => {
   }
 }
 
+// Helper function to resolve price for a menu item variant based on caterer_id
+const resolveMenuItemPrice = (
+  menuItem: MenuItem | undefined,
+  portionSize: string | undefined,
+  catererId: number | undefined
+): number | undefined => {
+  if (!menuItem || !portionSize) return undefined
+  
+  // Find the variant matching the portion size
+  const variant = menuItem.variants?.find(v => v.portion_size === portionSize)
+  if (!variant) return undefined
+  
+  // If caterer_id is provided and variant has caterer_prices, try to find caterer-specific price
+  if (catererId && variant.caterer_prices && variant.caterer_prices.length > 0) {
+    const catererPrice = variant.caterer_prices.find(cp => cp.caterer_id === catererId)
+    if (catererPrice) {
+      return catererPrice.price
+    }
+  }
+  
+  // Fallback to base price
+  return variant.price
+}
+
 // Helper function to map order type from API format to form format
 const mapOrderTypeToForm = (orderType: string | null | undefined): "inflight" | "qe_serv_hub" | "restaurant_pickup" | undefined => {
   if (!orderType) return undefined
@@ -396,6 +426,9 @@ function POSContent() {
   const pathname = usePathname()
   const [previewOpen, setPreviewOpen] = React.useState(false)
   const [previewHtml, setPreviewHtml] = React.useState<string>("")
+  
+  // Flag to prevent draft saving immediately after order creation or clear
+  const skipNextDraftSave = React.useRef(false)
   
   // API data states
   const [clientsData, setClientsData] = React.useState<Client[]>([])
@@ -490,7 +523,6 @@ function POSContent() {
   
   const { state, isMobile } = useSidebar()
   const sidebarCollapsed = state === "collapsed"
-  const buttonMarginLeft = !isMobile ? (sidebarCollapsed ? "4rem" : "14rem") : "0"
 
   const formatCurrency = React.useCallback((value: number) => {
     if (Number.isNaN(value)) return "$0.00"
@@ -939,6 +971,24 @@ function POSContent() {
   const selectedAirport = form.watch("airport_id")
   const selectedFBO = form.watch("fbo_id")
 
+  // Recalculate prices when caterer changes
+  React.useEffect(() => {
+    if (!selectedCaterer) return
+    
+    const currentItems = form.getValues("items")
+    currentItems.forEach((item, index) => {
+      if (item.itemName) {
+        const menuItem = menuItemsData.find((mi) => mi.id.toString() === item.itemName)
+        if (menuItem && item.portionSize) {
+          const resolvedPrice = resolveMenuItemPrice(menuItem, item.portionSize, selectedCaterer)
+          if (resolvedPrice !== undefined) {
+            form.setValue(`items.${index}.price`, resolvedPrice.toString(), { shouldValidate: false })
+          }
+        }
+      }
+    })
+  }, [selectedCaterer, menuItemsData, form])
+
   const priorityBadgeClass = React.useMemo(() => {
     switch (watchedPriority) {
       case "urgent":
@@ -999,6 +1049,10 @@ function POSContent() {
   React.useEffect(() => {
     setIsMounted(true)
   }, [])
+  
+  // Calculate button margin after mount to avoid hydration mismatch
+  // Use default margin on server (expanded state) to match initial render
+  const buttonMarginLeft = isMounted && !isMobile ? (sidebarCollapsed ? "4rem" : "14rem") : (!isMobile ? "14rem" : "0")
 
   // Load duplicate order data if coming from duplicate action, or load draft on mount
   React.useEffect(() => {
@@ -1083,16 +1137,32 @@ function POSContent() {
             if (duplicateData.order_priority) {
               form.setValue("orderPriority", duplicateData.order_priority as "low" | "normal" | "high" | "urgent", { shouldValidate: false })
             }
-          }, 100)
-          
+            
+            // Save draft immediately after duplicate order is loaded
+            // Get the current form values after all setValue calls
+            const currentFormValues = form.getValues()
+            const hasData = 
+              currentFormValues.client_id ||
+              currentFormValues.caterer_id ||
+              currentFormValues.airport_id ||
+              currentFormValues.items?.some((item: any) => item.itemName) ||
+              currentFormValues.description ||
+              currentFormValues.notes ||
+              currentFormValues.deliveryDate ||
+              currentFormValues.deliveryTime
+            
+            if (hasData) {
+              console.log("Saving draft immediately after duplicate load:", currentFormValues)
+              saveDraft(currentFormValues)
+            }
+          }, 150)
+
           // Clear the sessionStorage
           sessionStorage.removeItem("duplicateOrder")
           
           toast.success("Order duplicated", {
-            description: "All fields have been copied from the original order.",
+            description: "All fields have been copied from the original order. Draft saved.",
           })
-          // Clear draft when duplicating an order
-          clearDraft()
           setHasLoadedInitialData(true)
         } catch (err) {
           console.error("Error loading duplicate order:", err)
@@ -1127,8 +1197,9 @@ function POSContent() {
   // Helper function to save draft if form has data
   const saveDraftIfNeeded = React.useCallback(() => {
     if (!hasLoadedInitialData) return
-    const isDuplicate = searchParams.get("duplicate") === "true"
-    if (isDuplicate) return
+    
+    // Skip draft saving if we just cleared or saved an order
+    if (skipNextDraftSave.current) return
 
     const currentValues = form.getValues()
     // Only save if form has some meaningful data
@@ -1149,15 +1220,13 @@ function POSContent() {
       // Clear draft if form is empty
       clearDraft()
     }
-  }, [form, hasLoadedInitialData, searchParams])
+  }, [form, hasLoadedInitialData])
 
   // Auto-save draft whenever form values change (debounced)
   const formValues = form.watch()
   React.useEffect(() => {
-    // Don't save draft if we haven't loaded initial data yet or if we just loaded a duplicate
+    // Don't save draft if we haven't loaded initial data yet
     if (!hasLoadedInitialData) return
-    const isDuplicate = searchParams.get("duplicate") === "true"
-    if (isDuplicate) return
 
     // Debounce the save (reduced to 500ms for faster saves)
     const timer = setTimeout(() => {
@@ -1172,7 +1241,7 @@ function POSContent() {
   React.useEffect(() => {
     // If pathname changed and we're no longer on the POS page, save draft immediately
     if (prevPathname.current !== pathname && prevPathname.current === "/admin/pos" && pathname !== "/admin/pos") {
-      if (hasLoadedInitialData) {
+      if (hasLoadedInitialData && !skipNextDraftSave.current) {
         const currentValues = form.getValues()
         const hasData = 
           currentValues.client_id ||
@@ -1194,30 +1263,33 @@ function POSContent() {
   }, [pathname, form, hasLoadedInitialData])
 
   // Save draft on component unmount (when navigating away)
+  // Use useCallback to create a stable cleanup function
+  const saveDraftOnUnmount = React.useCallback(() => {
+    if (!hasLoadedInitialData) return
+    if (skipNextDraftSave.current) return
+
+    const currentValues = form.getValues()
+    const hasData = 
+      currentValues.client_id ||
+      currentValues.caterer_id ||
+      currentValues.airport_id ||
+      currentValues.items?.some(item => item.itemName) ||
+      currentValues.description ||
+      currentValues.notes ||
+      currentValues.deliveryDate ||
+      currentValues.deliveryTime
+
+    if (hasData) {
+      console.log("Saving draft on unmount:", currentValues)
+      saveDraft(currentValues)
+    }
+  }, [form, hasLoadedInitialData])
+
   React.useEffect(() => {
     return () => {
-      // Save draft when component unmounts - get values directly to avoid stale closure
-      if (!hasLoadedInitialData) return
-      const isDuplicate = searchParams.get("duplicate") === "true"
-      if (isDuplicate) return
-
-      const currentValues = form.getValues()
-      const hasData = 
-        currentValues.client_id ||
-        currentValues.caterer_id ||
-        currentValues.airport_id ||
-        currentValues.items?.some(item => item.itemName) ||
-        currentValues.description ||
-        currentValues.notes ||
-        currentValues.deliveryDate ||
-        currentValues.deliveryTime
-
-      if (hasData) {
-        console.log("Saving draft on unmount:", currentValues)
-        saveDraft(currentValues)
-      }
+      saveDraftOnUnmount()
     }
-  }, [form, hasLoadedInitialData, searchParams])
+  }, [saveDraftOnUnmount])
 
   // Save draft before page unload (for browser navigation/refresh)
   React.useEffect(() => {
@@ -1634,13 +1706,24 @@ function POSContent() {
       // Set the form value to the new menu item
       if (currentItemIndex !== undefined) {
         form.setValue(`items.${currentItemIndex}.itemName`, newMenuItem.id.toString())
-        // Auto-populate price if available (from variants for backward compatibility, or from price field)
-        const price = (newMenuItem.variants && newMenuItem.variants.length > 0) 
-          ? newMenuItem.variants[0].price 
-          : (newMenuItem as any).price
-        if (price !== undefined) {
-          form.setValue(`items.${currentItemIndex}.price`, price.toString())
+        
+        // Get current portion size and caterer_id from form
+        const currentPortionSize = form.getValues(`items.${currentItemIndex}.portionSize`)
+        const catererId = form.getValues("caterer_id")
+        
+        // Resolve price based on caterer_id and portion size
+        const price = resolveMenuItemPrice(newMenuItem, currentPortionSize || undefined, catererId)
+        
+        // Fallback to first variant or direct price
+        const fallbackPrice = price ?? 
+          (newMenuItem.variants && newMenuItem.variants.length > 0) 
+            ? newMenuItem.variants[0].price 
+            : (newMenuItem as any).price
+        
+        if (fallbackPrice !== undefined) {
+          form.setValue(`items.${currentItemIndex}.price`, fallbackPrice.toString())
         }
+        
         // Auto-populate category if available
         if (newMenuItem.category) {
           form.setValue(`items.${currentItemIndex}.category`, newMenuItem.category)
@@ -1662,11 +1745,51 @@ function POSContent() {
   }
 
   const handleClear = () => {
-    form.reset()
-    clearDraft() // Clear draft when user clicks clear
+    // Clear draft first, before resetting form
+    clearDraft()
+    skipNextDraftSave.current = true
+    
+    // Reset form to default values (matching form defaultValues)
+    form.reset({
+      order_number: "",
+      client_id: undefined,
+      caterer_id: undefined,
+      airport_id: undefined,
+      fbo_id: undefined,
+      description: "",
+      items: [
+        {
+          itemName: "",
+          itemDescription: "",
+          portionSize: "",
+          portionServing: "",
+          price: "",
+          category: "",
+          packaging: "",
+        },
+      ],
+      notes: "",
+      reheatingInstructions: "",
+      packagingInstructions: "",
+      dietaryRestrictions: "",
+      serviceCharge: "",
+      deliveryFee: "",
+      aircraftTailNumber: "",
+      deliveryDate: "",
+      deliveryTime: "",
+      orderPriority: "normal",
+      orderType: undefined,
+      paymentMethod: undefined,
+    })
+    
     toast.success("Form cleared", {
       description: "All form data has been cleared.",
     })
+    
+    // Reset flag after a short delay to allow form reset to complete
+    setTimeout(() => {
+      skipNextDraftSave.current = false
+    }, 1000)
   }
 
   const handlePreview = () => {
@@ -1714,12 +1837,13 @@ function POSContent() {
           const itemName = menuItem?.item_name || menuItemOptions.find((opt) => opt.value === item.itemName)?.label || ""
           
           return {
-            item_id: itemId,
+            menu_item_id: itemId, // Send menu_item_id for backend price resolution
+            item_id: itemId, // Keep for backward compatibility
             item_name: itemName,
             item_description: item.itemDescription || null,
             portion_size: item.portionSize,
             portion_serving: item.portionServing?.trim() || "No#",
-            price: parseFloat(item.price),
+            price: parseFloat(item.price) || 0, // Price will be auto-resolved by backend if 0, or use provided price
             category: item.category || null,
             packaging: item.packaging || null,
           }
@@ -1751,8 +1875,48 @@ function POSContent() {
       console.log("Order created successfully:", result)
       toast.success("Order created successfully!")
       setPreviewOpen(false)
-      form.reset()
-      clearDraft() // Clear draft after successful save
+      
+      // Clear draft first, before resetting form
+      clearDraft()
+      skipNextDraftSave.current = true
+      
+      // Reset form to default values (matching form defaultValues)
+      form.reset({
+        order_number: "",
+        client_id: undefined,
+        caterer_id: undefined,
+        airport_id: undefined,
+        fbo_id: undefined,
+        description: "",
+        items: [
+          {
+            itemName: "",
+            itemDescription: "",
+            portionSize: "",
+            portionServing: "",
+            price: "",
+            category: "",
+            packaging: "",
+          },
+        ],
+        notes: "",
+        reheatingInstructions: "",
+        packagingInstructions: "",
+        dietaryRestrictions: "",
+        serviceCharge: "",
+        deliveryFee: "",
+        aircraftTailNumber: "",
+        deliveryDate: "",
+        deliveryTime: "",
+        orderPriority: "normal",
+        orderType: undefined,
+        paymentMethod: undefined,
+      })
+      
+      // Reset flag after a short delay to allow form reset to complete
+      setTimeout(() => {
+        skipNextDraftSave.current = false
+      }, 1000)
     } catch (error) {
       console.error("Error creating order:", error)
       const errorMessage = error instanceof Error ? error.message : "Failed to create order. Please try again."
@@ -2295,13 +2459,23 @@ function POSContent() {
                                                 if (value) {
                                                   const selectedItem = menuItemsData.find((item) => item.id.toString() === value)
                                                   if (selectedItem) {
-                                                    // Auto-populate price if available (from variants or direct price field)
-                                                    const price = (selectedItem.variants && selectedItem.variants.length > 0)
-                                                      ? selectedItem.variants[0].price
-                                                      : (selectedItem as any).price
-                                                    if (price !== undefined && price !== null) {
-                                                      form.setValue(`items.${index}.price`, price.toString())
+                                                    // Get current portion size and caterer_id from form
+                                                    const currentPortionSize = form.getValues(`items.${index}.portionSize`)
+                                                    const catererId = form.getValues("caterer_id")
+                                                    
+                                                    // Resolve price based on caterer_id and portion size
+                                                    const price = resolveMenuItemPrice(selectedItem, currentPortionSize || undefined, catererId)
+                                                    
+                                                    // If no price resolved, try first variant as fallback
+                                                    const fallbackPrice = price ?? 
+                                                      (selectedItem.variants && selectedItem.variants.length > 0
+                                                        ? selectedItem.variants[0].price
+                                                        : (selectedItem as any).price)
+                                                    
+                                                    if (fallbackPrice !== undefined && fallbackPrice !== null) {
+                                                      form.setValue(`items.${index}.price`, fallbackPrice.toString())
                                                     }
+                                                    
                                                     // Auto-populate description if available
                                                     if (selectedItem.item_description) {
                                                       form.setValue(`items.${index}.itemDescription`, selectedItem.item_description)
@@ -2338,7 +2512,27 @@ function POSContent() {
                                           <FormItem>
                                             <FormLabel className="text-xs font-medium text-muted-foreground">Qty *</FormLabel>
                                             <FormControl>
-                                              <Input placeholder="1" {...field} />
+                                              <Input 
+                                                placeholder="1" 
+                                                {...field}
+                                                onChange={(e) => {
+                                                  field.onChange(e)
+                                                  // Recalculate price when portion size changes
+                                                  const itemName = form.getValues(`items.${index}.itemName`)
+                                                  const newPortionSize = e.target.value
+                                                  const catererId = form.getValues("caterer_id")
+                                                  
+                                                  if (itemName && newPortionSize) {
+                                                    const menuItem = menuItemsData.find((mi) => mi.id.toString() === itemName)
+                                                    if (menuItem) {
+                                                      const resolvedPrice = resolveMenuItemPrice(menuItem, newPortionSize, catererId)
+                                                      if (resolvedPrice !== undefined) {
+                                                        form.setValue(`items.${index}.price`, resolvedPrice.toString(), { shouldValidate: false })
+                                                      }
+                                                    }
+                                                  }
+                                                }}
+                                              />
                                             </FormControl>
                                             <FormMessage />
                                           </FormItem>

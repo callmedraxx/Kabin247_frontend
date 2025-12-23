@@ -78,6 +78,7 @@ import {
   Building2,
   UtensilsCrossed,
   Copy,
+  HelpCircle,
 } from "lucide-react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -99,20 +100,12 @@ import { ChevronLeft, ChevronRight, ArrowUpDown } from "lucide-react"
 import { useFieldArray } from "react-hook-form"
 
 import { API_BASE_URL } from "@/lib/api-config"
+import { getStatusOptions, getOrderStatusConfig, getStatusTooltipContent, orderStatusConfig } from "@/lib/order-status-config"
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"
 
-// Order status types
-export type OrderStatus = 
-  | "awaiting_quote"
-  | "quote_sent"
-  | "awaiting_client_approval"
-  | "quote_approved"
-  | "awaiting_caterer"
-  | "caterer_confirmed"
-  | "in_preparation"
-  | "ready_for_delivery"
-  | "delivered"
-  | "cancelled"
-  | "order_changed"
+// Order status types - imported from centralized config
+import type { OrderStatus } from "@/lib/order-status-config"
+export type { OrderStatus }
 
 // Order data structure matching API response
 interface OrderItem {
@@ -291,19 +284,8 @@ interface OrdersResponse {
 }
 
 // Status options with labels and colors
-const statusOptions: Array<{ value: OrderStatus; label: string; color: string }> = [
-  { value: "awaiting_quote", label: "Awaiting Quote", color: "bg-yellow-500/10 text-yellow-600 border-yellow-500/20" },
-  { value: "quote_sent", label: "Quote Sent", color: "bg-purple-500/10 text-purple-600 border-purple-500/20" },
-  { value: "awaiting_client_approval", label: "Awaiting Client Approval", color: "bg-amber-500/10 text-amber-600 border-amber-500/20" },
-  { value: "quote_approved", label: "Quote Approved", color: "bg-green-500/10 text-green-600 border-green-500/20" },
-  { value: "awaiting_caterer", label: "Awaiting Caterer", color: "bg-blue-500/10 text-blue-600 border-blue-500/20" },
-  { value: "caterer_confirmed", label: "Caterer Confirmed", color: "bg-teal-500/10 text-teal-600 border-teal-500/20" },
-  { value: "in_preparation", label: "In Preparation", color: "bg-orange-500/10 text-orange-600 border-orange-500/20" },
-  { value: "ready_for_delivery", label: "Ready for Delivery", color: "bg-cyan-500/10 text-cyan-600 border-cyan-500/20" },
-  { value: "delivered", label: "Delivered", color: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" },
-  { value: "cancelled", label: "Cancelled", color: "bg-red-500/10 text-red-600 border-red-500/20" },
-  { value: "order_changed", label: "Order Changed", color: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20" },
-]
+// Get status options from centralized config
+const statusOptions = getStatusOptions()
 
 // Item schema matching POS page
 const itemSchema = z.object({
@@ -345,14 +327,13 @@ const orderSchema = z.object({
   paymentMethod: z.enum(["card", "ACH"], { message: "Please select a payment method" }),
   status: z.enum([
     "awaiting_quote",
-    "quote_sent",
     "awaiting_client_approval",
-    "quote_approved",
     "awaiting_caterer",
     "caterer_confirmed",
     "in_preparation",
     "ready_for_delivery",
     "delivered",
+    "paid",
     "cancelled",
     "order_changed",
   ]),
@@ -466,6 +447,7 @@ function OrdersContent() {
   const [orderForStatusUpdate, setOrderForStatusUpdate] = React.useState<Order | null>(null)
   const [isUpdatingStatus, setIsUpdatingStatus] = React.useState(false)
   const [emailDialogOpen, setEmailDialogOpen] = React.useState(false)
+  const [helpDialogOpen, setHelpDialogOpen] = React.useState(false)
   const [orderForEmail, setOrderForEmail] = React.useState<Order | null>(null)
   const [emailRecipient, setEmailRecipient] = React.useState<"client" | "caterer" | "both">("client")
   const [isSendingEmail, setIsSendingEmail] = React.useState(false)
@@ -1472,16 +1454,16 @@ function OrdersContent() {
   }
 
   // Helper function to determine which PDF endpoint to use based on order status
-  // PDF A (with prices): awaiting_quote, quote_sent - for client quotes
-  // PDF B (no prices): awaiting_client_approval, quote_approved, awaiting_caterer, caterer_confirmed, in_preparation, ready_for_delivery, delivered - for confirmations
+  // PDF A (with prices): awaiting_client_approval, paid - for client quotes/invoices
+  // PDF B (no prices): awaiting_quote, awaiting_caterer, caterer_confirmed, in_preparation, ready_for_delivery, delivered, cancelled, order_changed - for confirmations
   const getPdfEndpoint = (orderId: number, status: OrderStatus, type: "preview" | "download"): string => {
-    const pdfAStatuses: OrderStatus[] = ["awaiting_quote", "quote_sent"]
+    const pdfAStatuses: OrderStatus[] = ["awaiting_client_approval", "paid"]
     const usePdfA = pdfAStatuses.includes(status)
     
     if (type === "preview") {
       return usePdfA ? `${API_BASE_URL}/orders/${orderId}/preview` : `${API_BASE_URL}/orders/${orderId}/preview-b`
     } else {
-      return usePdfA ? `${API_BASE_URL}/orders/${orderId}/pdf` : `${API_BASE_URL}/orders/${orderId}/pdf-b`
+      return usePdfA ? `${API_BASE_URL}/orders/${orderId}/pdf?regenerate=true` : `${API_BASE_URL}/orders/${orderId}/pdf-b?regenerate=true`
     }
   }
 
@@ -1538,9 +1520,9 @@ function OrdersContent() {
       // Determine endpoint based on status or forced type
       let endpoint: string
       if (forceType === "a") {
-        endpoint = `${API_BASE_URL}/orders/${order.id}/pdf`
+        endpoint = `${API_BASE_URL}/orders/${order.id}/pdf?regenerate=true`
       } else if (forceType === "b") {
-        endpoint = `${API_BASE_URL}/orders/${order.id}/pdf-b`
+        endpoint = `${API_BASE_URL}/orders/${order.id}/pdf-b?regenerate=true`
       } else {
         endpoint = getPdfEndpoint(order.id, order.status, "download")
       }
@@ -1682,15 +1664,36 @@ function OrdersContent() {
     }
   }
 
-  // Get status badge
+  // Get status badge with tooltip
   const getStatusBadge = (status: OrderStatus | "completed") => {
     const normalizedStatus: OrderStatus = status === "completed" ? "delivered" : status
     const statusOption = statusOptions.find((s) => s.value === normalizedStatus)
-    return (
+    const statusConfig = getOrderStatusConfig(normalizedStatus)
+    const tooltipContent = getStatusTooltipContent(normalizedStatus)
+    
+    const badge = (
       <Badge className={statusOption?.color || ""} variant="outline">
         {statusOption?.label || normalizedStatus}
       </Badge>
     )
+    
+    if (statusConfig && tooltipContent) {
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              {badge}
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs whitespace-pre-line text-left">
+              <div className="font-semibold mb-1">{statusConfig.label}</div>
+              <div className="text-xs">{tooltipContent}</div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )
+    }
+    
+    return badge
   }
 
   // Format date
@@ -2052,14 +2055,14 @@ function OrdersContent() {
                                     className="cursor-pointer"
                                   >
                                     <FileText className="mr-2 h-4 w-4" />
-                                    {["awaiting_quote", "quote_sent"].includes(order.status) ? "Preview Quote" : "Preview Order"}
+                                    {order.status === "awaiting_client_approval" ? "Preview Quote" : "Preview Order"}
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
                                     onClick={() => handlePdfDownload(order)}
                                     className="cursor-pointer"
                                   >
                                     <Download className="mr-2 h-4 w-4" />
-                                    {["awaiting_quote", "quote_sent"].includes(order.status) ? "Download Quote" : "Download Order"}
+                                    {order.status === "awaiting_client_approval" ? "Download Quote" : "Download Order"}
                                   </DropdownMenuItem>
                                   {/* Show Invoice option for delivered orders or any order that might need an invoice */}
                                   {order.status === "delivered" && (
@@ -2555,7 +2558,7 @@ function OrdersContent() {
                         className="flex-1 min-w-[100px] gap-2"
                       >
                         <Eye className="h-4 w-4" />
-                        {viewingOrder && ["awaiting_quote", "quote_sent"].includes(viewingOrder.status) ? "Quote" : "Preview"}
+                        {viewingOrder && viewingOrder.status === "awaiting_client_approval" ? "Quote" : "Preview"}
                       </Button>
                       <Button
                         variant="outline"
@@ -2567,7 +2570,7 @@ function OrdersContent() {
                         className="flex-1 min-w-[100px] gap-2"
                       >
                         <Download className="h-4 w-4" />
-                        {viewingOrder && ["awaiting_quote", "quote_sent"].includes(viewingOrder.status) ? "Quote PDF" : "Order PDF"}
+                        {viewingOrder && viewingOrder.status === "awaiting_client_approval" ? "Quote PDF" : "Order PDF"}
                       </Button>
                       {/* Show Invoice button for delivered orders */}
                       {viewingOrder?.status === "delivered" && (
@@ -3585,7 +3588,7 @@ function OrdersContent() {
                             className="flex-1 min-w-[100px] gap-2"
                           >
                             <Download className="h-4 w-4" />
-                            {["awaiting_quote", "quote_sent"].includes(orderForPdf.status) ? "Download Quote" : "Download Order"}
+                            {orderForPdf.status === "awaiting_client_approval" ? "Download Quote" : "Download Order"}
                           </Button>
                           {/* Show Invoice button for delivered orders */}
                           {orderForPdf.status === "delivered" && (
@@ -3615,6 +3618,72 @@ function OrdersContent() {
                 </div>
               </DrawerContent>
             </Drawer>
+
+            {/* Order Status Help Dialog */}
+            <Dialog open={helpDialogOpen} onOpenChange={setHelpDialogOpen}>
+              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <HelpCircle className="h-5 w-5" />
+                    Order Status Guide
+                  </DialogTitle>
+                  <DialogDescription>
+                    Learn about each order status, when to use them, and what happens when they're set.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  {orderStatusConfig.map((status) => (
+                    <Card key={status.value} className="border-border/50">
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center gap-3">
+                          <Badge className={status.color} variant="outline">
+                            {status.label}
+                          </Badge>
+                          {status.autoUpdate && (
+                            <Badge variant="secondary" className="text-xs">
+                              Auto-updated
+                            </Badge>
+                          )}
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-2 text-sm">
+                        <div>
+                          <span className="font-semibold">Purpose: </span>
+                          <span>{status.purpose}</span>
+                        </div>
+                        <div>
+                          <span className="font-semibold">PDF Type: </span>
+                          <span>{status.pdfType}</span>
+                        </div>
+                        <div>
+                          <span className="font-semibold">Email Recipient: </span>
+                          <span>{status.emailRecipient}</span>
+                        </div>
+                        {status.emailSubject && (
+                          <div>
+                            <span className="font-semibold">Email Subject: </span>
+                            <span className="text-muted-foreground font-mono text-xs">{status.emailSubject}</span>
+                          </div>
+                        )}
+                        {status.billTo && (
+                          <div>
+                            <span className="font-semibold">Bill-to: </span>
+                            <span>{status.billTo}</span>
+                          </div>
+                        )}
+                        <div className="pt-2 border-t border-border/50">
+                          <span className="font-semibold">Details: </span>
+                          <span className="text-muted-foreground">{status.details}</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+                <DialogFooter>
+                  <Button onClick={() => setHelpDialogOpen(false)}>Close</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
 
             {/* Delete Confirmation Dialog */}
             <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

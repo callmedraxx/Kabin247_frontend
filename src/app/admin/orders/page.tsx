@@ -99,17 +99,11 @@ import {
 import { toast } from "sonner"
 
 import { API_BASE_URL } from "@/lib/api-config"
+import type { OrderStatus } from "@/lib/order-status-config"
+import { getStatusOptions, getOrderStatusConfig, getStatusTooltipContent } from "@/lib/order-status-config"
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"
 
-// Order status types
-export type OrderStatus =
-  | "awaiting_quote"
-  | "awaiting_caterer"
-  | "quote_sent"
-  | "quote_approved"
-  | "in_preparation"
-  | "ready_for_delivery"
-  | "delivered"
-  | "cancelled"
+export type { OrderStatus }
 
 // Order data structure matching API response
 interface OrderItem {
@@ -217,17 +211,8 @@ interface Airport {
   airport_code_icao: string | null
 }
 
-// Status options with labels and colors
-const statusOptions: Array<{ value: OrderStatus; label: string; color: string }> = [
-  { value: "awaiting_quote", label: "Awaiting Quote", color: "bg-yellow-500/10 text-yellow-600 border-yellow-500/20" },
-  { value: "awaiting_caterer", label: "Awaiting Caterer", color: "bg-blue-500/10 text-blue-600 border-blue-500/20" },
-  { value: "quote_sent", label: "Quote Sent", color: "bg-purple-500/10 text-purple-600 border-purple-500/20" },
-  { value: "quote_approved", label: "Quote Approved", color: "bg-green-500/10 text-green-600 border-green-500/20" },
-  { value: "in_preparation", label: "In Preparation", color: "bg-orange-500/10 text-orange-600 border-orange-500/20" },
-  { value: "ready_for_delivery", label: "Ready for Delivery", color: "bg-cyan-500/10 text-cyan-600 border-cyan-500/20" },
-  { value: "delivered", label: "Delivered", color: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" },
-  { value: "cancelled", label: "Cancelled", color: "bg-red-500/10 text-red-600 border-red-500/20" },
-]
+// Get status options from centralized config
+const statusOptions = getStatusOptions()
 
 // Form schema
 const orderItemSchema = z.object({
@@ -883,7 +868,7 @@ function OrdersContent() {
     toast.loading("Generating PDF...", { id: `pdf-${order.id}` })
     
     try {
-      const response = await fetch(`${API_BASE_URL}/orders/${order.id}/pdf`)
+      const response = await fetch(`${API_BASE_URL}/orders/${order.id}/pdf?regenerate=true`)
       
       if (!response.ok) {
         const errorText = await response.text()
@@ -937,11 +922,32 @@ function OrdersContent() {
   const getStatusBadge = (status: OrderStatus | "completed") => {
     const normalizedStatus: OrderStatus = status === "completed" ? "delivered" : status
     const statusOption = statusOptions.find((s) => s.value === normalizedStatus)
-    return (
+    const statusConfig = getOrderStatusConfig(normalizedStatus)
+    const tooltipContent = getStatusTooltipContent(normalizedStatus)
+    
+    const badge = (
       <Badge variant="outline" className={statusOption?.color || ""}>
         {statusOption?.label || normalizedStatus}
       </Badge>
     )
+    
+    if (statusConfig && tooltipContent) {
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              {badge}
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs whitespace-pre-line text-left">
+              <div className="font-semibold mb-1">{statusConfig.label}</div>
+              <div className="text-xs">{tooltipContent}</div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )
+    }
+    
+    return badge
   }
 
   return (

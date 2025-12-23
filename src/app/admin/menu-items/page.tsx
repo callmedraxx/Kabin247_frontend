@@ -79,7 +79,7 @@ import {
   ChevronRight,
 } from "lucide-react"
 import * as XLSX from "xlsx"
-import { useForm } from "react-hook-form"
+import { useForm, useFieldArray } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import {
@@ -99,9 +99,14 @@ import { API_BASE_URL } from "@/lib/api-config"
 // Menu item data structure matching API response
 interface MenuItemVariant {
   id?: number
+  menu_item_id?: number
   portion_size: string
-  price: number
+  price: number // Base/default price
   sort_order?: number
+  caterer_prices?: Array<{
+    caterer_id: number
+    price: number
+  }>
 }
 
 interface MenuItem {
@@ -126,6 +131,20 @@ interface Category {
   is_active: boolean
 }
 
+interface Caterer {
+  id: number
+  caterer_name: string
+  caterer_number: string
+  caterer_email: string | null
+  airport_code_iata: string | null
+  airport_code_icao: string | null
+}
+
+interface CaterersResponse {
+  caterers: Caterer[]
+  total: number
+}
+
 // API Response types
 interface MenuItemsResponse {
   menu_items: MenuItem[]
@@ -139,6 +158,16 @@ interface CategoriesResponse {
   total: number
 }
 
+// Variant schema with caterer prices
+const variantSchema = z.object({
+  portion_size: z.string().min(1, "Portion size is required"),
+  price: z.number().positive("Price must be greater than 0"),
+  caterer_prices: z.array(z.object({
+    caterer_id: z.number().int().positive(),
+    price: z.number().positive("Price must be greater than 0"),
+  })).optional(),
+})
+
 // Form schema for menu items
 const menuItemSchema = z.object({
   item_name: z.string().min(1, "Item name is required"),
@@ -146,7 +175,8 @@ const menuItemSchema = z.object({
   food_type: z.enum(["veg", "non_veg"]),
   category: z.string().optional(),
   image_url: z.string().optional(),
-  price: z.number().positive("Price must be greater than 0").optional(),
+  price: z.number().positive("Price must be greater than 0").optional(), // Legacy support
+  variants: z.array(variantSchema).optional(), // New: variants with caterer prices
   tax_rate: z.number().min(0).max(100).optional(),
   service_charge: z.number().min(0).optional(),
   is_active: z.boolean(),
@@ -176,6 +206,10 @@ function MenuItemsContent() {
   const [categories, setCategories] = React.useState<Category[]>([])
   const [isLoadingCategories, setIsLoadingCategories] = React.useState(false)
   
+  // Caterers for price management
+  const [caterers, setCaterers] = React.useState<Caterer[]>([])
+  const [isLoadingCaterers, setIsLoadingCaterers] = React.useState(false)
+  
   const [drawerOpen, setDrawerOpen] = React.useState(false)
   const [editingItem, setEditingItem] = React.useState<MenuItem | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
@@ -199,12 +233,40 @@ function MenuItemsContent() {
       category: "",
       image_url: "",
       price: undefined,
+      variants: [],
       tax_rate: undefined,
       service_charge: undefined,
       is_active: true,
     },
   })
 
+  // Field array for variants
+  const { fields: variantFields, append: appendVariant, remove: removeVariant } = useFieldArray({
+    control: form.control,
+    name: "variants",
+  })
+
+
+  // Fetch caterers for price management
+  const fetchCaterers = React.useCallback(async () => {
+    setIsLoadingCaterers(true)
+    try {
+      const response = await fetch(`${API_BASE_URL}/caterers?limit=1000`)
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Failed to fetch caterers" }))
+        console.warn("Failed to load caterers:", errorData.error)
+        return
+      }
+      
+      const data: CaterersResponse = await response.json()
+      setCaterers(data.caterers || [])
+    } catch (err) {
+      console.warn("Error fetching caterers:", err)
+    } finally {
+      setIsLoadingCaterers(false)
+    }
+  }, [])
 
   // Fetch categories for dropdown
   const fetchCategories = React.useCallback(async () => {
@@ -239,7 +301,8 @@ function MenuItemsContent() {
 
   React.useEffect(() => {
     fetchCategories()
-  }, [fetchCategories])
+    fetchCaterers()
+  }, [fetchCategories, fetchCaterers])
 
   // Prepare category options for combobox
   const categoryOptions = React.useMemo(() => {
@@ -371,6 +434,7 @@ function MenuItemsContent() {
       category: "",
       image_url: "",
       price: undefined,
+      variants: [],
       tax_rate: undefined,
       service_charge: undefined,
       is_active: true,
@@ -392,10 +456,17 @@ function MenuItemsContent() {
       setEditingItem(fullItem)
       setImagePreview(fullItem.image_url || null)
       
-      // Extract price from first variant if variants exist, otherwise use undefined
+      // Extract price from first variant if variants exist, otherwise use undefined (for backward compatibility)
       const price = fullItem.variants && fullItem.variants.length > 0 
         ? fullItem.variants[0].price 
         : undefined
+
+      // Map variants to form format, including caterer_prices
+      const variants = fullItem.variants?.map(v => ({
+        portion_size: v.portion_size,
+        price: v.price,
+        caterer_prices: v.caterer_prices || [],
+      })) || []
 
       form.reset({
         item_name: fullItem.item_name,
@@ -403,7 +474,8 @@ function MenuItemsContent() {
         food_type: fullItem.food_type,
         category: fullItem.category || "",
         image_url: fullItem.image_url || "",
-        price: price,
+        price: price, // Legacy support
+        variants: variants, // New: variants with caterer prices
         tax_rate: fullItem.tax_rate || undefined,
         service_charge: fullItem.service_charge || undefined,
         is_active: fullItem.is_active,
@@ -435,7 +507,15 @@ function MenuItemsContent() {
       if (values.category && values.category.trim()) {
         body.category = values.category
       }
-      if (values.price !== undefined) {
+      // Send variants if provided, otherwise fall back to legacy price field
+      if (values.variants && values.variants.length > 0) {
+        body.variants = values.variants.map(v => ({
+          portion_size: v.portion_size,
+          price: v.price,
+          caterer_prices: v.caterer_prices || [],
+        }))
+      } else if (values.price !== undefined) {
+        // Legacy support: if no variants, use single price
         body.price = values.price
       }
       if (values.item_description) {
@@ -1391,27 +1471,205 @@ function MenuItemsContent() {
                           />
                         </div>
 
-                        {/* Price */}
-                        <FormField
-                          control={form.control}
-                          name="price"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Price</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  placeholder="0.00"
-                                  {...field}
-                                  value={field.value || ""}
-                                  onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
+                        {/* Variants with Caterer Prices */}
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <Label>Variants & Prices</Label>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => appendVariant({ portion_size: "", price: 0, caterer_prices: [] })}
+                              className="gap-2"
+                            >
+                              <Plus className="h-4 w-4" />
+                              Add Variant
+                            </Button>
+                          </div>
+                          
+                          {variantFields.length === 0 && (
+                            <div className="text-sm text-muted-foreground p-4 border border-dashed rounded-lg text-center">
+                              No variants added. Click "Add Variant" to add portion sizes with prices.
+                            </div>
                           )}
-                        />
+
+                          {variantFields.map((field, index) => (
+                            <Card key={field.id} className="p-4 space-y-4">
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1 grid gap-4 md:grid-cols-2">
+                                  <FormField
+                                    control={form.control}
+                                    name={`variants.${index}.portion_size`}
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>Portion Size *</FormLabel>
+                                        <FormControl>
+                                          <Input placeholder="e.g., Small, Medium, Large" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+                                  <FormField
+                                    control={form.control}
+                                    name={`variants.${index}.price`}
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>Base Price ($) *</FormLabel>
+                                        <FormControl>
+                                          <Input
+                                            type="number"
+                                            step="0.01"
+                                            placeholder="0.00"
+                                            {...field}
+                                            value={field.value || ""}
+                                            onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : 0)}
+                                          />
+                                        </FormControl>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => removeVariant(index)}
+                                  className="ml-2 text-destructive"
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                              
+                              {/* Caterer Prices Section */}
+                              <div className="space-y-3 pt-3 border-t">
+                                <div className="flex items-center justify-between">
+                                  <Label className="text-sm font-medium">Caterer-Specific Prices (Optional)</Label>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      const currentCatererPrices = form.getValues(`variants.${index}.caterer_prices`) || []
+                                      form.setValue(`variants.${index}.caterer_prices`, [
+                                        ...currentCatererPrices,
+                                        { caterer_id: 0, price: 0 }
+                                      ])
+                                    }}
+                                    className="gap-1 h-7 text-xs"
+                                    disabled={isLoadingCaterers || caterers.length === 0}
+                                  >
+                                    <Plus className="h-3 w-3" />
+                                    Add Caterer Price
+                                  </Button>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                  Set custom prices for specific caterers. If not set, base price will be used.
+                                </p>
+                                
+                                {form.watch(`variants.${index}.caterer_prices`)?.map((cp: any, cpIndex: number) => (
+                                  <div key={cpIndex} className="flex gap-2 items-end p-2 border rounded-lg bg-muted/30">
+                                    <FormField
+                                      control={form.control}
+                                      name={`variants.${index}.caterer_prices.${cpIndex}.caterer_id`}
+                                      render={({ field }) => (
+                                        <FormItem className="flex-1">
+                                          <FormLabel className="text-xs">Caterer</FormLabel>
+                                          <Select
+                                            onValueChange={(value) => field.onChange(parseInt(value))}
+                                            value={field.value?.toString() || ""}
+                                          >
+                                            <FormControl>
+                                              <SelectTrigger className="h-9">
+                                                <SelectValue placeholder="Select caterer..." />
+                                              </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                              {caterers.map((caterer) => (
+                                                <SelectItem key={caterer.id} value={caterer.id.toString()}>
+                                                  {caterer.caterer_name}
+                                                </SelectItem>
+                                              ))}
+                                            </SelectContent>
+                                          </Select>
+                                          <FormMessage />
+                                        </FormItem>
+                                      )}
+                                    />
+                                    <FormField
+                                      control={form.control}
+                                      name={`variants.${index}.caterer_prices.${cpIndex}.price`}
+                                      render={({ field }) => (
+                                        <FormItem className="w-32">
+                                          <FormLabel className="text-xs">Price ($)</FormLabel>
+                                          <FormControl>
+                                            <Input
+                                              type="number"
+                                              step="0.01"
+                                              placeholder="0.00"
+                                              className="h-9"
+                                              {...field}
+                                              value={field.value || ""}
+                                              onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : 0)}
+                                            />
+                                          </FormControl>
+                                          <FormMessage />
+                                        </FormItem>
+                                      )}
+                                    />
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        const currentCatererPrices = form.getValues(`variants.${index}.caterer_prices`) || []
+                                        const updated = currentCatererPrices.filter((_: any, i: number) => i !== cpIndex)
+                                        form.setValue(`variants.${index}.caterer_prices`, updated)
+                                      }}
+                                      className="h-9 w-9 p-0 text-destructive"
+                                    >
+                                      <X className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                ))}
+                                
+                                {(!form.watch(`variants.${index}.caterer_prices`) || form.watch(`variants.${index}.caterer_prices`)?.length === 0) && (
+                                  <p className="text-xs text-muted-foreground italic">
+                                    No caterer-specific prices set. Base price will be used for all caterers.
+                                  </p>
+                                )}
+                              </div>
+                            </Card>
+                          ))}
+                        </div>
+
+                        {/* Legacy Price Field (for backward compatibility) */}
+                        {variantFields.length === 0 && (
+                          <FormField
+                            control={form.control}
+                            name="price"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Price (Legacy)</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    type="number"
+                                    step="0.01"
+                                    placeholder="0.00"
+                                    {...field}
+                                    value={field.value || ""}
+                                    onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                                <p className="text-xs text-muted-foreground">
+                                  Note: Use variants above for better price management with caterer-specific pricing.
+                                </p>
+                              </FormItem>
+                            )}
+                          />
+                        )}
 
                         {/* Tax and Charges */}
                         <div className="grid gap-4 md:grid-cols-2">

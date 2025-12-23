@@ -84,7 +84,9 @@ import { toast } from "sonner"
 import { API_BASE_URL } from "@/lib/api-config"
 
 // Order status types (only historical statuses)
-type OrderStatus = "delivered" | "cancelled"
+import type { OrderStatus } from "@/lib/order-status-config"
+import { getStatusOptions, getOrderStatusConfig, getStatusTooltipContent } from "@/lib/order-status-config"
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"
 
 // Order data structure matching API response
 interface OrderClient {
@@ -164,10 +166,9 @@ interface OrdersResponse {
 }
 
 // Status options with labels and colors
-const statusOptions: Array<{ value: OrderStatus; label: string; color: string }> = [
-  { value: "delivered", label: "Delivered", color: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" },
-  { value: "cancelled", label: "Cancelled", color: "bg-red-500/10 text-red-600 border-red-500/20" },
-]
+// Get status options from centralized config (filtered for history page)
+const allStatusOptions = getStatusOptions()
+const statusOptions = allStatusOptions.filter(s => s.value === "delivered" || s.value === "cancelled")
 
 function OrderHistoryContent() {
   const [orders, setOrders] = React.useState<Order[]>([])
@@ -430,7 +431,7 @@ function OrderHistoryContent() {
     toast.loading("Generating PDF...", { id: `pdf-${order.id}` })
 
     try {
-      const response = await fetch(`${API_BASE_URL}/orders/${order.id}/pdf`)
+      const response = await fetch(`${API_BASE_URL}/orders/${order.id}/pdf?regenerate=true`)
       
       if (!response.ok) {
         throw new Error("Failed to download PDF")
@@ -471,11 +472,32 @@ function OrderHistoryContent() {
   // Get status badge
   const getStatusBadge = (status: OrderStatus) => {
     const statusOption = statusOptions.find((s) => s.value === status)
-    return (
+    const statusConfig = getOrderStatusConfig(status)
+    const tooltipContent = getStatusTooltipContent(status)
+    
+    const badge = (
       <Badge className={statusOption?.color || ""} variant="outline">
         {statusOption?.label || status}
       </Badge>
     )
+    
+    if (statusConfig && tooltipContent) {
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              {badge}
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs whitespace-pre-line text-left">
+              <div className="font-semibold mb-1">{statusConfig.label}</div>
+              <div className="text-xs">{tooltipContent}</div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )
+    }
+    
+    return badge
   }
 
   // Clear date filters

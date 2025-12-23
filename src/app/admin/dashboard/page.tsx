@@ -43,19 +43,8 @@ import { SidebarCategoryProvider } from "@/contexts/sidebar-context"
 import { API_BASE_URL } from "@/lib/api-config"
 import { toast } from "sonner"
 
-// Order status types
-type OrderStatus = 
-  | "awaiting_quote"
-  | "quote_sent"
-  | "awaiting_client_approval"
-  | "quote_approved"
-  | "awaiting_caterer"
-  | "caterer_confirmed"
-  | "in_preparation"
-  | "ready_for_delivery"
-  | "delivered"
-  | "cancelled"
-  | "order_changed"
+// Order status types - imported from centralized config
+import type { OrderStatus } from "@/lib/order-status-config"
 
 // Order data structure
 interface OrderClient {
@@ -117,7 +106,7 @@ interface OrdersResponse {
   limit: number
 }
 
-// Status configuration
+// Status configuration with icons (extending the base config)
 const statusConfig: Record<OrderStatus, { label: string; color: string; bgColor: string; icon: React.ReactNode }> = {
   awaiting_quote: { 
     label: "Awaiting Quote", 
@@ -125,23 +114,11 @@ const statusConfig: Record<OrderStatus, { label: string; color: string; bgColor:
     bgColor: "bg-yellow-500/10 border-yellow-500/20",
     icon: <Clock className="h-4 w-4" />
   },
-  quote_sent: { 
-    label: "Quote Sent", 
-    color: "text-purple-600", 
-    bgColor: "bg-purple-500/10 border-purple-500/20",
-    icon: <Send className="h-4 w-4" />
-  },
   awaiting_client_approval: { 
     label: "Awaiting Client Approval", 
     color: "text-amber-600", 
     bgColor: "bg-amber-500/10 border-amber-500/20",
     icon: <UserCheck className="h-4 w-4" />
-  },
-  quote_approved: { 
-    label: "Quote Approved", 
-    color: "text-green-600", 
-    bgColor: "bg-green-500/10 border-green-500/20",
-    icon: <CheckCircle2 className="h-4 w-4" />
   },
   awaiting_caterer: { 
     label: "Awaiting Caterer", 
@@ -171,6 +148,12 @@ const statusConfig: Record<OrderStatus, { label: string; color: string; bgColor:
     label: "Delivered", 
     color: "text-emerald-600", 
     bgColor: "bg-emerald-500/10 border-emerald-500/20",
+    icon: <CheckCircle2 className="h-4 w-4" />
+  },
+  paid: { 
+    label: "Paid", 
+    color: "text-green-600", 
+    bgColor: "bg-green-500/10 border-green-500/20",
     icon: <CheckCircle2 className="h-4 w-4" />
   },
   cancelled: { 
@@ -242,8 +225,7 @@ function DashboardContent() {
     )
     
     const inProgress = orders.filter(o => 
-      o.status === "quote_sent" || 
-      o.status === "quote_approved" || 
+      o.status === "awaiting_client_approval" || 
       o.status === "in_preparation" ||
       o.status === "ready_for_delivery"
     )
@@ -266,14 +248,13 @@ function DashboardContent() {
     // Status breakdown
     const statusCounts: Record<OrderStatus, number> = {
       awaiting_quote: 0,
-      quote_sent: 0,
       awaiting_client_approval: 0,
-      quote_approved: 0,
       awaiting_caterer: 0,
       caterer_confirmed: 0,
       in_preparation: 0,
       ready_for_delivery: 0,
       delivered: 0,
+      paid: 0,
       cancelled: 0,
       order_changed: 0,
     } as Record<OrderStatus, number>
