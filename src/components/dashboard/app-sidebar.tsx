@@ -54,6 +54,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { useAuth } from "@/contexts/auth-context"
+import { useRouter } from "next/navigation"
+import { LogOut } from "lucide-react"
 
 const navDashboard = {
   title: "Dashboard",
@@ -117,6 +120,7 @@ const navMain = [
         title: "Caterer",
         url: "/admin/caterers",
       },
+      // Employees link will be conditionally added in NavMain component
     ],
   },
   {
@@ -190,6 +194,7 @@ function NavMain({
   const { state } = useSidebar()
   const pathname = usePathname()
   const sidebarCollapsed = state === "collapsed"
+  const { isAdmin } = useAuth()
   // Track open state for each collapsible
   const [openStates, setOpenStates] = React.useState<Record<string, boolean>>({})
 
@@ -205,11 +210,30 @@ function NavMain({
     }
   }
 
+  // Process items to conditionally add Employees link for admin
+  const processedItems = React.useMemo(() => {
+    return items.map((item) => {
+      if (item.title === "User Management" && isAdmin) {
+        return {
+          ...item,
+          items: [
+            ...(item.items || []),
+            {
+              title: "Employees",
+              url: "/admin/employees",
+            },
+          ],
+        }
+      }
+      return item
+    })
+  }, [items, isAdmin])
+
   return (
     <SidebarGroup>
       <SidebarGroupLabel>Main Menu</SidebarGroupLabel>
       <SidebarMenu>
-        {items.map((item) => {
+        {processedItems.map((item) => {
           // Check if any sub-item is active
           const hasActiveSubItem = item.items?.some((subItem) => pathname === subItem.url) || false
           // Check if the category itself is active (though categories usually don't have direct URLs)
@@ -267,6 +291,23 @@ function NavMain({
 }
 
 function NavUser() {
+  const { user, logout } = useAuth()
+  const router = useRouter()
+
+  const handleLogout = async () => {
+    try {
+      await logout()
+      router.push("/login")
+    } catch (error) {
+      console.error("Logout error:", error)
+    }
+  }
+
+  const userInitial = user?.email?.[0]?.toUpperCase() || "U"
+  const userName = user?.email?.split("@")[0] || "User"
+  const userEmail = user?.email || "user@kabin247.com"
+  const userRole = user?.role || "CSR"
+
   return (
     <SidebarMenu>
       <SidebarMenuItem>
@@ -277,12 +318,12 @@ function NavUser() {
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
               <Avatar className="h-8 w-8 rounded-lg">
-                <AvatarImage src="https://ui-avatars.com/api/?name=Admin&background=6366f1&color=fff&bold=true" alt="Admin" />
-                <AvatarFallback className="rounded-lg bg-primary text-primary-foreground">A</AvatarFallback>
+                <AvatarImage src={`https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}&background=6366f1&color=fff&bold=true`} alt={userName} />
+                <AvatarFallback className="rounded-lg bg-primary text-primary-foreground">{userInitial}</AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsed=true]:!hidden group-data-[collapsed=true]:!w-0 group-data-[collapsed=true]:!max-w-0 group-data-[collapsed=true]:!overflow-hidden">
-                <span className="truncate font-medium">Admin</span>
-                <span className="truncate text-xs">admin@kabin247.com</span>
+                <span className="truncate font-medium">{userName}</span>
+                <span className="truncate text-xs">{userEmail}</span>
               </div>
             </SidebarMenuButton>
           </DropdownMenuTrigger>
@@ -295,12 +336,13 @@ function NavUser() {
             <DropdownMenuLabel className="p-0 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarImage src="https://ui-avatars.com/api/?name=Admin&background=6366f1&color=fff&bold=true" alt="Admin" />
-                  <AvatarFallback className="rounded-lg bg-primary text-primary-foreground">A</AvatarFallback>
+                  <AvatarImage src={`https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}&background=6366f1&color=fff&bold=true`} alt={userName} />
+                  <AvatarFallback className="rounded-lg bg-primary text-primary-foreground">{userInitial}</AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">Admin</span>
-                  <span className="truncate text-xs">admin@kabin247.com</span>
+                  <span className="truncate font-medium">{userName}</span>
+                  <span className="truncate text-xs">{userEmail}</span>
+                  <span className="truncate text-xs text-muted-foreground">{userRole}</span>
                 </div>
               </div>
             </DropdownMenuLabel>
@@ -308,7 +350,10 @@ function NavUser() {
             <DropdownMenuItem>Profile</DropdownMenuItem>
             <DropdownMenuItem>Settings</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>Log out</DropdownMenuItem>
+            <DropdownMenuItem onClick={handleLogout}>
+              <LogOut className="mr-2 h-4 w-4" />
+              Log out
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>

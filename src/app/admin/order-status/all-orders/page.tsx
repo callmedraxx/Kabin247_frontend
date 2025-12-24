@@ -100,8 +100,10 @@ import { ChevronLeft, ChevronRight, ArrowUpDown } from "lucide-react"
 import { useFieldArray } from "react-hook-form"
 
 import { API_BASE_URL } from "@/lib/api-config"
+import { apiCall, apiCallJson } from "@/lib/api-client"
 import { getStatusOptions, getOrderStatusConfig, getStatusTooltipContent, orderStatusConfig } from "@/lib/order-status-config"
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"
+import { useAuth } from "@/contexts/auth-context"
 
 // Order status types - imported from centralized config
 import type { OrderStatus } from "@/lib/order-status-config"
@@ -546,14 +548,7 @@ function OrdersContent() {
       params.append("page", page.toString())
       params.append("limit", limit.toString())
 
-      const response = await fetch(`${API_BASE_URL}/orders?${params.toString()}`)
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch orders" }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
-
-      const data: OrdersResponse = await response.json()
+      const data: OrdersResponse = await apiCallJson(`/orders?${params.toString()}`)
       setOrders(data.orders)
       setTotal(data.total)
     } catch (err) {
@@ -567,10 +562,15 @@ function OrdersContent() {
     }
   }, [searchQuery, statusFilter, sortBy, sortOrder, page, limit])
 
+  const { isAuthenticated, isLoading: authLoading } = useAuth()
+
   // Fetch orders on mount and when dependencies change
+  // Wait for auth to initialize before making API calls
   React.useEffect(() => {
-    fetchOrders()
-  }, [fetchOrders])
+    if (!authLoading && isAuthenticated) {
+      fetchOrders()
+    }
+  }, [fetchOrders, authLoading, isAuthenticated])
 
   // Debounce search
   React.useEffect(() => {
@@ -592,16 +592,7 @@ function OrdersContent() {
       }
       params.append("limit", "1000")
       
-      const response = await fetch(`${API_BASE_URL}/clients?${params.toString()}`)
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch clients" }))
-        toast.error("Failed to load clients", {
-          description: errorData.error || `HTTP error! status: ${response.status}`,
-        })
-        return
-      }
-      
-      const data: ClientsResponse = await response.json()
+      const data: ClientsResponse = await apiCallJson(`/clients?${params.toString()}`)
       setClientsData(data.clients || [])
       
       const options = (data.clients || []).map((client) => ({
@@ -630,16 +621,7 @@ function OrdersContent() {
       }
       params.append("limit", "1000")
       
-      const response = await fetch(`${API_BASE_URL}/caterers?${params.toString()}`)
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch caterers" }))
-        toast.error("Failed to load caterers", {
-          description: errorData.error || `HTTP error! status: ${response.status}`,
-        })
-        return
-      }
-      
-      const data: CaterersResponse = await response.json()
+      const data: CaterersResponse = await apiCallJson(`/caterers?${params.toString()}`)
       setCaterersData(data.caterers || [])
       
       const options = (data.caterers || []).map((caterer) => {
@@ -685,16 +667,7 @@ function OrdersContent() {
       }
       params.append("limit", "1000")
       
-      const response = await fetch(`${API_BASE_URL}/airports?${params.toString()}`)
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch airports" }))
-        toast.error("Failed to load airports", {
-          description: errorData.error || `HTTP error! status: ${response.status}`,
-        })
-        return
-      }
-      
-      const data: AirportsResponse = await response.json()
+      const data: AirportsResponse = await apiCallJson(`/airports?${params.toString()}`)
       setAirportsData(data.airports || [])
       
       const options = (data.airports || []).map((airport) => {
@@ -751,16 +724,7 @@ function OrdersContent() {
       }
       params.append("limit", "1000")
       
-      const response = await fetch(`${API_BASE_URL}/fbos?${params.toString()}`)
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch FBOs" }))
-        toast.error("Failed to load FBOs", {
-          description: errorData.error || `HTTP error! status: ${response.status}`,
-        })
-        return
-      }
-      
-      const data: FBOsResponse = await response.json()
+      const data: FBOsResponse = await apiCallJson(`/fbos?${params.toString()}`)
       setFBOsData(data.fbos || [])
       
       const options = (data.fbos || []).map((fbo) => {
@@ -807,16 +771,7 @@ function OrdersContent() {
       params.append("limit", "1000")
       params.append("is_active", "true")
       
-      const response = await fetch(`${API_BASE_URL}/menu-items?${params.toString()}`)
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch menu items" }))
-        toast.error("Failed to load menu items", {
-          description: errorData.error || `HTTP error! status: ${response.status}`,
-        })
-        return
-      }
-      
-      const data: MenuItemsResponse = await response.json()
+      const data: MenuItemsResponse = await apiCallJson(`/menu-items?${params.toString()}`)
       setMenuItemsData(data.menu_items || [])
       
       const options = (data.menu_items || []).map((item) => ({
@@ -839,17 +794,7 @@ function OrdersContent() {
   const fetchCategories = React.useCallback(async () => {
     setIsLoadingCategories(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/categories?is_active=true&limit=1000`)
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch categories" }))
-        toast.error("Failed to load categories", {
-          description: errorData.error || `HTTP error! status: ${response.status}`,
-        })
-        return
-      }
-      
-      const data: CategoriesResponse = await response.json()
+      const data: CategoriesResponse = await apiCallJson(`/categories?is_active=true&limit=1000`)
       setCategories(data.categories || [])
     } catch (err) {
       if (err instanceof TypeError && (err.message === "Failed to fetch" || err.message.includes("fetch"))) {
@@ -1068,14 +1013,7 @@ function OrdersContent() {
   // Handle view details
   const handleView = async (order: Order) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/orders/${order.id}`)
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch order details" }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
-
-      const data: Order = await response.json()
+      const data: Order = await apiCallJson(`/orders/${order.id}`)
       setViewingOrder(data)
       setViewDrawerOpen(true)
     } catch (err) {
@@ -1295,18 +1233,10 @@ function OrdersContent() {
         }),
       }
 
-      const response = await fetch(`${API_BASE_URL}/orders/${editingOrder.id}`, {
+      await apiCallJson(`/orders/${editingOrder.id}`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify(body),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to update order" }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
 
       toast.success("Order updated", {
         description: `Order ${editingOrder.order_number} has been updated successfully.`,
@@ -1337,17 +1267,9 @@ function OrdersContent() {
 
     setIsDeleting(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/orders/${orderToDelete.id}`, {
+      await apiCallJson(`/orders/${orderToDelete.id}`, {
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
       })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to delete order" }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
 
       toast.success("Order deleted", {
         description: `Order ${orderToDelete.order_number} has been deleted successfully.`,
@@ -1377,22 +1299,12 @@ function OrdersContent() {
 
     setIsDeleting(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/orders`, {
+      const data = await apiCallJson(`/orders`, {
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({
           ids: Array.from(selectedOrders),
         }),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to delete orders" }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
-
-      const data = await response.json()
       
       toast.success("Orders deleted", {
         description: `${data.deleted || selectedOrders.size} order(s) have been deleted successfully.`,
@@ -1421,20 +1333,12 @@ function OrdersContent() {
 
     setIsUpdatingStatus(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/orders/${orderForStatusUpdate.id}/status`, {
+      await apiCallJson(`/orders/${orderForStatusUpdate.id}/status`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({
           status: newStatus,
         }),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to update status" }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
 
       toast.success("Status updated", {
         description: `Order ${orderForStatusUpdate.order_number} status has been updated to ${statusOptions.find(s => s.value === newStatus)?.label}.`,
@@ -1527,7 +1431,9 @@ function OrdersContent() {
         endpoint = getPdfEndpoint(order.id, order.status, "download")
       }
 
-      const response = await fetch(endpoint)
+      // Extract the path from the full URL for apiCall
+      const urlPath = endpoint.replace(API_BASE_URL, "")
+      const response = await apiCall(urlPath)
 
       if (!response.ok) {
         const errorText = await response.text()
