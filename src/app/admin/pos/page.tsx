@@ -85,6 +85,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { API_BASE_URL } from "@/lib/api-config"
+import { apiCallJson } from "@/lib/api-client"
 
 // Data structures matching API responses
 interface Client {
@@ -539,16 +540,7 @@ function POSContent() {
       }
       params.append("limit", "1000")
       
-      const response = await fetch(`${API_BASE_URL}/clients?${params.toString()}`)
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch clients" }))
-        toast.error("Failed to load clients", {
-          description: errorData.error || `HTTP error! status: ${response.status}`,
-        })
-        return
-      }
-      
-      const data: ClientsResponse = await response.json()
+      const data: ClientsResponse = await apiCallJson<ClientsResponse>(`/clients?${params.toString()}`)
       setClientsData(data.clients || [])
       
       // Format for combobox
@@ -582,16 +574,7 @@ function POSContent() {
       }
       params.append("limit", "1000")
       
-      const response = await fetch(`${API_BASE_URL}/caterers?${params.toString()}`)
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch caterers" }))
-        toast.error("Failed to load caterers", {
-          description: errorData.error || `HTTP error! status: ${response.status}`,
-        })
-        return
-      }
-      
-      const data: CaterersResponse = await response.json()
+      const data: CaterersResponse = await apiCallJson<CaterersResponse>(`/caterers?${params.toString()}`)
       setCaterersData(data.caterers || [])
       
       // Format for combobox with airport code prefix (same format as airports)
@@ -719,16 +702,7 @@ function POSContent() {
       }
       params.append("limit", "1000")
       
-      const response = await fetch(`${API_BASE_URL}/fbos?${params.toString()}`)
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch FBOs" }))
-        toast.error("Failed to load FBOs", {
-          description: errorData.error || `HTTP error! status: ${response.status}`,
-        })
-        return
-      }
-      
-      const data: FBOsResponse = await response.json()
+      const data: FBOsResponse = await apiCallJson<FBOsResponse>(`/fbos?${params.toString()}`)
       setFBOsData(data.fbos || [])
       
       // Format for combobox with airport code prefix (same format as caterers)
@@ -1451,20 +1425,10 @@ function POSContent() {
         body.time_zone = newCatererTimezone.trim()
       }
       
-      const response = await fetch(`${API_BASE_URL}/caterers`, {
+      const newCaterer: Caterer = await apiCallJson<Caterer>("/caterers", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify(body),
       })
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to create caterer" }))
-        throw new Error(errorData.error || "Failed to create caterer")
-      }
-      
-      const newCaterer: Caterer = await response.json()
       
       toast.success("Caterer created successfully")
       
@@ -1570,20 +1534,10 @@ function POSContent() {
         body.fbo_phone = newStandaloneFboPhone.trim()
       }
 
-      const response = await fetch(`${API_BASE_URL}/fbos`, {
+      const newFBO: FBO = await apiCallJson<FBO>("/fbos", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify(body),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to create FBO" }))
-        throw new Error(errorData.error || "Failed to create FBO")
-      }
-
-      const newFBO: FBO = await response.json()
 
       toast.success("FBO created successfully")
 
@@ -1612,17 +1566,7 @@ function POSContent() {
   const fetchCategories = React.useCallback(async () => {
     setIsLoadingCategories(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/categories?is_active=true&limit=1000`)
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch categories" }))
-        toast.error("Failed to load categories", {
-          description: errorData.error || `HTTP error! status: ${response.status}`,
-        })
-        return
-      }
-      
-      const data: CategoriesResponse = await response.json()
+      const data: CategoriesResponse = await apiCallJson<CategoriesResponse>(`/categories?is_active=true&limit=1000`)
       setCategories(data.categories || [])
     } catch (err) {
       // Handle network errors gracefully - these are expected in some scenarios (offline, CORS, etc.)
@@ -1681,20 +1625,10 @@ function POSContent() {
         body.service_charge = values.service_charge
       }
 
-      const response = await fetch(`${API_BASE_URL}/menu-items`, {
+      const newMenuItem: MenuItem = await apiCallJson<MenuItem>("/menu-items", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify(body),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to create menu item" }))
-        throw new Error(errorData.error || "Failed to create menu item")
-      }
-
-      const newMenuItem: MenuItem = await response.json()
       
       toast.success("Menu item created successfully", {
         description: `${newMenuItem.item_name} has been added to the system.`,
@@ -1852,26 +1786,11 @@ function POSContent() {
 
       console.log("Order payload being sent:", JSON.stringify(orderPayload, null, 2))
       
-      const response = await fetch(`${API_BASE_URL}/orders`, {
+      const result = await apiCallJson("/orders", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify(orderPayload),
       })
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        console.error("Order creation error response:", {
-          status: response.status,
-          statusText: response.statusText,
-          errorData,
-        })
-        const errorMessage = errorData.message || errorData.error || `Failed to create order: ${response.statusText} (${response.status})`
-        throw new Error(errorMessage)
-      }
-
-      const result = await response.json()
       console.log("Order created successfully:", result)
       toast.success("Order created successfully!")
       setPreviewOpen(false)
