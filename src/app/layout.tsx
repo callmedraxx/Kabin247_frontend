@@ -3,6 +3,7 @@ import { Inter, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "sonner";
 import { AuthProvider } from "@/contexts/auth-context";
+import { DataProviders } from "@/contexts/data-providers";
 import "./globals.css";
 
 const inter = Inter({
@@ -38,8 +39,10 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <AuthProvider>
-            {children}
-            <Toaster position="top-right" richColors />
+            <DataProviders>
+              {children}
+              <Toaster position="top-right" richColors />
+            </DataProviders>
           </AuthProvider>
         </ThemeProvider>
       </body>

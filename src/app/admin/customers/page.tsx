@@ -91,6 +91,7 @@ import {
 import { toast } from "sonner"
 
 import { API_BASE_URL } from "@/lib/api-config"
+import { apiCall, apiCallJson } from "@/lib/api-client"
 
 // Client data structure matching API response
 interface Client {
@@ -186,14 +187,7 @@ function ClientsContent() {
       params.append("page", safePage.toString())
       params.append("limit", safeLimit.toString())
 
-      const response = await fetch(`${API_BASE_URL}/clients?${params.toString()}`)
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch clients" }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
-
-      const data: ClientsResponse = await response.json()
+      const data: ClientsResponse = await apiCallJson<ClientsResponse>(`/clients?${params.toString()}`)
       setClients(data.clients)
       setTotal(data.total)
     } catch (err) {
@@ -275,8 +269,8 @@ function ClientsContent() {
   const handleSave = async (values: ClientFormValues) => {
     try {
       const url = editingClient
-        ? `${API_BASE_URL}/clients/${editingClient.id}`
-        : `${API_BASE_URL}/clients`
+        ? `/clients/${editingClient.id}`
+        : `/clients`
 
       const method = editingClient ? "PUT" : "POST"
 
@@ -287,39 +281,11 @@ function ClientsContent() {
         contact_number: values.contact_number,
       }
 
-      const response = await fetch(url, {
+      const data: Client = await apiCallJson<Client>(url, {
         method,
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify(body),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to save client" }))
-        const errorMessage = errorData.error || `HTTP error! status: ${response.status}`
-        
-        // Provide more specific error messages
-        if (response.status === 400) {
-          if (errorMessage.includes("Duplicate client found")) {
-            toast.error("Duplicate client", {
-              description: "A client with these exact details already exists. Please check all fields.",
-            })
-          } else {
-            toast.error("Validation error", {
-              description: errorMessage,
-            })
-          }
-        } else {
-          toast.error("Error saving client", {
-            description: errorMessage,
-          })
-        }
-        throw new Error(errorMessage)
-      }
-
-      const data: Client = await response.json()
-      
+    
       toast.success(editingClient ? "Client updated" : "Client created", {
         description: `${data.full_name} has been ${editingClient ? "updated" : "created"} successfully.`,
       })
@@ -329,7 +295,22 @@ function ClientsContent() {
       form.reset()
       fetchClients()
     } catch (err) {
-      // Error already handled in toast above
+      const errorMessage = err instanceof Error ? err.message : "Failed to save client"
+      
+      // Provide more specific error messages based on error message content
+      if (errorMessage.includes("Duplicate client found") || errorMessage.includes("duplicate")) {
+        toast.error("Duplicate client", {
+          description: "A client with these exact details already exists. Please check all fields.",
+        })
+      } else if (errorMessage.includes("Validation") || errorMessage.includes("validation")) {
+        toast.error("Validation error", {
+          description: errorMessage,
+        })
+      } else {
+        toast.error("Error saving client", {
+          description: errorMessage,
+        })
+      }
       console.error("Error saving client:", err)
     }
   }
@@ -337,14 +318,7 @@ function ClientsContent() {
   // Handle view details
   const handleView = async (client: Client) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/clients/${client.id}`)
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch client details" }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
-
-      const data: Client = await response.json()
+      const data: Client = await apiCallJson<Client>(`/clients/${client.id}`)
       setViewingClient(data)
       setViewDrawerOpen(true)
     } catch (err) {
@@ -367,17 +341,9 @@ function ClientsContent() {
 
     setIsDeleting(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/clients/${clientToDelete.id}`, {
+      await apiCallJson(`/clients/${clientToDelete.id}`, {
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
       })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to delete client" }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
 
       toast.success("Client deleted", {
         description: `${clientToDelete.full_name} has been deleted successfully.`,
@@ -407,22 +373,12 @@ function ClientsContent() {
 
     setIsDeleting(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/clients`, {
+      const data = await apiCallJson<{ deleted: number }>(`/clients`, {
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({
           ids: Array.from(selectedClients),
         }),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to delete clients" }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
-
-      const data = await response.json()
       
       toast.success("Clients deleted", {
         description: `${data.deleted || selectedClients.size} client(s) have been deleted successfully.`,
@@ -444,12 +400,10 @@ function ClientsContent() {
   const handleExport = async () => {
     setIsExporting(true)
     try {
-      // Export endpoint expects no query parameters
-      const response = await fetch(`${API_BASE_URL}/clients/export`)
+      const response = await apiCall(`/clients/export`)
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to export clients" }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+        throw new Error("Failed to export clients")
       }
 
       const blob = await response.blob()
@@ -516,9 +470,16 @@ function ClientsContent() {
       const formData = new FormData()
       formData.append("file", file)
 
+      // For FormData, we need to let fetch set Content-Type automatically with boundary
+      // Since apiCall always sets Content-Type to "application/json", we use fetch directly with auth
+      const token = typeof window !== "undefined" ? localStorage.getItem("kabin247_access_token") : null
+      const authHeaders: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {}
+      
       const response = await fetch(`${API_BASE_URL}/clients/import`, {
         method: "POST",
+        headers: authHeaders,
         body: formData,
+        credentials: "include",
       })
 
       if (!response.ok) {

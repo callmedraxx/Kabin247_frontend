@@ -4,6 +4,13 @@ import * as React from "react"
 import { API_BASE_URL } from "@/lib/api-config"
 import { setAccessToken as setApiClientToken } from "@/lib/api-client"
 import { toast } from "sonner"
+import {
+  getTokenExpirationTime,
+  getTokenTimeUntilExpiration,
+  getTokenLifetime,
+  isTokenExpired,
+  formatTimeUntilExpiration,
+} from "@/lib/jwt-utils"
 
 export interface User {
   id: number
@@ -73,6 +80,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const refreshAccessToken = React.useCallback(async () => {
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/3e871f39-4ed4-465f-8745-06da452ba93a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth-context.tsx:75',message:'Token refresh attempt started',data:{hasCurrentToken:!!accessToken,currentTokenLength:accessToken?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
+    
     try {
       // Log cookie availability for debugging before attempting refresh
       if (typeof window !== "undefined") {
@@ -88,20 +99,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           cookieNames: Object.keys(availableCookies),
           note: "HttpOnly refresh token cookie may not be visible in document.cookie",
         })
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/3e871f39-4ed4-465f-8745-06da452ba93a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth-context.tsx:90',message:'Cookie status before refresh',data:{visibleCookies:Object.keys(availableCookies).length,cookieNames:Object.keys(availableCookies)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
       }
 
       const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
         method: "POST",
         credentials: "include",
       })
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/3e871f39-4ed4-465f-8745-06da452ba93a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth-context.tsx:100',message:'Token refresh response received',data:{status:response.status,ok:response.ok},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
 
       if (response.ok) {
         const data = await response.json()
         const newToken = data.accessToken
+        const oldToken = accessToken
+        
+        // Log old token info if available
+        if (oldToken) {
+          const oldExpTime = getTokenExpirationTime(oldToken)
+          const oldTimeUntilExp = getTokenTimeUntilExpiration(oldToken)
+          const oldLifetime = getTokenLifetime(oldToken)
+          if (oldExpTime && oldTimeUntilExp !== null && oldLifetime !== null) {
+            console.log("[Auth Context] Old token info:", {
+              expirationTime: new Date(oldExpTime).toISOString(),
+              timeUntilExpiration: formatTimeUntilExpiration(oldTimeUntilExp),
+              lifetime: `${Math.round(oldLifetime / 60)}m ${oldLifetime % 60}s`,
+            })
+          }
+        }
+        
         setAccessToken(newToken)
         setApiClientToken(newToken)
         localStorage.setItem(ACCESS_TOKEN_KEY, newToken)
-        console.log("[Auth Context] Token refresh successful")
+        
+        // Log new token info
+        const newExpTime = getTokenExpirationTime(newToken)
+        const newTimeUntilExp = getTokenTimeUntilExpiration(newToken)
+        const newLifetime = getTokenLifetime(newToken)
+        if (newExpTime && newTimeUntilExp !== null && newLifetime !== null) {
+          console.log("[Auth Context] Token refresh successful - New token info:", {
+            expirationTime: new Date(newExpTime).toISOString(),
+            timeUntilExpiration: formatTimeUntilExpiration(newTimeUntilExp),
+            lifetime: `${Math.round(newLifetime / 60)}m ${newLifetime % 60}s`,
+            refreshReason: "proactive (before expiration)",
+          })
+        } else {
+          console.log("[Auth Context] Token refresh successful (could not decode new token expiration)")
+        }
+        
         return newToken
       } else {
         // Try to get error details
@@ -142,6 +192,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // Refresh failed, clear auth state
         // This will trigger the admin layout to redirect to login
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/3e871f39-4ed4-465f-8745-06da452ba93a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth-context.tsx:143',message:'Token refresh failed - clearing auth state',data:{status:response.status,errorMessage,isMissingCookieError},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
+        
         setAccessToken(null)
         setUser(null)
         setApiClientToken(null)
@@ -171,13 +226,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const storedUser = localStorage.getItem(USER_KEY)
 
         if (storedToken && storedUser) {
-          // Use stored token without validation
-          // Token validation will happen naturally when API calls are made
-          // If token is invalid, the API client will handle refresh
-          const userData = JSON.parse(storedUser)
-          setAccessToken(storedToken)
-          setUser(userData)
-          setApiClientToken(storedToken)
+          // Validate token expiration on initialization
+          const expired = isTokenExpired(storedToken)
+          const expTime = getTokenExpirationTime(storedToken)
+          const timeUntilExp = getTokenTimeUntilExpiration(storedToken)
+          const lifetime = getTokenLifetime(storedToken)
+          const now = Date.now()
+          
+          // #region agent log
+          fetch('http://127.0.0.1:7243/ingest/3e871f39-4ed4-465f-8745-06da452ba93a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth-context.tsx:228',message:'Initializing auth with stored token',data:{expTime,now,timeUntilExp,lifetime,lifetimeSeconds:lifetime,lifetimeMinutes:lifetime?Math.round(lifetime/60):null,expired,expTimeISO:expTime?new Date(expTime).toISOString():null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
+          
+          if (expTime && timeUntilExp !== null && lifetime !== null) {
+            console.log("[Auth Context] Initializing auth with stored token:", {
+              expirationTime: new Date(expTime).toISOString(),
+              timeUntilExpiration: formatTimeUntilExpiration(timeUntilExp),
+              tokenLifetime: `${Math.round(lifetime / 60)}m ${lifetime % 60}s`,
+              isExpired: expired,
+            })
+          }
+          
+          if (expired) {
+            console.warn("[Auth Context] Stored token is expired, clearing auth state")
+            
+            // #region agent log
+            fetch('http://127.0.0.1:7243/ingest/3e871f39-4ed4-465f-8745-06da452ba93a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth-context.tsx:242',message:'Clearing expired token on init',data:{expTime,now,timeUntilExp},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+            // #endregion
+            
+            localStorage.removeItem(ACCESS_TOKEN_KEY)
+            localStorage.removeItem(USER_KEY)
+            setAccessToken(null)
+            setUser(null)
+            setApiClientToken(null)
+          } else {
+            // Token is valid, use it
+            const userData = JSON.parse(storedUser)
+            setAccessToken(storedToken)
+            setUser(userData)
+            setApiClientToken(storedToken)
+            
+            // #region agent log
+            fetch('http://127.0.0.1:7243/ingest/3e871f39-4ed4-465f-8745-06da452ba93a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth-context.tsx:252',message:'Using valid stored token',data:{tokenLength:storedToken?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+            // #endregion
+          }
         }
       } catch (error) {
         console.error("Error initializing auth:", error)
@@ -208,16 +299,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const data = await response.json()
     console.log("[Auth Context] Login successful, storing token and user data")
+    
+    // Log token expiration information
+    const expTime = getTokenExpirationTime(data.accessToken)
+    const timeUntilExp = getTokenTimeUntilExpiration(data.accessToken)
+    const lifetime = getTokenLifetime(data.accessToken)
+    const now = Date.now()
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/3e871f39-4ed4-465f-8745-06da452ba93a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth-context.tsx:216',message:'Token received on login',data:{expTime,now,timeUntilExp,lifetime,lifetimeSeconds:lifetime,lifetimeMinutes:lifetime?Math.round(lifetime/60):null,expTimeISO:expTime?new Date(expTime).toISOString():null,userId:data.user?.id,userEmail:data.user?.email},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    
+    if (expTime && timeUntilExp !== null && lifetime !== null) {
+      console.log("[Auth Context] Token received on login:", {
+        expirationTime: new Date(expTime).toISOString(),
+        timeUntilExpiration: formatTimeUntilExpiration(timeUntilExp),
+        tokenLifetime: `${Math.round(lifetime / 60)}m ${lifetime % 60}s`,
+        lifetimeInSeconds: lifetime,
+        userId: data.user?.id,
+        userEmail: data.user?.email,
+      })
+    } else {
+      console.log("[Auth Context] Token stored (could not decode expiration):", {
+        tokenLength: data.accessToken?.length,
+        userId: data.user?.id,
+        userEmail: data.user?.email,
+      })
+    }
+    
     setAccessToken(data.accessToken)
     setUser(data.user)
     setApiClientToken(data.accessToken)
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/3e871f39-4ed4-465f-8745-06da452ba93a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth-context.tsx:240',message:'Storing token to localStorage',data:{tokenLength:data.accessToken?.length,hasToken:!!data.accessToken},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+    
     localStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken)
     localStorage.setItem(USER_KEY, JSON.stringify(data.user))
-    console.log("[Auth Context] Token stored:", {
-      tokenLength: data.accessToken?.length,
-      userId: data.user?.id,
-      userEmail: data.user?.email,
-    })
   }, [])
 
   const logout = React.useCallback(async () => {

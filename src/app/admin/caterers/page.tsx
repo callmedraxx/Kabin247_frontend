@@ -85,6 +85,7 @@ import {
 import { toast } from "sonner"
 
 import { API_BASE_URL } from "@/lib/api-config"
+import { apiCall, apiCallJson } from "@/lib/api-client"
 
 // Caterer data structure matching API response
 interface Caterer {
@@ -214,14 +215,7 @@ function CaterersContent() {
       params.append("page", page.toString())
       params.append("limit", limit.toString())
 
-      const response = await fetch(`${API_BASE_URL}/caterers?${params.toString()}`)
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch caterers" }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
-
-      const data: CaterersResponse = await response.json()
+      const data: CaterersResponse = await apiCallJson<CaterersResponse>(`/caterers?${params.toString()}`)
       setCaterers(data.caterers)
       setTotal(data.total)
     } catch (err) {
@@ -245,16 +239,7 @@ function CaterersContent() {
       }
       params.append("limit", "1000")
       
-      const response = await fetch(`${API_BASE_URL}/airports?${params.toString()}`)
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch airports" }))
-        toast.error("Failed to load airports", {
-          description: errorData.error || `HTTP error! status: ${response.status}`,
-        })
-        return
-      }
-      
-      const data: AirportsResponse = await response.json()
+      const data: AirportsResponse = await apiCallJson<AirportsResponse>(`/airports?${params.toString()}`)
       setAirportsData(data.airports || [])
       
       // Format for combobox - codes first, then airport name
@@ -411,8 +396,8 @@ function CaterersContent() {
   const handleSave = async (values: CatererFormValues) => {
     try {
       const url = editingCaterer
-        ? `${API_BASE_URL}/caterers/${editingCaterer.id}`
-        : `${API_BASE_URL}/caterers`
+        ? `/caterers/${editingCaterer.id}`
+        : `/caterers`
 
       const method = editingCaterer ? "PUT" : "POST"
 
@@ -435,20 +420,10 @@ function CaterersContent() {
         body.time_zone = values.time_zone.trim()
       }
 
-      const response = await fetch(url, {
+      const data: Caterer = await apiCallJson<Caterer>(url, {
         method,
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify(body),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to save caterer" }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
-
-      const data: Caterer = await response.json()
       
       toast.success(editingCaterer ? "Caterer updated" : "Caterer created", {
         description: `${data.caterer_name} has been ${editingCaterer ? "updated" : "created"} successfully.`,
@@ -470,14 +445,7 @@ function CaterersContent() {
   // Handle view details
   const handleView = async (caterer: Caterer) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/caterers/${caterer.id}`)
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch caterer details" }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
-
-      const data: Caterer = await response.json()
+      const data: Caterer = await apiCallJson<Caterer>(`/caterers/${caterer.id}`)
       setViewingCaterer(data)
       setViewDrawerOpen(true)
     } catch (err) {
@@ -500,17 +468,9 @@ function CaterersContent() {
 
     setIsDeleting(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/caterers/${catererToDelete.id}`, {
+      await apiCallJson(`/caterers/${catererToDelete.id}`, {
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
       })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to delete caterer" }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
 
       toast.success("Caterer deleted", {
         description: `${catererToDelete.caterer_name} has been deleted successfully.`,
@@ -540,22 +500,12 @@ function CaterersContent() {
 
     setIsDeleting(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/caterers`, {
+      const data: BulkDeleteResponse = await apiCallJson<BulkDeleteResponse>(`/caterers`, {
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({
           ids: Array.from(selectedCaterers),
         }),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to delete caterers" }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
-
-      const data: BulkDeleteResponse = await response.json()
       
       toast.success("Caterers deleted", {
         description: `${data.deleted || selectedCaterers.size} caterer(s) have been deleted successfully.`,
@@ -577,11 +527,10 @@ function CaterersContent() {
   const handleExport = async () => {
     setIsExporting(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/caterers/export`)
+      const response = await apiCall(`/caterers/export`)
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to export caterers" }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+        throw new Error("Failed to export caterers")
       }
 
       const blob = await response.blob()
@@ -648,9 +597,16 @@ function CaterersContent() {
       const formData = new FormData()
       formData.append("file", file)
 
+      // For FormData, we need to let fetch set Content-Type automatically with boundary
+      // Since apiCall always sets Content-Type to "application/json", we use fetch directly with auth
+      const token = typeof window !== "undefined" ? localStorage.getItem("kabin247_access_token") : null
+      const authHeaders: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {}
+      
       const response = await fetch(`${API_BASE_URL}/caterers/import`, {
         method: "POST",
+        headers: authHeaders,
         body: formData,
+        credentials: "include",
       })
 
       if (!response.ok) {

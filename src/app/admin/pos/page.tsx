@@ -9,6 +9,11 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { SidebarCategoryProvider } from "@/contexts/sidebar-context"
+import { useCaterers } from "@/contexts/caterers-context"
+import { useAirports } from "@/contexts/airports-context"
+import { useClients } from "@/contexts/clients-context"
+import { useMenuItems } from "@/contexts/menu-items-context"
+import { useFBOs } from "@/contexts/fbos-context"
 import { HeaderNav } from "@/components/dashboard/header-nav"
 import { useForm, useFieldArray } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -431,19 +436,52 @@ function POSContent() {
   // Flag to prevent draft saving immediately after order creation or clear
   const skipNextDraftSave = React.useRef(false)
   
-  // API data states
-  const [clientsData, setClientsData] = React.useState<Client[]>([])
-  const [caterersData, setCaterersData] = React.useState<Caterer[]>([])
-  const [airportsData, setAirportsData] = React.useState<Airport[]>([])
-  const [fbosData, setFBOsData] = React.useState<FBO[]>([])
-  const [menuItemsData, setMenuItemsData] = React.useState<MenuItem[]>([])
+  // Use contexts for data
+  const { 
+    caterers: caterersData, 
+    catererOptions, 
+    isLoading: isLoadingCaterers, 
+    fetchCaterers: fetchCaterersFromContext,
+    getCatererById,
+    getCatererOptionById
+  } = useCaterers()
   
-  // Loading states (only for search operations, not initial load)
-  const [isLoadingClients, setIsLoadingClients] = React.useState(false)
-  const [isLoadingCaterers, setIsLoadingCaterers] = React.useState(false)
-  const [isLoadingAirports, setIsLoadingAirports] = React.useState(false)
-  const [isLoadingFBOs, setIsLoadingFBOs] = React.useState(false)
-  const [isLoadingMenuItems, setIsLoadingMenuItems] = React.useState(false)
+  const { 
+    airports: airportsData, 
+    airportOptions, 
+    isLoading: isLoadingAirports, 
+    fetchAirports: fetchAirportsFromContext,
+    getAirportById,
+    getAirportOptionById
+  } = useAirports()
+  
+  const { 
+    clients: clientsData, 
+    clientOptions, 
+    isLoading: isLoadingClients, 
+    fetchClients: fetchClientsFromContext,
+    getClientById,
+    getClientOptionById
+  } = useClients()
+  
+  const { 
+    menuItems: menuItemsData, 
+    menuItemOptions, 
+    isLoading: isLoadingMenuItems, 
+    fetchMenuItems: fetchMenuItemsFromContext,
+    getMenuItemById,
+    getMenuItemOptionById,
+    getMenuItemByName
+  } = useMenuItems()
+  
+  const { 
+    fbos: fbosData, 
+    fboOptions, 
+    isLoading: isLoadingFBOs, 
+    fetchFBOs: fetchFBOsFromContext,
+    getFBOById,
+    getFBOOptionById
+  } = useFBOs()
   
   // Search states for comboboxes
   const [clientSearch, setClientSearch] = React.useState("")
@@ -451,13 +489,6 @@ function POSContent() {
   const [airportSearch, setAirportSearch] = React.useState("")
   const [fboSearch, setFboSearch] = React.useState("")
   const [menuItemSearch, setMenuItemSearch] = React.useState("")
-  
-  // Options for comboboxes (formatted for display)
-  const [clientOptions, setClientOptions] = React.useState<{ value: string; label: string }[]>([])
-  const [catererOptions, setCatererOptions] = React.useState<{ value: string; label: string; searchText?: string }[]>([])
-  const [airportOptions, setAirportOptions] = React.useState<{ value: string; label: string; searchText?: string }[]>([])
-  const [fboOptions, setFboOptions] = React.useState<{ value: string; label: string; searchText?: string }[]>([])
-  const [menuItemOptions, setMenuItemOptions] = React.useState<{ value: string; label: string }[]>([])
   
   // Dialog states
   const [clientDialogOpen, setClientDialogOpen] = React.useState(false)
@@ -530,270 +561,39 @@ function POSContent() {
     return value.toLocaleString("en-US", { style: "currency", currency: "USD" })
   }, [])
 
-  // Fetch clients from API
-  const fetchClients = React.useCallback(async (search?: string) => {
-    setIsLoadingClients(true)
-    try {
-      const params = new URLSearchParams()
-      if (search?.trim()) {
-        params.append("search", search.trim())
-      }
-      params.append("limit", "1000")
-      
-      const data: ClientsResponse = await apiCallJson<ClientsResponse>(`/clients?${params.toString()}`)
-      setClientsData(data.clients || [])
-      
-      // Format for combobox
-      const options = (data.clients || []).map((client) => ({
-        value: client.id.toString(),
-        label: client.full_name,
-      }))
-      setClientOptions(options)
-    } catch (err) {
-      // Handle network errors gracefully - these are expected in some scenarios (offline, CORS, etc.)
-      if (err instanceof TypeError && (err.message === "Failed to fetch" || err.message.includes("fetch"))) {
-        // Network error - log as warn instead of error since it's not necessarily a problem
-        // This can happen if backend is not running, CORS issues, or network problems
-        console.warn(`Network error fetching clients from ${API_BASE_URL}/clients - this may be expected if backend is not running`)
-      } else {
-        // Other unexpected errors
-        console.error("Unexpected error fetching clients:", err)
-      }
-    } finally {
-      setIsLoadingClients(false)
-    }
-  }, [])
+  // Use context fetch function - it handles all state management
+  const fetchClients = fetchClientsFromContext
   
-  // Fetch caterers from API
-  const fetchCaterers = React.useCallback(async (search?: string, showLoading = false) => {
-    if (showLoading) setIsLoadingCaterers(true)
-    try {
-      const params = new URLSearchParams()
-      if (search?.trim()) {
-        params.append("search", search.trim())
-      }
-      params.append("limit", "1000")
-      
-      const data: CaterersResponse = await apiCallJson<CaterersResponse>(`/caterers?${params.toString()}`)
-      setCaterersData(data.caterers || [])
-      
-      // Format for combobox with airport code prefix (same format as airports)
-      const options = (data.caterers || []).map((caterer) => {
-        const airportCodes = [
-          caterer.airport_code_iata,
-          caterer.airport_code_icao,
-        ].filter(Boolean).join("/")
-        
-        // Display format: "CODE - Caterer Name" or "Caterer Name" if no codes
-        let label = ""
-        if (airportCodes) {
-          label = `${airportCodes} - ${caterer.caterer_name}`
-        } else {
-          label = caterer.caterer_name
-        }
-        
-        // Search text includes both name and codes
-        const searchText = `${caterer.caterer_name} ${airportCodes}`.toLowerCase()
-        
-        return {
-          value: caterer.id.toString(),
-          label,
-          searchText,
-        }
-      })
-      setCatererOptions(options)
-    } catch (err) {
-      // Handle network errors gracefully - these are expected in some scenarios (offline, CORS, etc.)
-      if (err instanceof TypeError && (err.message === "Failed to fetch" || err.message.includes("fetch"))) {
-        // Network error - log as warn instead of error since it's not necessarily a problem
-        // This can happen if backend is not running, CORS issues, or network problems
-        console.warn(`Network error fetching caterers from ${API_BASE_URL}/caterers - this may be expected if backend is not running`)
-      } else {
-        // Other unexpected errors
-        console.error("Unexpected error fetching caterers:", err)
-      }
-    } finally {
-      if (showLoading) setIsLoadingCaterers(false)
-    }
-  }, [])
+  // Use context fetch function - it handles all state management
+  // Note: showLoading parameter is ignored as context handles loading state
+  const fetchCaterers = React.useCallback(async (search?: string, _showLoading?: boolean) => {
+    await fetchCaterersFromContext(search)
+  }, [fetchCaterersFromContext])
   
-  // Fetch airports from API
-  const fetchAirports = React.useCallback(async (search?: string, showLoading = false) => {
-    if (showLoading) setIsLoadingAirports(true)
-    try {
-      const params = new URLSearchParams()
-      if (search?.trim()) {
-        params.append("search", search.trim())
-      }
-      params.append("limit", "1000")
-      
-      const response = await fetch(`${API_BASE_URL}/airports?${params.toString()}`)
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch airports" }))
-        toast.error("Failed to load airports", {
-          description: errorData.error || `HTTP error! status: ${response.status}`,
-        })
-        return
-      }
-      
-      const data: AirportsResponse = await response.json()
-      setAirportsData(data.airports || [])
-      
-      // Format for combobox - codes first, then airport name
-      const options = (data.airports || []).map((airport) => {
-        const codes = [
-          airport.airport_code_iata,
-          airport.airport_code_icao,
-        ].filter(Boolean).join("/")
-        
-        // Decode HTML entities in airport name
-        const decodedAirportName = decodeHtmlEntities(airport.airport_name)
-        
-        // Display format: "CODE - Airport Name" or "Airport Name" if no codes
-        let label = ""
-        if (codes) {
-          label = `${codes} - ${decodedAirportName}`
-        } else {
-          label = decodedAirportName
-        }
-        
-        // Search text includes codes and decoded airport name
-        const searchText = `${codes} ${decodedAirportName}`.toLowerCase()
-        
-        return {
-          value: airport.id.toString(),
-          label,
-          searchText,
-        }
-      })
-      
-      // Sort: airports with codes first
-      options.sort((a, b) => {
-        const aHasCode = a.searchText?.includes("/") || false
-        const bHasCode = b.searchText?.includes("/") || false
-        if (aHasCode && !bHasCode) return -1
-        if (!aHasCode && bHasCode) return 1
-        return 0
-      })
-      
-      setAirportOptions(options)
-    } catch (err) {
-      // Handle network errors gracefully - these are expected in some scenarios (offline, CORS, etc.)
-      if (err instanceof TypeError && (err.message === "Failed to fetch" || err.message.includes("fetch"))) {
-        // Network error - log as warn instead of error since it's not necessarily a problem
-        // This can happen if backend is not running, CORS issues, or network problems
-        console.warn(`Network error fetching airports from ${API_BASE_URL}/airports - this may be expected if backend is not running`)
-      } else {
-        // Other unexpected errors
-        console.error("Unexpected error fetching airports:", err)
-      }
-    } finally {
-      if (showLoading) setIsLoadingAirports(false)
-    }
-  }, [])
+  // Use context fetch function - it handles all state management
+  // Note: showLoading parameter is ignored as context handles loading state
+  const fetchAirports = React.useCallback(async (search?: string, _showLoading?: boolean) => {
+    await fetchAirportsFromContext(search)
+  }, [fetchAirportsFromContext])
   
-  // Fetch FBOs from API
-  const fetchFBOs = React.useCallback(async (search?: string, showLoading = false) => {
-    if (showLoading) setIsLoadingFBOs(true)
-    try {
-      const params = new URLSearchParams()
-      if (search?.trim()) {
-        params.append("search", search.trim())
-      }
-      params.append("limit", "1000")
-      
-      const data: FBOsResponse = await apiCallJson<FBOsResponse>(`/fbos?${params.toString()}`)
-      setFBOsData(data.fbos || [])
-      
-      // Format for combobox with airport code prefix (same format as caterers)
-      const options = (data.fbos || []).map((fbo) => {
-        const airportCodes = [
-          fbo.airport_code_iata,
-          fbo.airport_code_icao,
-        ].filter(Boolean).join("/")
-        
-        // Display format: "CODE - FBO Name" or "FBO Name" if no codes
-        let label = ""
-        if (airportCodes) {
-          label = `${airportCodes} - ${fbo.fbo_name}`
-        } else {
-          label = fbo.fbo_name
-        }
-        
-        // Search text includes both name and codes
-        const searchText = `${fbo.fbo_name} ${airportCodes} ${fbo.airport_name || ""}`.toLowerCase()
-        
-        return {
-          value: fbo.id.toString(),
-          label,
-          searchText,
-        }
-      })
-      setFboOptions(options)
-    } catch (err) {
-      // Handle network errors gracefully - these are expected in some scenarios (offline, CORS, etc.)
-      if (err instanceof TypeError && (err.message === "Failed to fetch" || err.message.includes("fetch"))) {
-        // Network error - log as warn instead of error since it's not necessarily a problem
-        // This can happen if backend is not running, CORS issues, or network problems
-        console.warn(`Network error fetching FBOs from ${API_BASE_URL}/fbos - this may be expected if backend is not running`)
-      } else {
-        // Other unexpected errors
-        console.error("Unexpected error fetching FBOs:", err)
-      }
-    } finally {
-      if (showLoading) setIsLoadingFBOs(false)
-    }
-  }, [])
+  // Use context fetch function - it handles all state management
+  // Note: showLoading parameter is ignored as context handles loading state
+  const fetchFBOs = React.useCallback(async (search?: string, _showLoading?: boolean) => {
+    await fetchFBOsFromContext(search)
+  }, [fetchFBOsFromContext])
   
-  // Fetch menu items from API
-  const fetchMenuItems = React.useCallback(async (search?: string, showLoading = false) => {
-    if (showLoading) setIsLoadingMenuItems(true)
-    try {
-      const params = new URLSearchParams()
-      if (search?.trim()) {
-        params.append("search", search.trim())
-      }
-      params.append("limit", "1000")
-      params.append("is_active", "true")
-      
-      const response = await fetch(`${API_BASE_URL}/menu-items?${params.toString()}`)
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch menu items" }))
-        toast.error("Failed to load menu items", {
-          description: errorData.error || `HTTP error! status: ${response.status}`,
-        })
-        return
-      }
-      
-      const data: MenuItemsResponse = await response.json()
-      setMenuItemsData(data.menu_items || [])
-      
-      // Format for combobox
-      const options = (data.menu_items || []).map((item) => ({
-        value: item.id.toString(),
-        label: item.item_name,
-      }))
-      setMenuItemOptions(options)
-    } catch (err) {
-      // Handle network errors gracefully - these are expected in some scenarios (offline, CORS, etc.)
-      if (err instanceof TypeError && err.message === "Failed to fetch") {
-        // Network error - log as info/warn instead of error since it's not necessarily a problem
-        console.info("Network error fetching menu items (this may be expected):", err.message)
-      } else {
-        // Other unexpected errors
-        console.error("Error fetching menu items:", err)
-      }
-    } finally {
-      if (showLoading) setIsLoadingMenuItems(false)
-    }
-  }, [])
+  // Use context fetch function - it handles all state management
+  // Note: showLoading parameter is ignored as context handles loading state
+  const fetchMenuItems = React.useCallback(async (search?: string, _showLoading?: boolean) => {
+    await fetchMenuItemsFromContext(search)
+  }, [fetchMenuItemsFromContext])
   
-  // Initial fetch on mount - show loading indicators for better UX
+  // Initial fetch on mount - fetch all data using contexts
   React.useEffect(() => {
     fetchClients()
-    fetchCaterers(undefined, true) // Show loading indicator
-    fetchAirports(undefined, true) // Show loading indicator
-    fetchFBOs(undefined, true) // Show loading indicator
+    fetchCaterers()
+    fetchAirports()
+    fetchFBOs()
     fetchMenuItems()
   }, [fetchClients, fetchCaterers, fetchAirports, fetchFBOs, fetchMenuItems])
   
@@ -952,16 +752,19 @@ function POSContent() {
     const currentItems = form.getValues("items")
     currentItems.forEach((item, index) => {
       if (item.itemName) {
-        const menuItem = menuItemsData.find((mi) => mi.id.toString() === item.itemName)
+        const menuItemId = parseInt(item.itemName)
+        if (!isNaN(menuItemId)) {
+          const menuItem = getMenuItemById(menuItemId)
         if (menuItem && item.portionSize) {
           const resolvedPrice = resolveMenuItemPrice(menuItem, item.portionSize, selectedCaterer)
           if (resolvedPrice !== undefined) {
             form.setValue(`items.${index}.price`, resolvedPrice.toString(), { shouldValidate: false })
+            }
           }
         }
       }
     })
-  }, [selectedCaterer, menuItemsData, form])
+  }, [selectedCaterer, getMenuItemById, form])
 
   const priorityBadgeClass = React.useMemo(() => {
     switch (watchedPriority) {
@@ -1055,7 +858,36 @@ function POSContent() {
             ? duplicateData.order_type
             : mapOrderTypeToForm(duplicateData.order_type || duplicateData.order_type_original)
           
+          // CRITICAL: Fetch ALL options BEFORE form.reset() to ensure Combobox components can match values
+          // This is especially important for menu items which might not be loaded yet
+          // We need to ensure context data is loaded before we try to map items
+          // Use IIFE to handle async operations in useEffect
+          ;(async () => {
+            const promises: Promise<any>[] = []
+            
+            // Always fetch menu items - they're critical for item matching
+            promises.push(fetchMenuItems())
+            
+            if (catererOptions.length === 0) {
+              promises.push(fetchCaterers())
+            }
+            if (airportOptions.length === 0) {
+              promises.push(fetchAirports())
+            }
+            if (clientOptions.length === 0) {
+              promises.push(fetchClients())
+            }
+            
+            // Wait for all fetches to complete
+            await Promise.all(promises)
+            
+            // Wait a bit longer to ensure React state has updated
+            // Context state updates are async, so we need to wait for them
+            await new Promise(resolve => setTimeout(resolve, 300))
+            
           // Reset form with duplicate data - include all fields
+            // Now menuItemOptions should be populated from context
+            // IMPORTANT: Use getMenuItemByName and getMenuItemById from context to get latest values
           form.reset({
             order_number: "",
             client_id: duplicateData.client_id || undefined,
@@ -1063,15 +895,35 @@ function POSContent() {
             airport_id: duplicateData.airport_id || undefined,
             fbo_id: duplicateData.fbo_id || undefined,
             description: duplicateData.description || "",
-            items: duplicateData.items?.length > 0 ? duplicateData.items.map((item: any) => ({
-              itemName: item.itemName || item.item_id?.toString() || item.menu_item_id?.toString() || "",
+            items: duplicateData.items?.length > 0 ? duplicateData.items.map((item: any, index: number) => {
+              // First try itemName, item_id, or menu_item_id
+              let itemName = item.itemName || item.item_id?.toString() || item.menu_item_id?.toString() || ""
+              
+              // If no ID, try to find by name using context getter (context should be loaded now)
+              // Try item_name first (from duplicate data), then itemName (legacy), then itemDescription (fallback)
+              if (!itemName) {
+                const itemNameToSearch = item.item_name || item.itemName || item.itemDescription
+                if (itemNameToSearch) {
+                  const foundMenuItem = getMenuItemByName(itemNameToSearch)
+                  if (foundMenuItem) {
+                    itemName = foundMenuItem.id.toString()
+                  }
+                }
+              }
+              
+              // Verify itemName exists in options using context getter (more reliable than closure variable)
+              const itemExists = itemName ? (getMenuItemOptionById(parseInt(itemName)) !== undefined) : false
+              
+              return {
+                itemName,
               itemDescription: item.itemDescription || item.item_description || "",
               portionSize: item.portionSize || item.portion_size || "1",
               portionServing: item.portionServing || item.portion_serving || "",
               price: item.price?.toString() || "0",
               category: item.category || "",
               packaging: item.packaging || "",
-            })) : [{
+              }
+            }) : [{
               itemName: "",
               itemDescription: "",
               portionSize: "",
@@ -1094,8 +946,10 @@ function POSContent() {
             paymentMethod: (duplicateData.payment_method as "card" | "ACH") || undefined,
           })
           
-          // Wait a bit for form to be ready, then explicitly set values to ensure Select components recognize them
-          setTimeout(() => {
+          // Wait for options to load and form to be ready, then explicitly set values to ensure Combobox components recognize them
+          // Since we've already loaded options above, we can call this immediately
+          const setValuesWhenReady = () => {
+            // Set basic fields first
             if (formattedDeliveryDate) {
               form.setValue("deliveryDate", formattedDeliveryDate, { shouldValidate: false })
             }
@@ -1112,7 +966,128 @@ function POSContent() {
               form.setValue("orderPriority", duplicateData.order_priority as "low" | "normal" | "high" | "urgent", { shouldValidate: false })
             }
             
-            // Save draft immediately after duplicate order is loaded
+            // Set caterer_id, airport_id, client_id, and items - these are critical for Combobox components
+            if (duplicateData.caterer_id) {
+              form.setValue("caterer_id", duplicateData.caterer_id, { shouldValidate: false })
+            }
+            if (duplicateData.airport_id) {
+              form.setValue("airport_id", duplicateData.airport_id, { shouldValidate: false })
+            }
+            if (duplicateData.client_id) {
+              form.setValue("client_id", duplicateData.client_id, { shouldValidate: false })
+            }
+            if (duplicateData.fbo_id) {
+              form.setValue("fbo_id", duplicateData.fbo_id, { shouldValidate: false })
+            }
+            
+            // Set menu items explicitly using context getter
+            // CRITICAL: Use context getters to access latest state, not closure variables
+            if (duplicateData.items && duplicateData.items.length > 0) {
+              duplicateData.items.forEach((item: any, index: number) => {
+                let itemName = item.itemName || item.item_id?.toString() || item.menu_item_id?.toString() || ""
+                
+                // If itemName is empty, try to find by name using context getter (accesses latest context state)
+                // Try item_name first (from duplicate data), then itemName (legacy), then itemDescription (fallback)
+                if (!itemName) {
+                  const itemNameToSearch = item.item_name || item.itemName || item.itemDescription
+                  if (itemNameToSearch) {
+                    const foundMenuItem = getMenuItemByName(itemNameToSearch)
+                    if (foundMenuItem) {
+                      itemName = foundMenuItem.id.toString()
+                    } else {
+                    }
+                  }
+                }
+                
+                // Verify itemName exists using context getter (more reliable than closure variable)
+                const itemId = itemName ? parseInt(itemName) : NaN
+                const itemExists = !isNaN(itemId) && getMenuItemOptionById(itemId) !== undefined
+                if (itemName && itemExists) {
+                  form.setValue(`items.${index}.itemName`, itemName, { shouldValidate: false })
+                } else if (itemName && !itemExists) {
+                }
+                if (item.itemDescription) {
+                  form.setValue(`items.${index}.itemDescription`, item.itemDescription, { shouldValidate: false })
+                }
+                if (item.portionSize) {
+                  form.setValue(`items.${index}.portionSize`, item.portionSize, { shouldValidate: false })
+                }
+                if (item.portionServing) {
+                  form.setValue(`items.${index}.portionServing`, item.portionServing, { shouldValidate: false })
+                }
+                if (item.price) {
+                  form.setValue(`items.${index}.price`, item.price, { shouldValidate: false })
+                }
+                if (item.category) {
+                  form.setValue(`items.${index}.category`, item.category, { shouldValidate: false })
+                }
+                if (item.packaging) {
+                  form.setValue(`items.${index}.packaging`, item.packaging, { shouldValidate: false })
+                }
+              })
+              
+            }
+            
+          }
+          
+          // Call setValuesWhenReady immediately since options are already loaded
+          setValuesWhenReady()
+          
+          // Also call it again after a short delay to ensure Combobox components recognize the values
+          setTimeout(() => {
+            setValuesWhenReady()
+          }, 200)
+          
+          // Fetch options directly if they haven't been loaded yet (backup - should already be loaded)
+          // Await the fetches to ensure data is loaded before setting values
+          const loadOptionsIfNeeded = async () => {
+            const promises: Promise<any>[] = []
+            
+            if (catererOptions.length === 0) {
+              promises.push(fetchCaterers())
+            }
+            if (airportOptions.length === 0) {
+              promises.push(fetchAirports())
+            }
+            if (clientOptions.length === 0) {
+              promises.push(fetchClients())
+            }
+            if (menuItemOptions.length === 0) {
+              promises.push(fetchMenuItems())
+            }
+            
+            // Wait for all fetches to complete
+            if (promises.length > 0) {
+              await Promise.all(promises)
+            }
+            
+            // Poll until state is updated (React state updates are async)
+            const waitForStateUpdate = (attempt = 0, maxAttempts = 10) => {
+              const hasOptions = catererOptions.length > 0 && airportOptions.length > 0 && clientOptions.length > 0 && menuItemOptions.length > 0
+              
+              if (hasOptions || attempt >= maxAttempts) {
+                // State is updated or we've tried enough times, set values now
+                setValuesWhenReady()
+                
+                // Retry once more after a short delay to ensure everything is set
+                setTimeout(() => {
+                  setValuesWhenReady()
+                  
+                }, 200)
+              } else {
+                // State not updated yet, retry after 100ms
+                setTimeout(() => waitForStateUpdate(attempt + 1, maxAttempts), 100)
+              }
+            }
+            
+            // Start waiting for state update
+            waitForStateUpdate()
+          }
+          
+          loadOptionsIfNeeded()
+          
+          // Save draft immediately after duplicate order is loaded
+          setTimeout(() => {
             // Get the current form values after all setValue calls
             const currentFormValues = form.getValues()
             const hasData = 
@@ -1138,6 +1113,8 @@ function POSContent() {
             description: "All fields have been copied from the original order. Draft saved.",
           })
           setHasLoadedInitialData(true)
+          
+          })() // Close the IIFE
         } catch (err) {
           console.error("Error loading duplicate order:", err)
           setHasLoadedInitialData(true)
@@ -1359,20 +1336,10 @@ function POSContent() {
         body.contact_number = newClientContact.trim()
       }
       
-      const response = await fetch(`${API_BASE_URL}/clients`, {
+      const newClient: Client = await apiCallJson<Client>(`/clients`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify(body),
       })
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to create client" }))
-        throw new Error(errorData.error || "Failed to create client")
-      }
-      
-      const newClient: Client = await response.json()
       
       toast.success("Client created successfully")
       
@@ -1476,20 +1443,10 @@ function POSContent() {
         body.airport_code_icao = newAirportIcao.trim()
       }
       
-      const response = await fetch(`${API_BASE_URL}/airports`, {
+      const newAirport: Airport = await apiCallJson<Airport>(`/airports`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify(body),
       })
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to create airport" }))
-        throw new Error(errorData.error || "Failed to create airport")
-      }
-      
-      const newAirport: Airport = await response.json()
       
       toast.success("Airport created successfully")
       
@@ -2376,7 +2333,8 @@ function POSContent() {
                                               onValueChange={(value) => {
                                                 field.onChange(value)
                                                 if (value) {
-                                                  const selectedItem = menuItemsData.find((item) => item.id.toString() === value)
+                                                  const itemId = parseInt(value)
+                                                  const selectedItem = !isNaN(itemId) ? getMenuItemById(itemId) : undefined
                                                   if (selectedItem) {
                                                     // Get current portion size and caterer_id from form
                                                     const currentPortionSize = form.getValues(`items.${index}.portionSize`)
@@ -2442,7 +2400,8 @@ function POSContent() {
                                                   const catererId = form.getValues("caterer_id")
                                                   
                                                   if (itemName && newPortionSize) {
-                                                    const menuItem = menuItemsData.find((mi) => mi.id.toString() === itemName)
+                                                    const menuItemId = parseInt(itemName)
+                                                    const menuItem = !isNaN(menuItemId) ? getMenuItemById(menuItemId) : undefined
                                                     if (menuItem) {
                                                       const resolvedPrice = resolveMenuItemPrice(menuItem, newPortionSize, catererId)
                                                       if (resolvedPrice !== undefined) {

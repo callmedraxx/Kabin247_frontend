@@ -8,6 +8,11 @@ import {
   SidebarProvider,
 } from "@/components/ui/sidebar"
 import { SidebarCategoryProvider } from "@/contexts/sidebar-context"
+import { useCaterers } from "@/contexts/caterers-context"
+import { useAirports } from "@/contexts/airports-context"
+import { useClients } from "@/contexts/clients-context"
+import { useMenuItems } from "@/contexts/menu-items-context"
+import { useFBOs } from "@/contexts/fbos-context"
 import { HeaderNav } from "@/components/dashboard/header-nav"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -495,20 +500,54 @@ function OrdersContent() {
     },
   })
 
-  // API data states for edit form
-  const [clientsData, setClientsData] = React.useState<Client[]>([])
-  const [caterersData, setCaterersData] = React.useState<Caterer[]>([])
-  const [airportsData, setAirportsData] = React.useState<Airport[]>([])
-  const [fbosData, setFBOsData] = React.useState<FBO[]>([])
-  const [menuItemsData, setMenuItemsData] = React.useState<MenuItem[]>([])
-  const [categories, setCategories] = React.useState<Category[]>([])
+  // Use contexts for data
+  const { 
+    caterers: caterersData, 
+    catererOptions, 
+    isLoading: isLoadingCaterers, 
+    fetchCaterers: fetchCaterersFromContext,
+    getCatererById,
+    getCatererOptionById
+  } = useCaterers()
   
-  // Loading states
-  const [isLoadingClients, setIsLoadingClients] = React.useState(false)
-  const [isLoadingCaterers, setIsLoadingCaterers] = React.useState(false)
-  const [isLoadingAirports, setIsLoadingAirports] = React.useState(false)
-  const [isLoadingFBOs, setIsLoadingFBOs] = React.useState(false)
-  const [isLoadingMenuItems, setIsLoadingMenuItems] = React.useState(false)
+  const { 
+    airports: airportsData, 
+    airportOptions, 
+    isLoading: isLoadingAirports, 
+    fetchAirports: fetchAirportsFromContext,
+    getAirportById,
+    getAirportOptionById
+  } = useAirports()
+  
+  const { 
+    clients: clientsData, 
+    clientOptions, 
+    isLoading: isLoadingClients, 
+    fetchClients: fetchClientsFromContext,
+    getClientById,
+    getClientOptionById
+  } = useClients()
+  
+  const { 
+    menuItems: menuItemsData, 
+    menuItemOptions, 
+    isLoading: isLoadingMenuItems, 
+    fetchMenuItems: fetchMenuItemsFromContext,
+    getMenuItemById,
+    getMenuItemOptionById,
+    getMenuItemByName
+  } = useMenuItems()
+  
+  const { 
+    fbos: fbosData, 
+    fboOptions, 
+    isLoading: isLoadingFBOs, 
+    fetchFBOs: fetchFBOsFromContext,
+    getFBOById,
+    getFBOOptionById
+  } = useFBOs()
+  
+  const [categories, setCategories] = React.useState<Category[]>([])
   const [isLoadingCategories, setIsLoadingCategories] = React.useState(false)
   
   // Search states for comboboxes
@@ -517,13 +556,6 @@ function OrdersContent() {
   const [airportSearch, setAirportSearch] = React.useState("")
   const [fboSearch, setFboSearch] = React.useState("")
   const [menuItemSearch, setMenuItemSearch] = React.useState("")
-  
-  // Options for comboboxes
-  const [clientOptions, setClientOptions] = React.useState<{ value: string; label: string }[]>([])
-  const [catererOptions, setCatererOptions] = React.useState<{ value: string; label: string; searchText?: string }[]>([])
-  const [airportOptions, setAirportOptions] = React.useState<{ value: string; label: string; searchText?: string }[]>([])
-  const [fboOptions, setFboOptions] = React.useState<{ value: string; label: string; searchText?: string }[]>([])
-  const [menuItemOptions, setMenuItemOptions] = React.useState<{ value: string; label: string }[]>([])
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
@@ -582,213 +614,20 @@ function OrdersContent() {
     return () => clearTimeout(timer)
   }, [searchQuery])
 
-  // Fetch clients from API
-  const fetchClients = React.useCallback(async (search?: string) => {
-    setIsLoadingClients(true)
-    try {
-      const params = new URLSearchParams()
-      if (search?.trim()) {
-        params.append("search", search.trim())
-      }
-      params.append("limit", "1000")
-      
-      const data: ClientsResponse = await apiCallJson(`/clients?${params.toString()}`)
-      setClientsData(data.clients || [])
-      
-      const options = (data.clients || []).map((client) => ({
-        value: client.id.toString(),
-        label: client.full_name,
-      }))
-      setClientOptions(options)
-    } catch (err) {
-      if (err instanceof TypeError && (err.message === "Failed to fetch" || err.message.includes("fetch"))) {
-        console.warn(`Network error fetching clients from ${API_BASE_URL}/clients`)
-      } else {
-        console.error("Unexpected error fetching clients:", err)
-      }
-    } finally {
-      setIsLoadingClients(false)
-    }
-  }, [])
-
-  // Fetch caterers from API
-  const fetchCaterers = React.useCallback(async (search?: string, showLoading = false) => {
-    if (showLoading) setIsLoadingCaterers(true)
-    try {
-      const params = new URLSearchParams()
-      if (search?.trim()) {
-        params.append("search", search.trim())
-      }
-      params.append("limit", "1000")
-      
-      const data: CaterersResponse = await apiCallJson(`/caterers?${params.toString()}`)
-      setCaterersData(data.caterers || [])
-      
-      const options = (data.caterers || []).map((caterer) => {
-        const airportCodes = [
-          caterer.airport_code_iata,
-          caterer.airport_code_icao,
-        ].filter(Boolean).join("/")
-        
-        let label = ""
-        if (airportCodes) {
-          label = `${airportCodes} - ${caterer.caterer_name}`
-        } else {
-          label = caterer.caterer_name
-        }
-        
-        const searchText = `${caterer.caterer_name} ${airportCodes}`.toLowerCase()
-        
-        return {
-          value: caterer.id.toString(),
-          label,
-          searchText,
-        }
-      })
-      setCatererOptions(options)
-    } catch (err) {
-      if (err instanceof TypeError && (err.message === "Failed to fetch" || err.message.includes("fetch"))) {
-        console.warn(`Network error fetching caterers from ${API_BASE_URL}/caterers`)
-      } else {
-        console.error("Unexpected error fetching caterers:", err)
-      }
-    } finally {
-      if (showLoading) setIsLoadingCaterers(false)
-    }
-  }, [])
-
-  // Fetch airports from API
-  const fetchAirports = React.useCallback(async (search?: string, showLoading = false) => {
-    if (showLoading) setIsLoadingAirports(true)
-    try {
-      const params = new URLSearchParams()
-      if (search?.trim()) {
-        params.append("search", search.trim())
-      }
-      params.append("limit", "1000")
-      
-      const data: AirportsResponse = await apiCallJson(`/airports?${params.toString()}`)
-      setAirportsData(data.airports || [])
-      
-      const options = (data.airports || []).map((airport) => {
-        const codes = [
-          airport.airport_code_iata,
-          airport.airport_code_icao,
-        ].filter(Boolean).join("/")
-        
-        const decodedAirportName = decodeHtmlEntities(airport.airport_name)
-        
-        let label = ""
-        if (codes) {
-          label = `${codes} - ${decodedAirportName}`
-        } else {
-          label = decodedAirportName
-        }
-        
-        const searchText = `${codes} ${decodedAirportName}`.toLowerCase()
-        
-        return {
-          value: airport.id.toString(),
-          label,
-          searchText,
-        }
-      })
-      
-      options.sort((a, b) => {
-        const aHasCode = a.searchText?.includes("/") || false
-        const bHasCode = b.searchText?.includes("/") || false
-        if (aHasCode && !bHasCode) return -1
-        if (!aHasCode && bHasCode) return 1
-        return 0
-      })
-      
-      setAirportOptions(options)
-    } catch (err) {
-      if (err instanceof TypeError && (err.message === "Failed to fetch" || err.message.includes("fetch"))) {
-        console.warn(`Network error fetching airports from ${API_BASE_URL}/airports`)
-      } else {
-        console.error("Unexpected error fetching airports:", err)
-      }
-    } finally {
-      if (showLoading) setIsLoadingAirports(false)
-    }
-  }, [])
-
-  // Fetch FBOs from API
-  const fetchFBOs = React.useCallback(async (search?: string, showLoading = false) => {
-    if (showLoading) setIsLoadingFBOs(true)
-    try {
-      const params = new URLSearchParams()
-      if (search?.trim()) {
-        params.append("search", search.trim())
-      }
-      params.append("limit", "1000")
-      
-      const data: FBOsResponse = await apiCallJson(`/fbos?${params.toString()}`)
-      setFBOsData(data.fbos || [])
-      
-      const options = (data.fbos || []).map((fbo) => {
-        const airportCodes = [
-          fbo.airport_code_iata,
-          fbo.airport_code_icao,
-        ].filter(Boolean).join("/")
-        
-        let label = ""
-        if (airportCodes) {
-          label = `${airportCodes} - ${fbo.fbo_name}`
-        } else {
-          label = fbo.fbo_name
-        }
-        
-        const searchText = `${fbo.fbo_name} ${airportCodes} ${fbo.airport_name || ""}`.toLowerCase()
-        
-        return {
-          value: fbo.id.toString(),
-          label,
-          searchText,
-        }
-      })
-      setFboOptions(options)
-    } catch (err) {
-      if (err instanceof TypeError && (err.message === "Failed to fetch" || err.message.includes("fetch"))) {
-        console.warn(`Network error fetching FBOs from ${API_BASE_URL}/fbos`)
-      } else {
-        console.error("Unexpected error fetching FBOs:", err)
-      }
-    } finally {
-      if (showLoading) setIsLoadingFBOs(false)
-    }
-  }, [])
-
-  // Fetch menu items from API
-  const fetchMenuItems = React.useCallback(async (search?: string, showLoading = false) => {
-    if (showLoading) setIsLoadingMenuItems(true)
-    try {
-      const params = new URLSearchParams()
-      if (search?.trim()) {
-        params.append("search", search.trim())
-      }
-      params.append("limit", "1000")
-      params.append("is_active", "true")
-      
-      const data: MenuItemsResponse = await apiCallJson(`/menu-items?${params.toString()}`)
-      setMenuItemsData(data.menu_items || [])
-      
-      const options = (data.menu_items || []).map((item) => ({
-        value: item.id.toString(),
-        label: item.item_name,
-      }))
-      setMenuItemOptions(options)
-    } catch (err) {
-      if (err instanceof TypeError && err.message === "Failed to fetch") {
-        console.info("Network error fetching menu items (this may be expected):", err.message)
-      } else {
-        console.error("Error fetching menu items:", err)
-      }
-    } finally {
-      if (showLoading) setIsLoadingMenuItems(false)
-    }
-  }, [])
+  // Use context fetch functions - they handle all state management and fetch ALL data
+  const fetchClients = fetchClientsFromContext
+  const fetchCaterers = React.useCallback(async (search?: string, _showLoading?: boolean) => {
+    await fetchCaterersFromContext(search)
+  }, [fetchCaterersFromContext])
+  const fetchAirports = React.useCallback(async (search?: string, _showLoading?: boolean) => {
+    await fetchAirportsFromContext(search)
+  }, [fetchAirportsFromContext])
+  const fetchFBOs = React.useCallback(async (search?: string, _showLoading?: boolean) => {
+    await fetchFBOsFromContext(search)
+  }, [fetchFBOsFromContext])
+  const fetchMenuItems = React.useCallback(async (search?: string, _showLoading?: boolean) => {
+    await fetchMenuItemsFromContext(search)
+  }, [fetchMenuItemsFromContext])
 
   // Fetch categories for dropdown
   const fetchCategories = React.useCallback(async () => {
@@ -941,9 +780,51 @@ function OrdersContent() {
         if (mappedOrderType) {
           form.setValue("orderType", mappedOrderType, { shouldValidate: false })
         }
+        
+        // Explicitly set caterer_id, airport_id, and client_id to ensure Combobox components recognize them
+        if (editingOrder.caterer_id) {
+          form.setValue("caterer_id", editingOrder.caterer_id, { shouldValidate: false })
+        }
+        if (editingOrder.airport_id) {
+          form.setValue("airport_id", editingOrder.airport_id, { shouldValidate: false })
+        }
+        if (editingOrder.client_id) {
+          form.setValue("client_id", editingOrder.client_id, { shouldValidate: false })
+        }
+        if (editingOrder.fbo_id) {
+          form.setValue("fbo_id", editingOrder.fbo_id, { shouldValidate: false })
+        }
+        
+        // Explicitly set menu items to ensure Combobox components recognize them
+        formItems.forEach((item, index) => {
+          if (item.itemName) {
+            form.setValue(`items.${index}.itemName`, item.itemName, { shouldValidate: false })
+          }
+        })
+        
+        // Set values again after a brief delay to ensure Combobox components recognize them
+        setTimeout(() => {
+          if (editingOrder.caterer_id) {
+            form.setValue("caterer_id", editingOrder.caterer_id, { shouldValidate: false })
+          }
+          if (editingOrder.airport_id) {
+            form.setValue("airport_id", editingOrder.airport_id, { shouldValidate: false })
+          }
+          if (editingOrder.client_id) {
+            form.setValue("client_id", editingOrder.client_id, { shouldValidate: false })
+          }
+          if (editingOrder.fbo_id) {
+            form.setValue("fbo_id", editingOrder.fbo_id, { shouldValidate: false })
+          }
+          formItems.forEach((item, index) => {
+            if (item.itemName) {
+              form.setValue(`items.${index}.itemName`, item.itemName, { shouldValidate: false })
+            }
+          })
+        }, 200)
       }
     }
-  }, [dialogOpen, editingOrder, clientOptions.length, catererOptions.length, airportOptions.length, form])
+  }, [dialogOpen, editingOrder, clientOptions.length, catererOptions.length, airportOptions.length, menuItemOptions.length, form])
 
   // Debounced server-side search for caterers
   React.useEffect(() => {
@@ -1059,6 +940,9 @@ function OrdersContent() {
         delivery_time: fullOrder.delivery_time || "", // Include delivery time
         items: fullOrder.items?.map(item => ({
           itemName: item.item_id?.toString() || item.menu_item_id?.toString() || "",
+          item_id: item.item_id, // Store original ID for fallback
+          menu_item_id: item.menu_item_id, // Store original menu_item_id for fallback
+          item_name: item.item_name || "", // Store item name for lookup by name
           itemDescription: item.item_description || "",
           portionSize: item.portion_size || "1",
           portionServing: item.portion_serving || "",
@@ -1086,36 +970,62 @@ function OrdersContent() {
   // Handle edit
   const handleEdit = async (order: Order) => {
     try {
+      // Clear search states to ensure filtered options include all options
+      setClientSearch("")
+      setCatererSearch("")
+      setAirportSearch("")
+      setFboSearch("")
+      setMenuItemSearch("")
+      
       // Open dialog first to trigger data fetching
       setDialogOpen(true)
       
       const fullOrder: Order = await apiCallJson(`/orders/${order.id}`)
       setEditingOrder(fullOrder)
 
-      // Fetch all required data in parallel
+      // Fetch all required data using contexts (they fetch ALL data, not just 1000)
+      // This ensures we have all caterers, airports, etc. available for matching
       await Promise.all([
-        fetchClients(),
-        fetchCaterers(undefined, true),
-        fetchAirports(undefined, true),
-        fetchFBOs(undefined, true),
-        fetchMenuItems(),
+        fetchClientsFromContext(),
+        fetchCaterersFromContext(),
+        fetchAirportsFromContext(),
+        fetchFBOsFromContext(),
+        fetchMenuItemsFromContext(),
         fetchCategories(),
       ])
-
-      // Wait a bit for state to update with the options
-      await new Promise(resolve => setTimeout(resolve, 200))
-
+      
+      // Use context data directly - contexts have ALL data loaded
+      const loadedClientOptions = clientOptions
+      const loadedCatererOptions = catererOptions
+      const loadedAirportOptions = airportOptions
+      const loadedFboOptions = fboOptions
+      const loadedMenuItemOptions = menuItemOptions
+      
       // Map order items to form format
+      // Try to find menu item by ID first, then by name if ID is not available
       const formItems = fullOrder.items && fullOrder.items.length > 0
-        ? fullOrder.items.map((item) => ({
-            itemName: item.item_id?.toString() || item.menu_item_id?.toString() || "",
-            itemDescription: item.item_description || "",
-            portionSize: item.portion_size || "1",
-            portionServing: item.portion_serving || "",
-            price: typeof item.price === 'number' ? item.price.toString() : (item.price || "0"),
-            category: item.category || "",
-            packaging: item.packaging || "",
-          }))
+        ? fullOrder.items.map((item) => {
+            // First try item_id or menu_item_id
+            let itemName = item.item_id?.toString() || item.menu_item_id?.toString() || ""
+            
+            // If no ID, try to find by name using context getter
+            if (!itemName && item.item_name) {
+              const foundMenuItem = getMenuItemByName(item.item_name)
+              if (foundMenuItem) {
+                itemName = foundMenuItem.id.toString()
+              }
+            }
+            
+            return {
+              itemName,
+              itemDescription: item.item_description || "",
+              portionSize: item.portion_size || "1",
+              portionServing: item.portion_serving || "",
+              price: typeof item.price === 'number' ? item.price.toString() : (item.price || "0"),
+              category: item.category || "",
+              packaging: item.packaging || "",
+            }
+          })
         : [{
             itemName: "",
             itemDescription: "",
@@ -1125,7 +1035,7 @@ function OrdersContent() {
             category: "",
             packaging: "",
           }]
-
+      
       // Mark that we're resetting for this order
       lastResetOrderId.current = fullOrder.id
 
@@ -1159,7 +1069,7 @@ function OrdersContent() {
         items: formItems,
       })
 
-      // Explicitly set delivery date and order type to ensure they're recognized
+      // Explicitly set values to ensure Combobox components recognize them
       // This helps with timing issues where the form might not immediately reflect the reset
       if (formattedDeliveryDate) {
         form.setValue("deliveryDate", formattedDeliveryDate, { shouldValidate: false })
@@ -1167,6 +1077,63 @@ function OrdersContent() {
       if (mappedOrderType) {
         form.setValue("orderType", mappedOrderType, { shouldValidate: false })
       }
+      
+      // Explicitly set caterer_id, airport_id, and client_id to ensure Combobox components recognize them
+      // Check if options exist using the directly loaded options (compare as strings)
+      const catererIdStr = fullOrder.caterer_id?.toString()
+      const airportIdStr = fullOrder.airport_id?.toString()
+      const clientIdStr = fullOrder.client_id?.toString()
+      const fboIdStr = fullOrder.fbo_id?.toString()
+      
+      const catererExists = catererIdStr && loadedCatererOptions.some(opt => opt.value === catererIdStr)
+      const airportExists = airportIdStr && loadedAirportOptions.some(opt => opt.value === airportIdStr)
+      const clientExists = clientIdStr && loadedClientOptions.some(opt => opt.value === clientIdStr)
+      const fboExists = fboIdStr ? loadedFboOptions.some(opt => opt.value === fboIdStr) : false
+      
+      if (fullOrder.caterer_id) {
+        // Always set the value, even if option check fails (options might not be fully loaded)
+        form.setValue("caterer_id", fullOrder.caterer_id, { shouldValidate: false })
+      }
+      if (fullOrder.airport_id) {
+        form.setValue("airport_id", fullOrder.airport_id, { shouldValidate: false })
+      }
+      if (fullOrder.client_id) {
+        form.setValue("client_id", fullOrder.client_id, { shouldValidate: false })
+      }
+      if (fullOrder.fbo_id) {
+        form.setValue("fbo_id", fullOrder.fbo_id, { shouldValidate: false })
+      }
+      
+      // Explicitly set menu items to ensure Combobox components recognize them
+      formItems.forEach((item, index) => {
+        if (item.itemName) {
+          const menuItemExists = loadedMenuItemOptions.some(opt => opt.value === item.itemName)
+          form.setValue(`items.${index}.itemName`, item.itemName, { shouldValidate: false })
+        }
+      })
+      
+      // Force a small delay and set values again to ensure Combobox components have updated
+      await new Promise(resolve => setTimeout(resolve, 200))
+      
+      // Set values again after a brief delay to ensure Combobox components recognize them
+      if (fullOrder.caterer_id) {
+        form.setValue("caterer_id", fullOrder.caterer_id, { shouldValidate: false })
+      }
+      if (fullOrder.airport_id) {
+        form.setValue("airport_id", fullOrder.airport_id, { shouldValidate: false })
+      }
+      if (fullOrder.client_id) {
+        form.setValue("client_id", fullOrder.client_id, { shouldValidate: false })
+      }
+      if (fullOrder.fbo_id) {
+        form.setValue("fbo_id", fullOrder.fbo_id, { shouldValidate: false })
+      }
+      formItems.forEach((item, index) => {
+        if (item.itemName) {
+          form.setValue(`items.${index}.itemName`, item.itemName, { shouldValidate: false })
+        }
+      })
+      
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to fetch order details"
       toast.error("Error loading order", {
@@ -1487,18 +1454,18 @@ function OrdersContent() {
       let body: Record<string, string> = {}
 
       if (emailRecipient === "client") {
-        endpoint = `${API_BASE_URL}/orders/${orderForEmail.id}/send-to-client`
+        endpoint = `/orders/${orderForEmail.id}/send-to-client`
         if (customClientMessage.trim()) {
           body.custom_message = customClientMessage.trim()
         }
       } else if (emailRecipient === "caterer") {
-        endpoint = `${API_BASE_URL}/orders/${orderForEmail.id}/send-to-caterer`
+        endpoint = `/orders/${orderForEmail.id}/send-to-caterer`
         if (customCatererMessage.trim()) {
           body.custom_message = customCatererMessage.trim()
         }
       } else {
         // both
-        endpoint = `${API_BASE_URL}/orders/${orderForEmail.id}/send-to-both`
+        endpoint = `/orders/${orderForEmail.id}/send-to-both`
         if (customClientMessage.trim()) {
           body.custom_client_message = customClientMessage.trim()
         }
@@ -1507,20 +1474,10 @@ function OrdersContent() {
         }
       }
 
-      const response = await fetch(endpoint, {
+      await apiCallJson(endpoint, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify(body),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to send email" }))
-        throw new Error(errorData.error || errorData.message || `HTTP error! status: ${response.status}`)
-      }
-
-      const data = await response.json()
       
       const recipientLabel = emailRecipient === "both" 
         ? "client and caterer" 

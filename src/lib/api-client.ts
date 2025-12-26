@@ -4,6 +4,13 @@
  */
 
 import { API_BASE_URL } from "./api-config"
+import {
+  getTokenExpirationTime,
+  getTokenTimeUntilExpiration,
+  getTokenLifetime,
+  isTokenExpired,
+  formatTimeUntilExpiration,
+} from "./jwt-utils"
 
 let accessToken: string | null = null
 let refreshTokenPromise: Promise<string | null> | null = null
@@ -81,12 +88,43 @@ async function refreshToken(): Promise<string | null> {
       if (response.ok) {
         const data = await response.json()
         const newToken = data.accessToken
+        const oldToken = accessToken
+        
+        // Log old token expiration info
+        if (oldToken) {
+          const oldExpTime = getTokenExpirationTime(oldToken)
+          const oldTimeUntilExp = getTokenTimeUntilExpiration(oldToken)
+          const oldLifetime = getTokenLifetime(oldToken)
+          if (oldExpTime && oldTimeUntilExp !== null && oldLifetime !== null) {
+            console.log("[API Client] Old token info:", {
+              expirationTime: new Date(oldExpTime).toISOString(),
+              timeUntilExpiration: formatTimeUntilExpiration(oldTimeUntilExp),
+              lifetime: `${Math.round(oldLifetime / 60)}m ${oldLifetime % 60}s`,
+            })
+          }
+        }
+        
         accessToken = newToken
         // Update localStorage if available
         if (typeof window !== "undefined") {
           localStorage.setItem("kabin247_access_token", newToken)
         }
-        console.log("[API Client] Token refresh successful")
+        
+        // Log new token expiration info
+        const newExpTime = getTokenExpirationTime(newToken)
+        const newTimeUntilExp = getTokenTimeUntilExpiration(newToken)
+        const newLifetime = getTokenLifetime(newToken)
+        if (newExpTime && newTimeUntilExp !== null && newLifetime !== null) {
+          console.log("[API Client] Token refresh successful - New token info:", {
+            expirationTime: new Date(newExpTime).toISOString(),
+            timeUntilExpiration: formatTimeUntilExpiration(newTimeUntilExp),
+            lifetime: `${Math.round(newLifetime / 60)}m ${newLifetime % 60}s`,
+            refreshReason: "reactive (401 error)",
+          })
+        } else {
+          console.log("[API Client] Token refresh successful (could not decode new token expiration)")
+        }
+        
         return newToken
       } else {
         // Try to get error details from response
@@ -153,6 +191,23 @@ export interface ApiCallOptions extends RequestInit {
   skipRefresh?: boolean
 }
 
+/**
+ * Check if token should be refreshed proactively (expires in less than 2 minutes)
+ */
+export function shouldRefreshToken(token: string | null): boolean {
+  if (!token) {
+    return false
+  }
+  
+  const timeUntilExp = getTokenTimeUntilExpiration(token)
+  if (timeUntilExp === null) {
+    return false // Can't determine, don't refresh proactively
+  }
+  
+  // Refresh if token expires in less than 2 minutes (120 seconds)
+  return timeUntilExp < 120000
+}
+
 export async function apiCall(
   url: string,
   options: ApiCallOptions = {}
@@ -172,7 +227,46 @@ export async function apiCall(
       }
     }
   }
-
+  
+  // Proactive token refresh: check if token should be refreshed before making request
+  if (!skipAuth && !skipRefresh && currentToken && shouldRefreshToken(currentToken)) {
+    const timeUntilExp = getTokenTimeUntilExpiration(currentToken)
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/3e871f39-4ed4-465f-8745-06da452ba93a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api-client.ts:231',message:'Proactive refresh before API request',data:{url,timeUntilExp,timeUntilExpSeconds:timeUntilExp?Math.floor(timeUntilExp/1000):null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+    // #endregion
+    
+    console.log("[API Client] Token expires soon, refreshing proactively before request...")
+    try {
+      const newToken = await refreshToken()
+      if (newToken) {
+        currentToken = newToken
+        // Update in-memory token and localStorage
+        accessToken = newToken
+        if (typeof window !== "undefined") {
+          localStorage.setItem("kabin247_access_token", newToken)
+        }
+        console.log("[API Client] Proactive token refresh successful, proceeding with request")
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/3e871f39-4ed4-465f-8745-06da452ba93a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api-client.ts:245',message:'Proactive refresh successful',data:{url,newTokenLength:newToken?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+        // #endregion
+      } else {
+        console.warn("[API Client] Proactive token refresh failed, proceeding with existing token")
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/3e871f39-4ed4-465f-8745-06da452ba93a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api-client.ts:250',message:'Proactive refresh failed',data:{url},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
+      }
+    } catch (error) {
+      console.warn("[API Client] Proactive token refresh error, proceeding with existing token:", error)
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/3e871f39-4ed4-465f-8745-06da452ba93a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api-client.ts:255',message:'Proactive refresh error',data:{url,error:error instanceof Error?error.message:String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+    }
+  }
+  
   // Build headers as a Record to allow property assignment
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -184,8 +278,36 @@ export async function apiCall(
   // Add authorization header if not skipping auth
   if (!skipAuth && currentToken) {
     headers.Authorization = `Bearer ${currentToken}`
-    // Debug: log token presence (first 20 chars only for security)
-    console.log(`[API Client] Making request to ${url} with token: ${currentToken.substring(0, 20)}...`)
+    
+    // Log token expiration information
+    const expTime = getTokenExpirationTime(currentToken)
+    const timeUntilExp = getTokenTimeUntilExpiration(currentToken)
+    const lifetime = getTokenLifetime(currentToken)
+    const expired = isTokenExpired(currentToken)
+    
+    if (expTime && timeUntilExp !== null && lifetime !== null) {
+      const expDate = new Date(expTime)
+      const timeUntilExpFormatted = formatTimeUntilExpiration(timeUntilExp)
+      const lifetimeFormatted = `${Math.round(lifetime / 60)}m ${lifetime % 60}s`
+      
+      console.log(`[API Client] Making request to ${url}`, {
+        tokenPrefix: `${currentToken.substring(0, 20)}...`,
+        expirationTime: expDate.toISOString(),
+        timeUntilExpiration: timeUntilExpFormatted,
+        tokenLifetime: lifetimeFormatted,
+        isExpired: expired,
+        expiresInSeconds: Math.round(timeUntilExp / 1000),
+      })
+      
+      if (expired) {
+        console.warn(`[API Client] Token is expired! Expired ${Math.abs(Math.round(timeUntilExp / 1000))} seconds ago`)
+      } else if (timeUntilExp < 120000) {
+        // Less than 2 minutes remaining
+        console.warn(`[API Client] Token expires soon: ${timeUntilExpFormatted}`)
+      }
+    } else {
+      console.log(`[API Client] Making request to ${url} with token: ${currentToken.substring(0, 20)}... (could not decode expiration)`)
+    }
   } else if (!skipAuth && !currentToken) {
     // Debug: log when token is missing
     console.warn("[API Client] No access token available for request:", url)
@@ -204,7 +326,19 @@ export async function apiCall(
     // If we never had a token, this is a genuine auth error
     const hadToken = !!currentToken
     
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/3e871f39-4ed4-465f-8745-06da452ba93a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api-client.ts:290',message:'401 Unauthorized received',data:{url,hadToken,currentTokenLength:currentToken?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
+    
     if (hadToken) {
+      const tokenExpTime = currentToken ? getTokenExpirationTime(currentToken) : null
+      const tokenTimeUntilExp = currentToken ? getTokenTimeUntilExpiration(currentToken) : null
+      const tokenLifetime = currentToken ? getTokenLifetime(currentToken) : null
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/3e871f39-4ed4-465f-8745-06da452ba93a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api-client.ts:295',message:'Token info on 401 error',data:{url,tokenExpTime,tokenTimeUntilExp,tokenLifetime,tokenLifetimeSeconds:tokenLifetime,tokenLifetimeMinutes:tokenLifetime?Math.round(tokenLifetime/60):null,now:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      
       console.log("[API Client] Got 401 Unauthorized, attempting token refresh...", {
         url,
         hadToken: true,

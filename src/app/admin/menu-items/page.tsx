@@ -95,6 +95,7 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "sonner"
 import { API_BASE_URL } from "@/lib/api-config"
+import { apiCall, apiCallJson } from "@/lib/api-client"
 
 // Menu item data structure matching API response
 interface MenuItemVariant {
@@ -251,15 +252,7 @@ function MenuItemsContent() {
   const fetchCaterers = React.useCallback(async () => {
     setIsLoadingCaterers(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/caterers?limit=1000`)
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch caterers" }))
-        console.warn("Failed to load caterers:", errorData.error)
-        return
-      }
-      
-      const data: CaterersResponse = await response.json()
+      const data: CaterersResponse = await apiCallJson<CaterersResponse>(`/caterers?limit=1000`)
       setCaterers(data.caterers || [])
     } catch (err) {
       console.warn("Error fetching caterers:", err)
@@ -272,17 +265,7 @@ function MenuItemsContent() {
   const fetchCategories = React.useCallback(async () => {
     setIsLoadingCategories(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/categories?is_active=true&limit=1000`)
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch categories" }))
-        toast.error("Failed to load categories", {
-          description: errorData.error || `HTTP error! status: ${response.status}`,
-        })
-        return
-      }
-      
-      const data: CategoriesResponse = await response.json()
+      const data: CategoriesResponse = await apiCallJson<CategoriesResponse>(`/categories?is_active=true&limit=1000`)
       setCategories(data.categories || [])
     } catch (err) {
       // Handle network errors gracefully - these are expected in some scenarios (offline, CORS, etc.)
@@ -336,19 +319,7 @@ function MenuItemsContent() {
       params.append("page", page.toString())
       params.append("limit", limit.toString())
 
-      const response = await fetch(`${API_BASE_URL}/menu-items?${params.toString()}`)
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch menu items" }))
-        const errorMessage = errorData.error || `HTTP error! status: ${response.status}`
-        setError(errorMessage)
-        toast.error("Failed to load menu items", {
-          description: errorMessage,
-        })
-        return
-      }
-
-      const data: MenuItemsResponse = await response.json()
+      const data: MenuItemsResponse = await apiCallJson<MenuItemsResponse>(`/menu-items?${params.toString()}`)
       setMenuItems(data.menu_items || [])
       setTotal(data.total || 0)
     } catch (err) {

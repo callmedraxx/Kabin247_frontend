@@ -91,6 +91,7 @@ import {
 import { toast } from "sonner"
 
 import { API_BASE_URL } from "@/lib/api-config"
+import { apiCall, apiCallJson } from "@/lib/api-client"
 
 // Airport data structure matching API response
 interface Airport {
@@ -182,14 +183,7 @@ function AirportsContent() {
       params.append("page", page.toString())
       params.append("limit", limit.toString())
 
-      const response = await fetch(`${API_BASE_URL}/airports?${params.toString()}`)
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch airports" }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
-
-      const data: AirportsResponse = await response.json()
+      const data: AirportsResponse = await apiCallJson<AirportsResponse>(`/airports?${params.toString()}`)
       setAirports(data.airports)
       setTotal(data.total)
     } catch (err) {
@@ -264,8 +258,8 @@ function AirportsContent() {
   const handleSave = async (values: AirportFormValues) => {
     try {
       const url = editingAirport
-        ? `${API_BASE_URL}/airports/${editingAirport.id}`
-        : `${API_BASE_URL}/airports`
+        ? `/airports/${editingAirport.id}`
+        : `/airports`
 
       const method = editingAirport ? "PUT" : "POST"
 
@@ -276,20 +270,10 @@ function AirportsContent() {
         airport_code_icao: values.airport_code_icao || null,
       }
 
-      const response = await fetch(url, {
+      const data: Airport = await apiCallJson<Airport>(url, {
         method,
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify(payload),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to save airport" }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
-
-      const data: Airport = await response.json()
       
       toast.success(editingAirport ? "Airport updated" : "Airport created", {
         description: `${data.airport_name} has been ${editingAirport ? "updated" : "created"} successfully.`,
@@ -310,14 +294,7 @@ function AirportsContent() {
   // Handle view details
   const handleView = async (airport: Airport) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/airports/${airport.id}`)
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch airport details" }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
-
-      const data: Airport = await response.json()
+      const data: Airport = await apiCallJson<Airport>(`/airports/${airport.id}`)
       setViewingAirport(data)
       setViewDrawerOpen(true)
     } catch (err) {
@@ -340,17 +317,9 @@ function AirportsContent() {
 
     setIsDeleting(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/airports/${airportToDelete.id}`, {
+      await apiCallJson(`/airports/${airportToDelete.id}`, {
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
       })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to delete airport" }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
 
       toast.success("Airport deleted", {
         description: `${airportToDelete.airport_name} has been deleted successfully.`,
@@ -380,22 +349,12 @@ function AirportsContent() {
 
     setIsDeleting(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/airports`, {
+      const data = await apiCallJson<{ deleted: number }>(`/airports`, {
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({
           ids: Array.from(selectedAirports),
         }),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to delete airports" }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
-
-      const data = await response.json()
       
       toast.success("Airports deleted", {
         description: `${data.deleted || selectedAirports.size} airport(s) have been deleted successfully.`,
@@ -417,11 +376,10 @@ function AirportsContent() {
   const handleExport = async () => {
     setIsExporting(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/airports/export`)
+      const response = await apiCall(`/airports/export`)
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to export airports" }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+        throw new Error("Failed to export airports")
       }
 
       const blob = await response.blob()

@@ -82,6 +82,7 @@ import { Badge } from "@/components/ui/badge"
 import * as XLSX from "xlsx"
 import { toast } from "sonner"
 import { API_BASE_URL } from "@/lib/api-config"
+import { apiCall, apiCallJson } from "@/lib/api-client"
 
 // Order status types (only historical statuses)
 import type { OrderStatus } from "@/lib/order-status-config"
@@ -360,17 +361,17 @@ function OrderHistoryContent() {
       let payload: Record<string, string> = {}
 
       if (emailRecipient === "client") {
-        endpoint = `${API_BASE_URL}/orders/${orderForEmail.id}/send-to-client`
+        endpoint = `/orders/${orderForEmail.id}/send-to-client`
         if (customClientMessage.trim()) {
           payload.custom_message = customClientMessage.trim()
         }
       } else if (emailRecipient === "caterer") {
-        endpoint = `${API_BASE_URL}/orders/${orderForEmail.id}/send-to-caterer`
+        endpoint = `/orders/${orderForEmail.id}/send-to-caterer`
         if (customCatererMessage.trim()) {
           payload.custom_message = customCatererMessage.trim()
         }
       } else {
-        endpoint = `${API_BASE_URL}/orders/${orderForEmail.id}/send-to-both`
+        endpoint = `/orders/${orderForEmail.id}/send-to-both`
         if (customClientMessage.trim()) {
           payload.custom_client_message = customClientMessage.trim()
         }
@@ -379,16 +380,10 @@ function OrderHistoryContent() {
         }
       }
 
-      const response = await fetch(endpoint, {
+      await apiCallJson(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error || errorData.message || "Failed to send email")
-      }
 
       toast.success("Email sent successfully", {
         description: `Order ${orderForEmail.order_number} sent to ${emailRecipient === "both" ? "client and caterer" : emailRecipient}`,
@@ -410,13 +405,7 @@ function OrderHistoryContent() {
     setPdfHtml("")
 
     try {
-      const response = await fetch(`${API_BASE_URL}/orders/${order.id}/preview`)
-      
-      if (!response.ok) {
-        throw new Error("Failed to load preview")
-      }
-
-      const data = await response.json()
+      const data = await apiCallJson<{ html: string }>(`/orders/${order.id}/preview`)
       setPdfHtml(data.html || "")
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to load preview"
@@ -431,7 +420,7 @@ function OrderHistoryContent() {
     toast.loading("Generating PDF...", { id: `pdf-${order.id}` })
 
     try {
-      const response = await fetch(`${API_BASE_URL}/orders/${order.id}/pdf?regenerate=true`)
+      const response = await apiCall(`/orders/${order.id}/pdf?regenerate=true`)
       
       if (!response.ok) {
         throw new Error("Failed to download PDF")

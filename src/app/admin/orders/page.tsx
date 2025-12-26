@@ -99,6 +99,7 @@ import {
 import { toast } from "sonner"
 
 import { API_BASE_URL } from "@/lib/api-config"
+import { apiCall, apiCallJson } from "@/lib/api-client"
 import type { OrderStatus } from "@/lib/order-status-config"
 import { getStatusOptions, getOrderStatusConfig, getStatusTooltipContent } from "@/lib/order-status-config"
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"
@@ -315,9 +316,9 @@ function OrdersContent() {
     setIsLoadingSupportingData(true)
     try {
       const [clientsRes, caterersRes, airportsRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/clients?limit=1000`),
-        fetch(`${API_BASE_URL}/caterers?limit=1000`),
-        fetch(`${API_BASE_URL}/airports?limit=1000`),
+        apiCall(`/clients?limit=1000`),
+        apiCall(`/caterers?limit=1000`),
+        apiCall(`/airports?limit=1000`),
       ])
 
       if (clientsRes.ok) {
@@ -363,14 +364,7 @@ function OrdersContent() {
       params.append("page", page.toString())
       params.append("limit", limit.toString())
 
-      const response = await fetch(`${API_BASE_URL}/orders?${params.toString()}`)
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch orders" }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
-
-      const data: OrdersResponse = await response.json()
+      const data: OrdersResponse = await apiCallJson<OrdersResponse>(`/orders?${params.toString()}`)
       setOrders(data.orders)
       setTotal(data.total)
     } catch (err) {
@@ -477,14 +471,7 @@ function OrdersContent() {
   // Open edit dialog
   const handleEdit = async (order: Order) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/orders/${order.id}`)
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch order details" }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
-
-      const fullOrder: Order = await response.json()
+      const fullOrder: Order = await apiCallJson<Order>(`/orders/${order.id}`)
       setEditingOrder(fullOrder)
       
       form.reset({
@@ -524,8 +511,8 @@ function OrdersContent() {
   const handleSave = async (values: OrderFormValues) => {
     try {
       const url = editingOrder
-        ? `${API_BASE_URL}/orders/${editingOrder.id}`
-        : `${API_BASE_URL}/orders`
+        ? `/orders/${editingOrder.id}`
+        : `/orders`
 
       const method = editingOrder ? "PUT" : "POST"
 
@@ -567,25 +554,10 @@ function OrdersContent() {
         body.service_charge = values.service_charge
       }
 
-      const response = await fetch(url, {
+      const data: Order = await apiCallJson<Order>(url, {
         method,
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify(body),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to save order" }))
-        const errorMessage = errorData.error || `HTTP error! status: ${response.status}`
-        
-        toast.error("Error saving order", {
-          description: errorMessage,
-        })
-        throw new Error(errorMessage)
-      }
-
-      const data: Order = await response.json()
       
       toast.success(editingOrder ? "Order updated" : "Order created", {
         description: `Order ${data.order_number} has been ${editingOrder ? "updated" : "created"} successfully.`,
@@ -596,7 +568,10 @@ function OrdersContent() {
       form.reset()
       fetchOrders()
     } catch (err) {
-      // Error already handled in toast above
+      const errorMessage = err instanceof Error ? err.message : "Failed to save order"
+      toast.error("Error saving order", {
+        description: errorMessage,
+      })
       console.error("Error saving order:", err)
     }
   }
@@ -604,14 +579,7 @@ function OrdersContent() {
   // Handle view details
   const handleView = async (order: Order) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/orders/${order.id}`)
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch order details" }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
-
-      const data: Order = await response.json()
+      const data: Order = await apiCallJson<Order>(`/orders/${order.id}`)
       setViewingOrder(data)
       setViewDrawerOpen(true)
     } catch (err) {
@@ -634,17 +602,9 @@ function OrdersContent() {
 
     setIsDeleting(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/orders/${orderToDelete.id}`, {
+      await apiCallJson(`/orders/${orderToDelete.id}`, {
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
       })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to delete order" }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
 
       toast.success("Order deleted", {
         description: `Order ${orderToDelete.order_number} has been deleted successfully.`,
@@ -674,22 +634,12 @@ function OrdersContent() {
 
     setIsDeleting(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/orders`, {
+      const data = await apiCallJson<{ deleted: number }>(`/orders`, {
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({
           ids: Array.from(selectedOrders),
         }),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to delete orders" }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
-
-      const data = await response.json()
       
       toast.success("Orders deleted", {
         description: `${data.deleted || selectedOrders.size} order(s) have been deleted successfully.`,
@@ -769,18 +719,18 @@ function OrdersContent() {
       let body: Record<string, string> = {}
 
       if (emailRecipient === "client") {
-        endpoint = `${API_BASE_URL}/orders/${orderForEmail.id}/send-to-client`
+        endpoint = `/orders/${orderForEmail.id}/send-to-client`
         if (customClientMessage.trim()) {
           body.custom_message = customClientMessage.trim()
         }
       } else if (emailRecipient === "caterer") {
-        endpoint = `${API_BASE_URL}/orders/${orderForEmail.id}/send-to-caterer`
+        endpoint = `/orders/${orderForEmail.id}/send-to-caterer`
         if (customCatererMessage.trim()) {
           body.custom_message = customCatererMessage.trim()
         }
       } else {
         // both
-        endpoint = `${API_BASE_URL}/orders/${orderForEmail.id}/send-to-both`
+        endpoint = `/orders/${orderForEmail.id}/send-to-both`
         if (customClientMessage.trim()) {
           body.custom_client_message = customClientMessage.trim()
         }
@@ -789,20 +739,10 @@ function OrdersContent() {
         }
       }
 
-      const response = await fetch(endpoint, {
+      await apiCallJson(endpoint, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify(body),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to send email" }))
-        throw new Error(errorData.error || errorData.message || `HTTP error! status: ${response.status}`)
-      }
-
-      const data = await response.json()
       
       const recipientLabel = emailRecipient === "both" 
         ? "client and caterer" 
@@ -835,22 +775,7 @@ function OrdersContent() {
     setPdfHtml("") // Reset while loading
     
     try {
-      const response = await fetch(`${API_BASE_URL}/orders/${order.id}/preview`)
-      
-      if (!response.ok) {
-        const errorText = await response.text()
-        let errorMessage = "Failed to load preview"
-        try {
-          const errorData = JSON.parse(errorText)
-          errorMessage = errorData.error || errorData.message || errorMessage
-        } catch {
-          errorMessage = errorText || errorMessage
-        }
-        throw new Error(errorMessage)
-      }
-
-      // The endpoint returns JSON with html property
-      const data = await response.json()
+      const data = await apiCallJson<{ html: string }>(`/orders/${order.id}/preview`)
       const html = data.html || ""
       setPdfHtml(html)
     } catch (err) {
@@ -868,18 +793,10 @@ function OrdersContent() {
     toast.loading("Generating PDF...", { id: `pdf-${order.id}` })
     
     try {
-      const response = await fetch(`${API_BASE_URL}/orders/${order.id}/pdf?regenerate=true`)
+      const response = await apiCall(`/orders/${order.id}/pdf?regenerate=true`)
       
       if (!response.ok) {
-        const errorText = await response.text()
-        let errorMessage = "Failed to download PDF"
-        try {
-          const errorData = JSON.parse(errorText)
-          errorMessage = errorData.error || errorData.message || errorMessage
-        } catch {
-          errorMessage = errorText || errorMessage
-        }
-        throw new Error(errorMessage)
+        throw new Error("Failed to download PDF")
       }
 
       const blob = await response.blob()
