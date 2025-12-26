@@ -47,6 +47,8 @@ import {
   Loader2,
   Edit,
   UserCog,
+  UserPlus,
+  Shield,
 } from "lucide-react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -427,82 +429,127 @@ function EmployeesContent() {
       {/* Invite Employee Dialog */}
       <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Invite Employee</DialogTitle>
-            <DialogDescription>
-              Send an invitation email to a new employee. They will receive a link to create their account.
-            </DialogDescription>
+          <DialogHeader className="space-y-3 pb-2">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                <UserPlus className="h-5 w-5 text-primary" />
+              </div>
+              <div className="flex-1">
+                <DialogTitle className="text-xl">Invite Employee</DialogTitle>
+                <DialogDescription className="mt-1.5">
+                  Send an invitation email to a new employee. They will receive a link to create their account.
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
           <Form {...inviteForm}>
-            <form onSubmit={inviteForm.handleSubmit(handleInvite)} className="space-y-4">
+            <form onSubmit={inviteForm.handleSubmit(handleInvite)} className="space-y-6">
               <FormField
                 control={inviteForm.control}
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Email</FormLabel>
+                    <FormLabel className="flex items-center gap-2">
+                      <Mail className="h-4 w-4 text-muted-foreground" />
+                      Email Address
+                    </FormLabel>
                     <FormControl>
-                      <Input type="email" placeholder="employee@example.com" {...field} />
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input 
+                          type="email" 
+                          placeholder="employee@example.com" 
+                          className="pl-9"
+                          {...field} 
+                        />
+                      </div>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              <div className="space-y-2">
-                <FormLabel>Permissions</FormLabel>
-                <FormField
-                  control={inviteForm.control}
-                  name="permissions.orders.read"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                      <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                      <div className="space-y-1 leading-none">
-                        <FormLabel className="font-normal">Read Orders</FormLabel>
-                        <p className="text-xs text-muted-foreground">
-                          Allow employee to view orders
-                        </p>
-                      </div>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={inviteForm.control}
-                  name="permissions.orders.update_status"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                      <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                      <div className="space-y-1 leading-none">
-                        <FormLabel className="font-normal">Update Order Status</FormLabel>
-                        <p className="text-xs text-muted-foreground">
-                          Allow employee to update order status (except "paid")
-                        </p>
-                      </div>
-                    </FormItem>
-                  )}
-                />
+              <div className="space-y-3">
+                <FormLabel className="flex items-center gap-2 text-base font-semibold">
+                  <Shield className="h-4 w-4 text-muted-foreground" />
+                  Permissions
+                </FormLabel>
+                <Card className="border-border/50 bg-muted/30">
+                  <CardContent className="p-4 space-y-4">
+                    <FormField
+                      control={inviteForm.control}
+                      name="permissions.orders.read"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-lg border border-transparent bg-background/50 p-3 transition-all hover:border-border hover:bg-background/80">
+                          <FormControl>
+                            <Checkbox
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                              className="mt-0.5"
+                            />
+                          </FormControl>
+                          <div className="space-y-1 leading-none flex-1">
+                            <FormLabel className="font-medium cursor-pointer">
+                              Read Orders
+                            </FormLabel>
+                            <p className="text-xs text-muted-foreground">
+                              Allow employee to view orders
+                            </p>
+                          </div>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={inviteForm.control}
+                      name="permissions.orders.update_status"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-lg border border-transparent bg-background/50 p-3 transition-all hover:border-border hover:bg-background/80">
+                          <FormControl>
+                            <Checkbox
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                              className="mt-0.5"
+                            />
+                          </FormControl>
+                          <div className="space-y-1 leading-none flex-1">
+                            <FormLabel className="font-medium cursor-pointer">
+                              Update Order Status
+                            </FormLabel>
+                            <p className="text-xs text-muted-foreground">
+                              Allow employee to update order status (except "paid")
+                            </p>
+                          </div>
+                        </FormItem>
+                      )}
+                    />
+                  </CardContent>
+                </Card>
               </div>
-              <DialogFooter>
+              <DialogFooter className="gap-2 pt-2">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => setInviteDialogOpen(false)}
                   disabled={isInviting}
+                  className="min-w-[100px]"
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={isInviting}>
-                  {isInviting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Send Invitation
+                <Button 
+                  type="submit" 
+                  disabled={isInviting}
+                  className="min-w-[140px]"
+                >
+                  {isInviting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="mr-2 h-4 w-4" />
+                      Send Invitation
+                    </>
+                  )}
                 </Button>
               </DialogFooter>
             </form>

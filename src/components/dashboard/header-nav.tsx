@@ -2,23 +2,12 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
+import { usePathname } from "next/navigation"
 import { useSidebar, SidebarTrigger } from "@/components/ui/sidebar"
 import { useSidebarCategory } from "@/contexts/sidebar-context"
-import { useAuth } from "@/contexts/auth-context"
 import { cn } from "@/lib/utils"
-import { ChevronRight, ShoppingCart, Utensils, Tag, TrendingUp, UserCog, Plane, Settings, LogOut, User } from "lucide-react"
+import { ChevronRight, ShoppingCart, Utensils, Tag, TrendingUp, UserCog, Plane, Settings } from "lucide-react"
 import { Separator } from "@/components/ui/separator"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 // Navigation structure matching app-sidebar.tsx
 const navStructure = [
@@ -93,24 +82,8 @@ export function HeaderNav({ title, className }: HeaderNavProps) {
   const { state } = useSidebar()
   const { selectedCategory, setSelectedCategory } = useSidebarCategory()
   const pathname = usePathname()
-  const router = useRouter()
-  const { user, logout } = useAuth()
   const [mounted, setMounted] = React.useState(false)
   const sidebarCollapsed = state === "collapsed"
-
-  const handleLogout = async () => {
-    try {
-      await logout()
-      router.push("/login")
-    } catch (error) {
-      console.error("Logout error:", error)
-    }
-  }
-
-  const userInitial = user?.email?.[0]?.toUpperCase() || "U"
-  const userName = user?.email?.split("@")[0] || "User"
-  const userEmail = user?.email || "user@kabin247.com"
-  const userRole = user?.role || "CSR"
 
   // Ensure we only render conditional content after mount to avoid hydration mismatch
   React.useEffect(() => {
@@ -193,41 +166,6 @@ export function HeaderNav({ title, className }: HeaderNavProps) {
           /* Default title when sidebar is expanded or no category */
           <h1 className="text-sm font-medium text-foreground truncate">{title}</h1>
         )}
-        <div className="ml-auto flex items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 w-8 rounded-full">
-                <Avatar className="h-6 w-6">
-                  <AvatarImage src={`https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}&background=6366f1&color=fff&bold=true`} alt={userName} />
-                  <AvatarFallback className="bg-primary text-primary-foreground text-xs">{userInitial}</AvatarFallback>
-                </Avatar>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">{userName}</p>
-                  <p className="text-xs leading-none text-muted-foreground">{userEmail}</p>
-                  <p className="text-xs leading-none text-muted-foreground">{userRole}</p>
-                </div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <User className="mr-2 h-4 w-4" />
-                Profile
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Settings className="mr-2 h-4 w-4" />
-                Settings
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleLogout}>
-                <LogOut className="mr-2 h-4 w-4" />
-                Log out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
       </div>
     </header>
   )

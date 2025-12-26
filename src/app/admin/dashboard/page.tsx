@@ -41,6 +41,8 @@ import {
 } from "lucide-react"
 import { SidebarCategoryProvider } from "@/contexts/sidebar-context"
 import { API_BASE_URL } from "@/lib/api-config"
+import { apiCallJson } from "@/lib/api-client"
+import { useAuth } from "@/contexts/auth-context"
 import { toast } from "sonner"
 
 // Order status types - imported from centralized config
@@ -172,6 +174,7 @@ const statusConfig: Record<OrderStatus, { label: string; color: string; bgColor:
 
 function DashboardContent() {
   const router = useRouter()
+  const { isAuthenticated, isLoading: authLoading } = useAuth()
   const [orders, setOrders] = React.useState<Order[]>([])
   const [isLoading, setIsLoading] = React.useState(true)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
@@ -185,13 +188,7 @@ function DashboardContent() {
     setError(null)
 
     try {
-      const response = await fetch(`${API_BASE_URL}/orders?limit=100`)
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch orders: ${response.status}`)
-      }
-
-      const data: OrdersResponse = await response.json()
+      const data: OrdersResponse = await apiCallJson(`/orders?limit=100`)
       setOrders(data.orders || [])
       setLastUpdated(new Date())
     } catch (err) {
@@ -206,12 +203,15 @@ function DashboardContent() {
     }
   }, [])
 
+  // Wait for auth to initialize before making API calls
   React.useEffect(() => {
-    fetchOrders()
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(() => fetchOrders(true), 30000)
-    return () => clearInterval(interval)
-  }, [fetchOrders])
+    if (!authLoading && isAuthenticated) {
+      fetchOrders()
+      // Auto-refresh every 30 seconds
+      const interval = setInterval(() => fetchOrders(true), 30000)
+      return () => clearInterval(interval)
+    }
+  }, [fetchOrders, authLoading, isAuthenticated])
 
   // Calculate stats
   const stats = React.useMemo(() => {

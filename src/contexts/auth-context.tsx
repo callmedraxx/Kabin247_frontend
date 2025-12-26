@@ -3,6 +3,7 @@
 import * as React from "react"
 import { API_BASE_URL } from "@/lib/api-config"
 import { setAccessToken as setApiClientToken } from "@/lib/api-client"
+import { toast } from "sonner"
 
 export interface User {
   id: number
@@ -49,6 +50,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Listen for refresh failures from API client
   React.useEffect(() => {
     const handleRefreshFailed = () => {
+      // Show user-friendly error message
+      toast.error("Session Expired", {
+        description: "Your session has expired. Please log in again to continue.",
+        duration: 5000,
+      })
+      
       // Clear auth state when refresh fails
       setAccessToken(null)
       setUser(null)
@@ -67,6 +74,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshAccessToken = React.useCallback(async () => {
     try {
+      // Log cookie availability for debugging before attempting refresh
+      if (typeof window !== "undefined") {
+        const availableCookies: Record<string, string> = {}
+        document.cookie.split(";").forEach((cookie) => {
+          const [name, value] = cookie.trim().split("=")
+          if (name && value) {
+            availableCookies[name] = value
+          }
+        })
+        console.log("[Auth Context] Attempting token refresh...", {
+          visibleCookies: Object.keys(availableCookies).length,
+          cookieNames: Object.keys(availableCookies),
+          note: "HttpOnly refresh token cookie may not be visible in document.cookie",
+        })
+      }
+
       const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
         method: "POST",
         credentials: "include",
@@ -78,8 +101,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setAccessToken(newToken)
         setApiClientToken(newToken)
         localStorage.setItem(ACCESS_TOKEN_KEY, newToken)
+        console.log("[Auth Context] Token refresh successful")
         return newToken
       } else {
+        // Try to get error details
+        let errorMessage = "Token refresh failed"
+        let errorDetails: any = null
+
+        try {
+          errorDetails = await response.json()
+          errorMessage = errorDetails.error || errorMessage
+        } catch {
+          errorMessage = `Token refresh failed with status: ${response.status}`
+        }
+
+        // Check if error is due to missing refresh token cookie
+        const isMissingCookieError =
+          errorMessage.toLowerCase().includes("refresh token") ||
+          errorMessage.toLowerCase().includes("cookie") ||
+          response.status === 401
+
+        if (isMissingCookieError) {
+          console.warn("[Auth Context] Token refresh failed - refresh token cookie missing or invalid", {
+            status: response.status,
+            error: errorMessage,
+            details: errorDetails,
+            troubleshooting: [
+              "Refresh token cookie was not sent or is invalid",
+              "This usually indicates a CORS or cookie configuration issue",
+              "User will need to re-login to get a new refresh token",
+            ],
+          })
+        } else {
+          console.warn("[Auth Context] Token refresh failed", {
+            status: response.status,
+            error: errorMessage,
+            details: errorDetails,
+          })
+        }
+
         // Refresh failed, clear auth state
         // This will trigger the admin layout to redirect to login
         setAccessToken(null)
@@ -87,9 +147,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setApiClientToken(null)
         localStorage.removeItem(ACCESS_TOKEN_KEY)
         localStorage.removeItem(USER_KEY)
-        throw new Error("Token refresh failed")
+        throw new Error(errorMessage || "Token refresh failed")
       }
     } catch (error) {
+      console.error("[Auth Context] Token refresh error (network or other)", {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      })
       setAccessToken(null)
       setUser(null)
       setApiClientToken(null)
@@ -107,39 +171,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const storedUser = localStorage.getItem(USER_KEY)
 
         if (storedToken && storedUser) {
-          // Validate token by making a test request
-          try {
-            const response = await fetch(`${API_BASE_URL}/auth/me`, {
-              method: "GET",
-              headers: {
-                Authorization: `Bearer ${storedToken}`,
-              },
-              credentials: "include",
-            })
-
-            if (response.ok) {
-              const userData = JSON.parse(storedUser)
-              setAccessToken(storedToken)
-              setUser(userData)
-              setApiClientToken(storedToken)
-            } else if (response.status === 401) {
-              // Token invalid, try to refresh
-              await refreshAccessToken()
-            } else {
-              // Clear invalid data
-              localStorage.removeItem(ACCESS_TOKEN_KEY)
-              localStorage.removeItem(USER_KEY)
-              setApiClientToken(null)
-            }
-          } catch (error) {
-            // If /auth/me doesn't exist, just use stored token
-            // This allows the app to work even if the endpoint isn't implemented
-            setAccessToken(storedToken)
-            setApiClientToken(storedToken)
-            if (storedUser) {
-              setUser(JSON.parse(storedUser))
-            }
-          }
+          // Use stored token without validation
+          // Token validation will happen naturally when API calls are made
+          // If token is invalid, the API client will handle refresh
+          const userData = JSON.parse(storedUser)
+          setAccessToken(storedToken)
+          setUser(userData)
+          setApiClientToken(storedToken)
         }
       } catch (error) {
         console.error("Error initializing auth:", error)
@@ -169,11 +207,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     const data = await response.json()
+    console.log("[Auth Context] Login successful, storing token and user data")
     setAccessToken(data.accessToken)
     setUser(data.user)
     setApiClientToken(data.accessToken)
     localStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken)
     localStorage.setItem(USER_KEY, JSON.stringify(data.user))
+    console.log("[Auth Context] Token stored:", {
+      tokenLength: data.accessToken?.length,
+      userId: data.user?.id,
+      userEmail: data.user?.email,
+    })
   }, [])
 
   const logout = React.useCallback(async () => {

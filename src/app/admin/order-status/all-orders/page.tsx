@@ -1027,14 +1027,7 @@ function OrdersContent() {
   // Handle duplicate order - navigate to POS with pre-filled data
   const handleDuplicate = async (order: Order) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/orders/${order.id}`)
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch order details" }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
-
-      const fullOrder: Order = await response.json()
+      const fullOrder: Order = await apiCallJson(`/orders/${order.id}`)
       
       // Format delivery date for HTML date input (YYYY-MM-DD)
       const formattedDeliveryDate = formatDateForInput(fullOrder.delivery_date)
@@ -1096,14 +1089,7 @@ function OrdersContent() {
       // Open dialog first to trigger data fetching
       setDialogOpen(true)
       
-      const response = await fetch(`${API_BASE_URL}/orders/${order.id}`)
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to fetch order details" }))
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
-
-      const fullOrder: Order = await response.json()
+      const fullOrder: Order = await apiCallJson(`/orders/${order.id}`)
       setEditingOrder(fullOrder)
 
       // Fetch all required data in parallel

@@ -290,6 +290,17 @@ function NavMain({
   )
 }
 
+// Helper function to deterministically select an avatar based on user email
+function getAvatarPath(email: string, avatarCount: number = 3): string {
+  // Simple hash-based selection
+  let hash = 0
+  for (let i = 0; i < email.length; i++) {
+    hash = email.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  const index = Math.abs(hash) % avatarCount + 1
+  return `/assets/avatars/avatar-${index}.png`
+}
+
 function NavUser() {
   const { user, logout } = useAuth()
   const router = useRouter()
@@ -307,6 +318,24 @@ function NavUser() {
   const userName = user?.email?.split("@")[0] || "User"
   const userEmail = user?.email || "user@kabin247.com"
   const userRole = user?.role || "CSR"
+  const avatarPath = userEmail ? getAvatarPath(userEmail) : "/assets/avatars/avatar-1.png"
+
+  // Log avatar path for debugging and test image accessibility
+  React.useEffect(() => {
+    console.log("[NavUser] Avatar path:", avatarPath, "for user:", userEmail)
+    
+    // Test if image is accessible using native browser Image constructor
+    if (typeof window !== "undefined") {
+      const img = new window.Image()
+      img.onload = () => {
+        console.log("[NavUser] Avatar image loaded successfully:", avatarPath)
+      }
+      img.onerror = () => {
+        console.error("[NavUser] Avatar image failed to load:", avatarPath, "Full URL:", window.location.origin + avatarPath)
+      }
+      img.src = avatarPath
+    }
+  }, [avatarPath, userEmail])
 
   return (
     <SidebarMenu>
@@ -317,8 +346,22 @@ function NavUser() {
               size="lg"
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
-              <Avatar className="h-8 w-8 rounded-lg">
-                <AvatarImage src={`https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}&background=6366f1&color=fff&bold=true`} alt={userName} />
+              <Avatar className="h-8 w-8 rounded-lg shrink-0 flex-shrink-0">
+                <AvatarImage 
+                  src={avatarPath} 
+                  alt={userName}
+                  onError={(e) => {
+                    console.error("[NavUser] Failed to load avatar image:", avatarPath, e)
+                    const target = e.target as HTMLImageElement
+                    if (target) {
+                      console.error("[NavUser] Image error details:", {
+                        src: target.src,
+                        naturalWidth: target.naturalWidth,
+                        naturalHeight: target.naturalHeight,
+                      })
+                    }
+                  }}
+                />
                 <AvatarFallback className="rounded-lg bg-primary text-primary-foreground">{userInitial}</AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsed=true]:!hidden group-data-[collapsed=true]:!w-0 group-data-[collapsed=true]:!max-w-0 group-data-[collapsed=true]:!overflow-hidden">
@@ -335,8 +378,22 @@ function NavUser() {
           >
             <DropdownMenuLabel className="p-0 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarImage src={`https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}&background=6366f1&color=fff&bold=true`} alt={userName} />
+                <Avatar className="h-8 w-8 rounded-lg shrink-0">
+                  <AvatarImage 
+                    src={avatarPath} 
+                    alt={userName}
+                    onError={(e) => {
+                      console.error("[NavUser Dropdown] Failed to load avatar image:", avatarPath, e)
+                      const target = e.target as HTMLImageElement
+                      if (target) {
+                        console.error("[NavUser Dropdown] Image error details:", {
+                          src: target.src,
+                          naturalWidth: target.naturalWidth,
+                          naturalHeight: target.naturalHeight,
+                        })
+                      }
+                    }}
+                  />
                   <AvatarFallback className="rounded-lg bg-primary text-primary-foreground">{userInitial}</AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
