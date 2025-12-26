@@ -49,6 +49,8 @@ import {
   UserCog,
   UserPlus,
   Shield,
+  Trash2,
+  Clock,
 } from "lucide-react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -86,6 +88,26 @@ interface EmployeesResponse {
   employees: Employee[]
 }
 
+// Invite data structure matching API response
+interface Invite {
+  id: number
+  email: string
+  role: "ADMIN" | "CSR"
+  permissions: {
+    "orders.read"?: boolean
+    "orders.update_status"?: boolean
+    [key: string]: boolean | undefined
+  } | null
+  created_at: string
+  expires_at?: string
+  status?: string
+}
+
+// API Response types for invites
+interface InvitesResponse {
+  invites: Invite[]
+}
+
 // Form schema for inviting employee
 const inviteEmployeeSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -113,6 +135,14 @@ function EmployeesContent() {
   const [employees, setEmployees] = React.useState<Employee[]>([])
   const [isLoading, setIsLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
+
+  // Invite states
+  const [invites, setInvites] = React.useState<Invite[]>([])
+  const [isLoadingInvites, setIsLoadingInvites] = React.useState(true)
+  const [inviteError, setInviteError] = React.useState<string | null>(null)
+  const [deleteInviteDialogOpen, setDeleteInviteDialogOpen] = React.useState(false)
+  const [inviteToDelete, setInviteToDelete] = React.useState<Invite | null>(null)
+  const [isDeletingInvite, setIsDeletingInvite] = React.useState(false)
 
   // Dialog states
   const [inviteDialogOpen, setInviteDialogOpen] = React.useState(false)
@@ -180,6 +210,33 @@ function EmployeesContent() {
     }
   }, [fetchEmployees, isAdmin])
 
+  // Fetch invites from API
+  const fetchInvites = React.useCallback(async () => {
+    if (!isAdmin) return
+
+    setIsLoadingInvites(true)
+    setInviteError(null)
+
+    try {
+      const data = await apiCallJson<InvitesResponse>("/employees/invites")
+      setInvites(data.invites)
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to fetch invites"
+      setInviteError(errorMessage)
+      toast.error("Error", {
+        description: errorMessage,
+      })
+    } finally {
+      setIsLoadingInvites(false)
+    }
+  }, [isAdmin])
+
+  React.useEffect(() => {
+    if (isAdmin) {
+      fetchInvites()
+    }
+  }, [fetchInvites, isAdmin])
+
   // Handle invite employee
   const handleInvite = async (data: InviteEmployeeFormValues) => {
     setIsInviting(true)
@@ -196,6 +253,7 @@ function EmployeesContent() {
       setInviteDialogOpen(false)
       inviteForm.reset()
       fetchEmployees()
+      fetchInvites() // Refresh invites list
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to send invitation"
       toast.error("Error", {
@@ -274,6 +332,39 @@ function EmployeesContent() {
       },
     })
     setPermissionsDialogOpen(true)
+  }
+
+  // Handle delete invite
+  const handleDeleteInvite = (invite: Invite) => {
+    setInviteToDelete(invite)
+    setDeleteInviteDialogOpen(true)
+  }
+
+  // Confirm delete invite
+  const confirmDeleteInvite = async () => {
+    if (!inviteToDelete) return
+
+    setIsDeletingInvite(true)
+    try {
+      await apiCallJson(`/employees/invites/${inviteToDelete.id}`, {
+        method: "DELETE",
+      })
+
+      toast.success("Invite revoked", {
+        description: `Invitation for ${inviteToDelete.email} has been revoked.`,
+      })
+
+      setDeleteInviteDialogOpen(false)
+      setInviteToDelete(null)
+      fetchInvites() // Refresh invites list
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to revoke invitation"
+      toast.error("Error", {
+        description: errorMessage,
+      })
+    } finally {
+      setIsDeletingInvite(false)
+    }
   }
 
   if (authLoading) {
@@ -377,10 +468,10 @@ function EmployeesContent() {
                                 Update Status
                               </span>
                             )}
-                            {!employee.permissions ||
-                              (Object.values(employee.permissions).every((v) => !v) && (
-                                <span className="text-xs text-muted-foreground">No permissions</span>
-                              ))}
+                            {(!employee.permissions ||
+                              Object.values(employee.permissions).every((v) => !v)) && (
+                              <span className="text-xs text-muted-foreground">No permissions</span>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell className="text-right">
@@ -412,6 +503,110 @@ function EmployeesContent() {
                                     Reactivate
                                   </>
                                 )}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Pending Invitations Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Pending Invitations</CardTitle>
+              <CardDescription>
+                List of all pending employee invitations
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoadingInvites ? (
+                <div className="space-y-2">
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-12 w-full" />
+                  ))}
+                </div>
+              ) : inviteError ? (
+                <div className="text-center py-8 text-destructive">{inviteError}</div>
+              ) : invites.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  No pending invitations. All invitations have been accepted or revoked.
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Permissions</TableHead>
+                      <TableHead>Invited Date</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {invites.map((invite) => (
+                      <TableRow key={invite.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Mail className="h-4 w-4 text-muted-foreground" />
+                            {invite.email}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="inline-flex items-center rounded-full bg-secondary px-2 py-1 text-xs font-medium">
+                            {invite.role}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {invite.permissions?.["orders.read"] && (
+                              <span className="text-xs bg-blue-500/10 text-blue-600 px-2 py-0.5 rounded">
+                                Read Orders
+                              </span>
+                            )}
+                            {invite.permissions?.["orders.update_status"] && (
+                              <span className="text-xs bg-green-500/10 text-green-600 px-2 py-0.5 rounded">
+                                Update Status
+                              </span>
+                            )}
+                            {(!invite.permissions ||
+                              Object.values(invite.permissions).every((v) => !v)) && (
+                              <span className="text-xs text-muted-foreground">No permissions</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5 text-muted-foreground">
+                            <Clock className="h-3.5 w-3.5" />
+                            <span className="text-sm">
+                              {new Date(invite.created_at).toLocaleDateString("en-US", {
+                                year: "numeric",
+                                month: "short",
+                                day: "numeric",
+                              })}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                              <DropdownMenuItem
+                                onClick={() => handleDeleteInvite(invite)}
+                                disabled={isDeletingInvite}
+                                className="text-destructive"
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Revoke Invitation
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -630,6 +825,49 @@ function EmployeesContent() {
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Invite Confirmation Dialog */}
+      <Dialog open={deleteInviteDialogOpen} onOpenChange={setDeleteInviteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Revoke Invitation</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to revoke the invitation for {inviteToDelete?.email}? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setDeleteInviteDialogOpen(false)
+                setInviteToDelete(null)
+              }}
+              disabled={isDeletingInvite}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={confirmDeleteInvite}
+              disabled={isDeletingInvite}
+            >
+              {isDeletingInvite ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Revoking...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Revoke Invitation
+                </>
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </SidebarProvider>
