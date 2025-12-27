@@ -445,6 +445,7 @@ function OrdersContent() {
   
   const [dialogOpen, setDialogOpen] = React.useState(false)
   const [editingOrder, setEditingOrder] = React.useState<Order | null>(null)
+  const [isLoadingFormData, setIsLoadingFormData] = React.useState(false)
   const lastResetOrderId = React.useRef<number | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
   const [orderToDelete, setOrderToDelete] = React.useState<Order | null>(null)
@@ -585,10 +586,27 @@ function OrdersContent() {
       setTotal(data.total)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to fetch orders"
-      setError(errorMessage)
-      toast.error("Error loading orders", {
-        description: errorMessage,
-      })
+      
+      // Check if it's a permission error
+      if (errorMessage.toLowerCase().includes("permission") || 
+          errorMessage.toLowerCase().includes("insufficient") ||
+          errorMessage.toLowerCase().includes("forbidden") ||
+          errorMessage.toLowerCase().includes("403")) {
+        console.error("[Orders] Permission error when fetching orders:", {
+          error: errorMessage,
+          note: "This may indicate that the employee's permissions were not properly set when they accepted the invitation. Please verify permissions in the Employees page.",
+        })
+        setError("Insufficient permissions to view orders. Please contact an administrator to verify your permissions.")
+        toast.error("Permission Denied", {
+          description: "You don't have permission to view orders. Please contact an administrator to verify your 'Read Orders' permission is enabled.",
+          duration: 8000,
+        })
+      } else {
+        setError(errorMessage)
+        toast.error("Error loading orders", {
+          description: errorMessage,
+        })
+      }
     } finally {
       setIsLoading(false)
     }
@@ -721,6 +739,7 @@ function OrdersContent() {
       // Only reset if we haven't already reset for this order
       if (lastResetOrderId.current !== editingOrder.id) {
         lastResetOrderId.current = editingOrder.id
+        setIsLoadingFormData(true)
         
         // Map order items to form format
         const formItems = editingOrder.items && editingOrder.items.length > 0
@@ -821,6 +840,8 @@ function OrdersContent() {
               form.setValue(`items.${index}.itemName`, item.itemName, { shouldValidate: false })
             }
           })
+          // Form is fully populated, hide loader
+          setIsLoadingFormData(false)
         }, 200)
       }
     }
@@ -979,6 +1000,7 @@ function OrdersContent() {
       
       // Open dialog first to trigger data fetching
       setDialogOpen(true)
+      setIsLoadingFormData(true)
       
       const fullOrder: Order = await apiCallJson(`/orders/${order.id}`)
       setEditingOrder(fullOrder)
@@ -1331,32 +1353,20 @@ function OrdersContent() {
     setPdfHtml("") // Reset while loading
 
     try {
-      // Determine endpoint based on status or forced type
-      let endpoint: string
+      // Determine endpoint path based on status or forced type
+      let endpointPath: string
       if (forceType === "a") {
-        endpoint = `${API_BASE_URL}/orders/${order.id}/preview`
+        endpointPath = `/orders/${order.id}/preview`
       } else if (forceType === "b") {
-        endpoint = `${API_BASE_URL}/orders/${order.id}/preview-b`
+        endpointPath = `/orders/${order.id}/preview-b`
       } else {
-        endpoint = getPdfEndpoint(order.id, order.status, "preview")
+        // Extract path from full URL
+        const fullEndpoint = getPdfEndpoint(order.id, order.status, "preview")
+        endpointPath = fullEndpoint.replace(API_BASE_URL, "")
       }
 
-      const response = await fetch(endpoint)
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        let errorMessage = "Failed to load preview"
-        try {
-          const errorData = JSON.parse(errorText)
-          errorMessage = errorData.error || errorData.message || errorMessage
-        } catch {
-          errorMessage = errorText || errorMessage
-        }
-        throw new Error(errorMessage)
-      }
-
-      // The endpoint returns JSON with html property
-      const data = await response.json()
+      // Use apiCallJson to include authentication headers
+      const data = await apiCallJson<{ html: string }>(endpointPath)
       const html = data.html || ""
       setPdfHtml(html)
     } catch (err) {
@@ -2471,7 +2481,12 @@ function OrdersContent() {
             </Drawer>
 
             {/* Edit Order Dialog */}
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <Dialog open={dialogOpen} onOpenChange={(open) => {
+              setDialogOpen(open)
+              if (!open) {
+                setIsLoadingFormData(false)
+              }
+            }}>
               <DialogContent className="!max-w-[98vw] w-[98vw] max-h-[95vh] overflow-hidden flex flex-col p-0 gap-0">
                 <DialogHeader className="px-4 sm:px-6 lg:px-8 pt-6 pb-4 border-b border-border/30 bg-gradient-to-b from-background to-background/95 shrink-0">
                   <div className="flex items-center gap-4">
@@ -2491,7 +2506,16 @@ function OrdersContent() {
                     </div>
                   </div>
                 </DialogHeader>
-                <div className="flex-1 overflow-y-auto scrollbar-hide">
+                <div className="flex-1 overflow-y-auto scrollbar-hide relative">
+                  {isLoadingFormData && (
+                    <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+                      <div className="flex flex-col items-center gap-3">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        <p className="text-sm font-medium text-foreground">Loading order data...</p>
+                        <p className="text-xs text-muted-foreground">Please wait while we populate the form</p>
+                      </div>
+                    </div>
+                  )}
                   <div className="p-4 sm:p-6 lg:p-8">
                     <Card className="group relative overflow-hidden rounded-2xl border-0 bg-gradient-to-b from-card via-card to-card/95 shadow-2xl shadow-black/40 ring-1 ring-white/[0.05]">
                       <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.02] via-transparent to-transparent" />

@@ -193,9 +193,28 @@ function DashboardContent() {
       setLastUpdated(new Date())
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to load orders"
-      setError(errorMessage)
-      if (showRefresh) {
-        toast.error("Failed to refresh", { description: errorMessage })
+      
+      // Check if it's a permission error
+      if (errorMessage.toLowerCase().includes("permission") || 
+          errorMessage.toLowerCase().includes("insufficient") ||
+          errorMessage.toLowerCase().includes("forbidden") ||
+          errorMessage.toLowerCase().includes("403")) {
+        console.error("[Dashboard] Permission error when fetching orders:", {
+          error: errorMessage,
+          note: "This may indicate that the employee's permissions were not properly set when they accepted the invitation. Please verify permissions in the Employees page.",
+        })
+        setError("Insufficient permissions to view orders. Please contact an administrator to verify your permissions.")
+        if (showRefresh) {
+          toast.error("Permission Denied", {
+            description: "You don't have permission to view orders. Please contact an administrator to verify your 'Read Orders' permission is enabled.",
+            duration: 8000,
+          })
+        }
+      } else {
+        setError(errorMessage)
+        if (showRefresh) {
+          toast.error("Failed to refresh", { description: errorMessage })
+        }
       }
     } finally {
       setIsLoading(false)

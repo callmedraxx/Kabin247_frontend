@@ -291,19 +291,21 @@ function NavMain({
 }
 
 // Helper function to deterministically select an avatar based on user email
-function getAvatarPath(email: string, avatarCount: number = 3): string {
+// Supports up to 10 NFT-style avatars
+function getAvatarPath(email: string, avatarCount: number = 10): string {
   // Simple hash-based selection
   let hash = 0
   for (let i = 0; i < email.length; i++) {
     hash = email.charCodeAt(i) + ((hash << 5) - hash)
   }
   const index = Math.abs(hash) % avatarCount + 1
-  return `/assets/avatars/avatar-${index}.png`
+  return `/assets/avatars/avatar-${index}.jpg`
 }
 
 function NavUser() {
   const { user, logout } = useAuth()
   const router = useRouter()
+  const { state: sidebarState } = useSidebar()
 
   const handleLogout = async () => {
     try {
@@ -318,24 +320,8 @@ function NavUser() {
   const userName = user?.email?.split("@")[0] || "User"
   const userEmail = user?.email || "user@kabin247.com"
   const userRole = user?.role || "CSR"
-  const avatarPath = userEmail ? getAvatarPath(userEmail) : "/assets/avatars/avatar-1.png"
-
-  // Log avatar path for debugging and test image accessibility
-  React.useEffect(() => {
-    console.log("[NavUser] Avatar path:", avatarPath, "for user:", userEmail)
-    
-    // Test if image is accessible using native browser Image constructor
-    if (typeof window !== "undefined") {
-      const img = new window.Image()
-      img.onload = () => {
-        console.log("[NavUser] Avatar image loaded successfully:", avatarPath)
-      }
-      img.onerror = () => {
-        console.error("[NavUser] Avatar image failed to load:", avatarPath, "Full URL:", window.location.origin + avatarPath)
-      }
-      img.src = avatarPath
-    }
-  }, [avatarPath, userEmail])
+  const avatarPath = userEmail ? getAvatarPath(userEmail) : "/assets/avatars/avatar-1.jpg"
+  const isCollapsed = sidebarState === "collapsed"
 
   return (
     <SidebarMenu>
@@ -344,12 +330,34 @@ function NavUser() {
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
               size="lg"
-              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground group-data-[collapsed=true]:justify-center group-data-[collapsed=true]:items-center [&>[data-sidebar=user-avatar]]:group-data-[collapsed=true]:!flex [&>[data-sidebar=user-avatar]]:group-data-[collapsed=true]:!visible [&>[data-sidebar=user-avatar]]:group-data-[collapsed=true]:!opacity-100 [&>[data-sidebar=user-avatar]]:group-data-[collapsed=true]:!relative [&>[data-sidebar=user-avatar]]:group-data-[collapsed=true]:!z-auto [&>[data-sidebar=user-avatar]]:group-data-[collapsed=true]:!w-7 [&>[data-sidebar=user-avatar]]:group-data-[collapsed=true]:!h-7 [&>[data-sidebar=user-avatar]>span]:group-data-[collapsed=true]:!flex [&>[data-sidebar=user-avatar]>span]:group-data-[collapsed=true]:!visible [&>[data-sidebar=user-avatar]>span]:group-data-[collapsed=true]:!opacity-100 [&>[data-sidebar=user-avatar]>span]:group-data-[collapsed=true]:!relative [&>[data-sidebar=user-avatar]>span]:group-data-[collapsed=true]:!w-full [&>[data-sidebar=user-avatar]>span]:group-data-[collapsed=true]:!h-full"
             >
-              <Avatar className="h-8 w-8 rounded-lg shrink-0 flex-shrink-0">
+              <div 
+                data-sidebar="user-avatar-wrapper"
+                className={isCollapsed ? 'flex items-center justify-center w-7 h-7 shrink-0' : 'shrink-0'}
+              >
+                <Avatar 
+                  data-sidebar="user-avatar"
+                  className="h-8 w-8 rounded-lg shrink-0 flex-shrink-0"
+                  style={isCollapsed ? { 
+                    display: 'flex', 
+                    visibility: 'visible', 
+                    opacity: 1,
+                    width: '28px',
+                    height: '28px',
+                    minWidth: '28px',
+                    minHeight: '28px',
+                    maxWidth: '28px',
+                    maxHeight: '28px',
+                    position: 'relative',
+                    zIndex: 'auto'
+                  } : undefined}
+                >
                 <AvatarImage 
                   src={avatarPath} 
                   alt={userName}
+                  className={isCollapsed ? '!block !visible !opacity-100' : ''}
+                  style={isCollapsed ? { display: 'block', visibility: 'visible', opacity: 1 } : undefined}
                   onError={(e) => {
                     console.error("[NavUser] Failed to load avatar image:", avatarPath, e)
                     const target = e.target as HTMLImageElement
@@ -362,8 +370,26 @@ function NavUser() {
                     }
                   }}
                 />
-                <AvatarFallback className="rounded-lg bg-primary text-primary-foreground">{userInitial}</AvatarFallback>
+                <AvatarFallback 
+                  className={`rounded-lg ${isCollapsed ? '!flex !visible !opacity-100 bg-primary text-primary-foreground' : 'bg-primary text-primary-foreground'}`}
+                  style={isCollapsed ? { 
+                    display: 'flex', 
+                    visibility: 'visible', 
+                    opacity: 1,
+                    backgroundColor: 'hsl(var(--primary))',
+                    color: 'hsl(var(--primary-foreground))',
+                    width: '100%',
+                    height: '100%',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '14px',
+                    fontWeight: '600'
+                  } : undefined}
+                >
+                  {userInitial}
+                </AvatarFallback>
               </Avatar>
+              </div>
               <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsed=true]:!hidden group-data-[collapsed=true]:!w-0 group-data-[collapsed=true]:!max-w-0 group-data-[collapsed=true]:!overflow-hidden">
                 <span className="truncate font-medium">{userName}</span>
                 <span className="truncate text-xs">{userEmail}</span>

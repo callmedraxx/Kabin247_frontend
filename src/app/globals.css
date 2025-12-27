@@ -176,12 +176,13 @@ body {
   }
   
   /* Ensure sidebar text is completely hidden when collapsed - even on hover */
-  .sidebar-collapsed [data-sidebar="menu-button"] > span,
-  .sidebar-collapsed [data-sidebar="menu-button"]:hover > span,
-  .sidebar-collapsed [data-sidebar="menu-button"]:focus > span,
-  .sidebar-collapsed [data-sidebar="menu-button"]:active > span,
-  .sidebar-collapsed [data-sidebar="menu-item"]:hover [data-sidebar="menu-button"] > span,
-  .sidebar-collapsed [data-sidebar="menu-item"]:focus [data-sidebar="menu-button"] > span,
+  /* Exclude avatar fallback from being hidden */
+  .sidebar-collapsed [data-sidebar="menu-button"] > span:not([data-radix-avatar-fallback]):not([data-sidebar="user-avatar"] span),
+  .sidebar-collapsed [data-sidebar="menu-button"]:hover > span:not([data-radix-avatar-fallback]):not([data-sidebar="user-avatar"] span),
+  .sidebar-collapsed [data-sidebar="menu-button"]:focus > span:not([data-radix-avatar-fallback]):not([data-sidebar="user-avatar"] span),
+  .sidebar-collapsed [data-sidebar="menu-button"]:active > span:not([data-radix-avatar-fallback]):not([data-sidebar="user-avatar"] span),
+  .sidebar-collapsed [data-sidebar="menu-item"]:hover [data-sidebar="menu-button"] > span:not([data-radix-avatar-fallback]):not([data-sidebar="user-avatar"] span),
+  .sidebar-collapsed [data-sidebar="menu-item"]:focus [data-sidebar="menu-button"] > span:not([data-radix-avatar-fallback]):not([data-sidebar="user-avatar"] span),
   .sidebar-collapsed [data-sidebar="menu-sub-button"] > span,
   .sidebar-collapsed [data-sidebar="menu-sub-button"]:hover > span,
   .sidebar-collapsed [data-sidebar="menu-sub"] {
@@ -210,12 +211,13 @@ body {
   }
   
   /* Also target by data-collapsed attribute for extra safety */
-  [data-collapsed="true"] [data-sidebar="menu-button"] > span,
-  [data-collapsed="true"] [data-sidebar="menu-button"]:hover > span,
-  [data-collapsed="true"] [data-sidebar="menu-button"]:focus > span,
-  [data-collapsed="true"] [data-sidebar="menu-button"]:active > span,
-  [data-collapsed="true"] [data-sidebar="menu-item"]:hover [data-sidebar="menu-button"] > span,
-  [data-collapsed="true"] [data-sidebar="menu-item"]:focus [data-sidebar="menu-button"] > span,
+  /* Exclude avatar fallback from being hidden */
+  [data-collapsed="true"] [data-sidebar="menu-button"] > span:not([data-radix-avatar-fallback]):not([data-sidebar="user-avatar"] span),
+  [data-collapsed="true"] [data-sidebar="menu-button"]:hover > span:not([data-radix-avatar-fallback]):not([data-sidebar="user-avatar"] span),
+  [data-collapsed="true"] [data-sidebar="menu-button"]:focus > span:not([data-radix-avatar-fallback]):not([data-sidebar="user-avatar"] span),
+  [data-collapsed="true"] [data-sidebar="menu-button"]:active > span:not([data-radix-avatar-fallback]):not([data-sidebar="user-avatar"] span),
+  [data-collapsed="true"] [data-sidebar="menu-item"]:hover [data-sidebar="menu-button"] > span:not([data-radix-avatar-fallback]):not([data-sidebar="user-avatar"] span),
+  [data-collapsed="true"] [data-sidebar="menu-item"]:focus [data-sidebar="menu-button"] > span:not([data-radix-avatar-fallback]):not([data-sidebar="user-avatar"] span),
   [data-collapsed="true"] [data-sidebar="menu-sub-button"] > span,
   [data-collapsed="true"] [data-sidebar="menu-sub-button"]:hover > span,
   [data-collapsed="true"] [data-sidebar="menu-sub"] {
@@ -233,6 +235,88 @@ body {
     margin: 0 !important;
   }
   
+  /* Ensure avatar is visible when sidebar is collapsed */
+  .sidebar-collapsed [data-sidebar="user-avatar"],
+  [data-collapsed="true"] [data-sidebar="user-avatar"],
+  .sidebar-collapsed [data-sidebar="menu-button"] > [data-sidebar="user-avatar"],
+  [data-collapsed="true"] [data-sidebar="menu-button"] > [data-sidebar="user-avatar"],
+  .sidebar-collapsed [data-sidebar="menu-button"] > [data-radix-avatar-root],
+  [data-collapsed="true"] [data-sidebar="menu-button"] > [data-radix-avatar-root],
+  .sidebar-collapsed [data-sidebar="menu-button"] > div[class*="Avatar"],
+  [data-collapsed="true"] [data-sidebar="menu-button"] > div[class*="Avatar"],
+  .sidebar-collapsed [data-sidebar="menu-button"] > div[class*="rounded-lg"][class*="shrink-0"],
+  [data-collapsed="true"] [data-sidebar="menu-button"] > div[class*="rounded-lg"][class*="shrink-0"] {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: auto !important;
+    height: auto !important;
+    max-width: none !important;
+    position: relative !important;
+    pointer-events: auto !important;
+  }
+  
+  /* Force avatar fallback to be visible when collapsed - must come after span hiding rules */
+  .sidebar-collapsed [data-sidebar="menu-button"] [data-sidebar="user-avatar"] [data-radix-avatar-fallback],
+  [data-collapsed="true"] [data-sidebar="menu-button"] [data-sidebar="user-avatar"] [data-radix-avatar-fallback],
+  .sidebar-collapsed [data-sidebar="menu-button"] [data-sidebar="user-avatar"] span,
+  [data-collapsed="true"] [data-sidebar="menu-button"] [data-sidebar="user-avatar"] span,
+  .sidebar-collapsed [data-sidebar="user-avatar"] [data-radix-avatar-fallback],
+  [data-collapsed="true"] [data-sidebar="user-avatar"] [data-radix-avatar-fallback],
+  .sidebar-collapsed [data-sidebar="user-avatar"] span,
+  [data-collapsed="true"] [data-sidebar="user-avatar"] span {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    background-color: hsl(var(--primary)) !important;
+    color: hsl(var(--primary-foreground)) !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    position: relative !important;
+    pointer-events: auto !important;
+    font-size: 14px !important;
+    line-height: normal !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    z-index: auto !important;
+  }
+  
+  /* Ensure avatar container itself is visible and properly sized when collapsed */
+  /* Must override Tailwind's [&>span] classes from sidebarMenuButtonVariants */
+  .sidebar-collapsed [data-sidebar="menu-button"] [data-sidebar="user-avatar"],
+  [data-collapsed="true"] [data-sidebar="menu-button"] [data-sidebar="user-avatar"],
+  .sidebar-collapsed [data-sidebar="user-avatar"],
+  [data-collapsed="true"] [data-sidebar="user-avatar"] {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 28px !important;
+    height: 28px !important;
+    min-width: 28px !important;
+    min-height: 28px !important;
+    max-width: 28px !important;
+    max-height: 28px !important;
+    position: relative !important;
+    z-index: auto !important;
+  }
+  
+  /* Override Tailwind's span-hiding classes specifically for avatar fallback */
+  .sidebar-collapsed [data-sidebar="menu-button"] [data-sidebar="user-avatar"] > span,
+  [data-collapsed="true"] [data-sidebar="menu-button"] [data-sidebar="user-avatar"] > span,
+  .sidebar-collapsed [data-sidebar="user-avatar"] > span,
+  [data-collapsed="true"] [data-sidebar="user-avatar"] > span {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100% !important;
+    position: relative !important;
+    z-index: auto !important;
+    pointer-events: auto !important;
+  }
+  
   [data-collapsed="true"] [data-sidebar="group-label"],
   [data-collapsed="true"] [data-sidebar="group-label"]:hover {
     display: none !important;
@@ -242,4 +326,49 @@ body {
     overflow: hidden !important;
     visibility: hidden !important;
   }
+}
+
+/* Avatar visibility rules - outside @layer for maximum specificity */
+.sidebar-collapsed [data-sidebar="menu-button"] [data-sidebar="user-avatar-wrapper"],
+[data-collapsed="true"] [data-sidebar="menu-button"] [data-sidebar="user-avatar-wrapper"],
+.sidebar-collapsed [data-sidebar="user-avatar-wrapper"],
+[data-collapsed="true"] [data-sidebar="user-avatar-wrapper"],
+.sidebar-collapsed [data-sidebar="menu-button"] [data-sidebar="user-avatar"],
+[data-collapsed="true"] [data-sidebar="menu-button"] [data-sidebar="user-avatar"],
+.sidebar-collapsed [data-sidebar="user-avatar"],
+[data-collapsed="true"] [data-sidebar="user-avatar"] {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  min-height: 28px !important;
+  max-width: 28px !important;
+  max-height: 28px !important;
+  position: relative !important;
+  z-index: auto !important;
+}
+
+.sidebar-collapsed [data-sidebar="menu-button"] [data-sidebar="user-avatar"] > span,
+[data-collapsed="true"] [data-sidebar="menu-button"] [data-sidebar="user-avatar"] > span,
+.sidebar-collapsed [data-sidebar="user-avatar"] > span,
+[data-collapsed="true"] [data-sidebar="user-avatar"] > span,
+.sidebar-collapsed [data-sidebar="menu-button"] [data-sidebar="user-avatar"] [data-radix-avatar-fallback],
+[data-collapsed="true"] [data-sidebar="menu-button"] [data-sidebar="user-avatar"] [data-radix-avatar-fallback],
+.sidebar-collapsed [data-sidebar="user-avatar"] [data-radix-avatar-fallback],
+[data-collapsed="true"] [data-sidebar="user-avatar"] [data-radix-avatar-fallback] {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  position: relative !important;
+  z-index: auto !important;
+  pointer-events: auto !important;
+  background-color: hsl(var(--primary)) !important;
+  color: hsl(var(--primary-foreground)) !important;
+  font-size: 14px !important;
+  line-height: normal !important;
 }

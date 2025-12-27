@@ -673,15 +673,26 @@ function EmployeesContent() {
                     <FormField
                       control={inviteForm.control}
                       name="permissions.orders.read"
-                      render={({ field }) => (
-                        <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-lg border border-transparent bg-background/50 p-3 transition-all hover:border-border hover:bg-background/80">
-                          <FormControl>
-                            <Checkbox
-                              checked={field.value}
-                              onCheckedChange={field.onChange}
-                              className="mt-0.5"
-                            />
-                          </FormControl>
+                      render={({ field }) => {
+                        // Get current permissions object
+                        const currentPermissions = inviteForm.getValues("permissions") || {}
+                        const currentValue = currentPermissions["orders.read"] ?? false
+                        
+                        return (
+                          <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-lg border border-transparent bg-background/50 p-3 transition-all hover:border-border hover:bg-background/80">
+                            <FormControl>
+                              <Checkbox
+                                checked={currentValue}
+                                onCheckedChange={(checked) => {
+                                  // Manually update the permissions object with the correct flat key structure
+                                  inviteForm.setValue("permissions", {
+                                    ...currentPermissions,
+                                    "orders.read": checked === true,
+                                  })
+                                }}
+                                className="mt-0.5"
+                              />
+                            </FormControl>
                           <div className="space-y-1 leading-none flex-1">
                             <FormLabel className="font-medium cursor-pointer">
                               Read Orders
@@ -691,20 +702,32 @@ function EmployeesContent() {
                             </p>
                           </div>
                         </FormItem>
-                      )}
+                        )
+                      }}
                     />
                     <FormField
                       control={inviteForm.control}
                       name="permissions.orders.update_status"
-                      render={({ field }) => (
-                        <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-lg border border-transparent bg-background/50 p-3 transition-all hover:border-border hover:bg-background/80">
-                          <FormControl>
-                            <Checkbox
-                              checked={field.value}
-                              onCheckedChange={field.onChange}
-                              className="mt-0.5"
-                            />
-                          </FormControl>
+                      render={({ field }) => {
+                        // Get current permissions object
+                        const currentPermissions = inviteForm.getValues("permissions") || {}
+                        const currentValue = currentPermissions["orders.update_status"] ?? false
+                        
+                        return (
+                          <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-lg border border-transparent bg-background/50 p-3 transition-all hover:border-border hover:bg-background/80">
+                            <FormControl>
+                              <Checkbox
+                                checked={currentValue}
+                                onCheckedChange={(checked) => {
+                                  // Manually update the permissions object with the correct flat key structure
+                                  inviteForm.setValue("permissions", {
+                                    ...currentPermissions,
+                                    "orders.update_status": checked === true,
+                                  })
+                                }}
+                                className="mt-0.5"
+                              />
+                            </FormControl>
                           <div className="space-y-1 leading-none flex-1">
                             <FormLabel className="font-medium cursor-pointer">
                               Update Order Status
@@ -714,7 +737,8 @@ function EmployeesContent() {
                             </p>
                           </div>
                         </FormItem>
-                      )}
+                        )
+                      }}
                     />
                   </CardContent>
                 </Card>
@@ -771,42 +795,62 @@ function EmployeesContent() {
                 <FormField
                   control={permissionsForm.control}
                   name="permissions.orders.read"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                      <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                      <div className="space-y-1 leading-none">
-                        <FormLabel className="font-normal">Read Orders</FormLabel>
-                        <p className="text-xs text-muted-foreground">
-                          Allow employee to view orders
-                        </p>
-                      </div>
-                    </FormItem>
-                  )}
+                  render={({ field }) => {
+                    const currentPermissions = permissionsForm.getValues("permissions") || {}
+                    const currentValue = currentPermissions["orders.read"] ?? false
+                    
+                    return (
+                      <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                        <FormControl>
+                          <Checkbox
+                            checked={currentValue}
+                            onCheckedChange={(checked) => {
+                              permissionsForm.setValue("permissions", {
+                                ...currentPermissions,
+                                "orders.read": checked === true,
+                              })
+                            }}
+                          />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel className="font-normal">Read Orders</FormLabel>
+                          <p className="text-xs text-muted-foreground">
+                            Allow employee to view orders
+                          </p>
+                        </div>
+                      </FormItem>
+                    )
+                  }}
                 />
                 <FormField
                   control={permissionsForm.control}
                   name="permissions.orders.update_status"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                      <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                      <div className="space-y-1 leading-none">
-                        <FormLabel className="font-normal">Update Order Status</FormLabel>
-                        <p className="text-xs text-muted-foreground">
-                          Allow employee to update order status (except "paid")
-                        </p>
-                      </div>
-                    </FormItem>
-                  )}
+                  render={({ field }) => {
+                    const currentPermissions = permissionsForm.getValues("permissions") || {}
+                    const currentValue = currentPermissions["orders.update_status"] ?? false
+                    
+                    return (
+                      <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                        <FormControl>
+                          <Checkbox
+                            checked={currentValue}
+                            onCheckedChange={(checked) => {
+                              permissionsForm.setValue("permissions", {
+                                ...currentPermissions,
+                                "orders.update_status": checked === true,
+                              })
+                            }}
+                          />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel className="font-normal">Update Order Status</FormLabel>
+                          <p className="text-xs text-muted-foreground">
+                            Allow employee to update order status (except "paid")
+                          </p>
+                        </div>
+                      </FormItem>
+                    )
+                  }}
                 />
               </div>
               <DialogFooter>

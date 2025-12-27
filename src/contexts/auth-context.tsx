@@ -300,6 +300,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const data = await response.json()
     console.log("[Auth Context] Login successful, storing token and user data")
     
+    // Log user permissions to verify they're included
+    console.log("[Auth Context] User data received from login:", {
+      userId: data.user?.id,
+      userEmail: data.user?.email,
+      userRole: data.user?.role,
+      hasPermissions: !!data.user?.permissions,
+      permissions: data.user?.permissions,
+      permissionsKeys: data.user?.permissions ? Object.keys(data.user.permissions) : [],
+      ordersRead: data.user?.permissions?.["orders.read"],
+      ordersUpdateStatus: data.user?.permissions?.["orders.update_status"],
+    })
+    
+    // Warn if CSR user doesn't have permissions object
+    if (data.user?.role === "CSR" && !data.user?.permissions) {
+      console.warn("[Auth Context] WARNING: CSR user logged in without permissions object!", {
+        userId: data.user?.id,
+        userEmail: data.user?.email,
+        note: "This may cause permission errors. Permissions should be set when employee accepts invitation.",
+      })
+    }
+    
     // Log token expiration information
     const expTime = getTokenExpirationTime(data.accessToken)
     const timeUntilExp = getTokenTimeUntilExpiration(data.accessToken)
@@ -307,7 +328,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const now = Date.now()
     
     // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/3e871f39-4ed4-465f-8745-06da452ba93a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth-context.tsx:216',message:'Token received on login',data:{expTime,now,timeUntilExp,lifetime,lifetimeSeconds:lifetime,lifetimeMinutes:lifetime?Math.round(lifetime/60):null,expTimeISO:expTime?new Date(expTime).toISOString():null,userId:data.user?.id,userEmail:data.user?.email},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7243/ingest/3e871f39-4ed4-465f-8745-06da452ba93a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth-context.tsx:216',message:'Token received on login',data:{expTime,now,timeUntilExp,lifetime,lifetimeSeconds:lifetime,lifetimeMinutes:lifetime?Math.round(lifetime/60):null,expTimeISO:expTime?new Date(expTime).toISOString():null,userId:data.user?.id,userEmail:data.user?.email,hasPermissions:!!data.user?.permissions,permissionsKeys:data.user?.permissions?Object.keys(data.user.permissions):[]},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
     // #endregion
     
     if (expTime && timeUntilExp !== null && lifetime !== null) {
@@ -367,8 +388,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const hasPermission = React.useCallback(
     (permission: string): boolean => {
       if (isAdmin) return true // Admin has all permissions
-      if (!user?.permissions) return false
-      return user.permissions[permission] === true
+      if (!user?.permissions) {
+        // Log warning for CSR users without permissions
+        if (user?.role === "CSR") {
+          console.warn(`[Auth Context] Permission check failed: CSR user has no permissions object`, {
+            userId: user?.id,
+            userEmail: user?.email,
+            requestedPermission: permission,
+            note: "This may indicate permissions were not set when employee accepted invitation",
+          })
+        }
+        return false
+      }
+      const hasPerm = user.permissions[permission] === true
+      if (!hasPerm && user.role === "CSR") {
+        console.warn(`[Auth Context] Permission check failed: CSR user does not have permission`, {
+          userId: user?.id,
+          userEmail: user?.email,
+          requestedPermission: permission,
+          availablePermissions: Object.keys(user.permissions).filter(k => user.permissions?.[k] === true),
+          allPermissions: user.permissions,
+        })
+      }
+      return hasPerm
     },
     [isAdmin, user]
   )

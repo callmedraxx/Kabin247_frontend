@@ -435,6 +435,7 @@ function POSContent() {
   
   // Flag to prevent draft saving immediately after order creation or clear
   const skipNextDraftSave = React.useRef(false)
+  const [isLoadingDuplicateData, setIsLoadingDuplicateData] = React.useState(false)
   
   // Use contexts for data
   const { 
@@ -841,6 +842,7 @@ function POSContent() {
       const duplicateDataStr = sessionStorage.getItem("duplicateOrder")
       if (duplicateDataStr) {
         try {
+          setIsLoadingDuplicateData(true)
           const duplicateData = JSON.parse(duplicateDataStr)
           
           // Format delivery date if provided
@@ -1036,6 +1038,8 @@ function POSContent() {
           // Also call it again after a short delay to ensure Combobox components recognize the values
           setTimeout(() => {
             setValuesWhenReady()
+            // Form is fully populated, hide loader
+            setIsLoadingDuplicateData(false)
           }, 200)
           
           // Fetch options directly if they haven't been loaded yet (backup - should already be loaded)
@@ -1113,11 +1117,13 @@ function POSContent() {
             description: "All fields have been copied from the original order. Draft saved.",
           })
           setHasLoadedInitialData(true)
+          setIsLoadingDuplicateData(false)
           
           })() // Close the IIFE
         } catch (err) {
           console.error("Error loading duplicate order:", err)
           setHasLoadedInitialData(true)
+          setIsLoadingDuplicateData(false)
         }
       } else {
         setHasLoadedInitialData(true)
@@ -1839,6 +1845,15 @@ function POSContent() {
                         <Card className="group relative overflow-hidden rounded-2xl border-0 bg-gradient-to-b from-card via-card to-card/95 shadow-2xl shadow-black/40 ring-1 ring-white/[0.05]">
                           <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.02] via-transparent to-transparent" />
                           <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
+                          {isLoadingDuplicateData && (
+                            <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm rounded-2xl">
+                              <div className="flex flex-col items-center gap-3">
+                                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                                <p className="text-sm font-medium text-foreground">Loading order data...</p>
+                                <p className="text-xs text-muted-foreground">Please wait while we populate the form</p>
+                              </div>
+                            </div>
+                          )}
                           <CardContent className="relative pt-8 pb-6 px-6">
                             <Form {...form}>
                               <form className="space-y-8">

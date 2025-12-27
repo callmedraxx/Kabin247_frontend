@@ -200,13 +200,7 @@ function OrderHistoryContent() {
     else setIsLoading(true)
 
     try {
-      const response = await fetch(`${API_BASE_URL}/orders?limit=500`)
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch orders: ${response.status}`)
-      }
-
-      const data: OrdersResponse = await response.json()
+      const data: OrdersResponse = await apiCallJson<OrdersResponse>(`/orders?limit=500`)
       
       // Filter for only delivered or cancelled orders (historical orders)
       const historicalOrders = (data.orders || []).filter(
@@ -216,7 +210,23 @@ function OrderHistoryContent() {
       setOrders(historicalOrders)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to load orders"
-      toast.error("Error loading order history", { description: errorMessage })
+      
+      // Check if it's a permission error
+      if (errorMessage.toLowerCase().includes("permission") || 
+          errorMessage.toLowerCase().includes("insufficient") ||
+          errorMessage.toLowerCase().includes("forbidden") ||
+          errorMessage.toLowerCase().includes("403")) {
+        console.error("[Order History] Permission error when fetching orders:", {
+          error: errorMessage,
+          note: "This may indicate that the employee's permissions were not properly set when they accepted the invitation. Please verify permissions in the Employees page.",
+        })
+        toast.error("Permission Denied", {
+          description: "You don't have permission to view order history. Please contact an administrator to verify your 'Read Orders' permission is enabled.",
+          duration: 8000,
+        })
+      } else {
+        toast.error("Error loading order history", { description: errorMessage })
+      }
     } finally {
       setIsLoading(false)
       setIsRefreshing(false)
