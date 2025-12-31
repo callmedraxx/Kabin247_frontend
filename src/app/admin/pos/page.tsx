@@ -101,6 +101,7 @@ interface Client {
   contact_number: string | null
   airport_code: string | null
   fbo_name: string | null
+  additional_emails?: string[]
 }
 
 interface Caterer {
@@ -110,6 +111,7 @@ interface Caterer {
   caterer_email: string | null
   airport_code_iata: string | null
   airport_code_icao: string | null
+  additional_emails?: string[]
 }
 
 interface Airport {
@@ -504,6 +506,8 @@ function POSContent() {
   const [newClientEmail, setNewClientEmail] = React.useState("")
   const [newClientAddress, setNewClientAddress] = React.useState("")
   const [newClientContact, setNewClientContact] = React.useState("")
+  const [newClientAdditionalEmails, setNewClientAdditionalEmails] = React.useState<string[]>([])
+  const [newClientEmailInput, setNewClientEmailInput] = React.useState("")
   
   const [newCatererName, setNewCatererName] = React.useState("")
   const [newCatererNumber, setNewCatererNumber] = React.useState("")
@@ -512,6 +516,8 @@ function POSContent() {
   const [newCatererAirportIcao, setNewCatererAirportIcao] = React.useState("")
   const [newCatererTimezone, setNewCatererTimezone] = React.useState("")
   const [selectedCatererAirport, setSelectedCatererAirport] = React.useState<number | undefined>(undefined)
+  const [newCatererAdditionalEmails, setNewCatererAdditionalEmails] = React.useState<string[]>([])
+  const [newCatererEmailInput, setNewCatererEmailInput] = React.useState("")
   
   const [newAirportName, setNewAirportName] = React.useState("")
   const [newFboName, setNewFboName] = React.useState("")
@@ -1341,6 +1347,9 @@ function POSContent() {
       if (newClientContact.trim()) {
         body.contact_number = newClientContact.trim()
       }
+      if (newClientAdditionalEmails.length > 0) {
+        body.additional_emails = newClientAdditionalEmails
+      }
       
       const newClient: Client = await apiCallJson<Client>(`/clients`, {
         method: "POST",
@@ -1360,6 +1369,8 @@ function POSContent() {
       setNewClientEmail("")
       setNewClientAddress("")
       setNewClientContact("")
+      setNewClientAdditionalEmails([])
+      setNewClientEmailInput("")
       setClientDialogOpen(false)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to create client"
@@ -1397,6 +1408,9 @@ function POSContent() {
       if (newCatererTimezone.trim()) {
         body.time_zone = newCatererTimezone.trim()
       }
+      if (newCatererAdditionalEmails.length > 0) {
+        body.additional_emails = newCatererAdditionalEmails
+      }
       
       const newCaterer: Caterer = await apiCallJson<Caterer>("/caterers", {
         method: "POST",
@@ -1418,6 +1432,8 @@ function POSContent() {
       setNewCatererAirportIata("")
       setNewCatererAirportIcao("")
       setSelectedCatererAirport(undefined)
+      setNewCatererAdditionalEmails([])
+      setNewCatererEmailInput("")
       setCatererDialogOpen(false)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to create caterer"
@@ -1604,21 +1620,23 @@ function POSContent() {
       if (currentItemIndex !== undefined) {
         form.setValue(`items.${currentItemIndex}.itemName`, newMenuItem.id.toString())
         
-        // Get current portion size and caterer_id from form
+        // Use the price entered in the menu item creation form directly
+        if (values.price !== undefined && values.price > 0) {
+          form.setValue(`items.${currentItemIndex}.price`, values.price.toString())
+        } else {
+          // Fallback: try to resolve from API response
         const currentPortionSize = form.getValues(`items.${currentItemIndex}.portionSize`)
         const catererId = form.getValues("caterer_id")
-        
-        // Resolve price based on caterer_id and portion size
         const price = resolveMenuItemPrice(newMenuItem, currentPortionSize || undefined, catererId)
         
-        // Fallback to first variant or direct price
         const fallbackPrice = price ?? 
-          (newMenuItem.variants && newMenuItem.variants.length > 0) 
+            ((newMenuItem.variants && newMenuItem.variants.length > 0) 
             ? newMenuItem.variants[0].price 
-            : (newMenuItem as any).price
+              : undefined)
         
         if (fallbackPrice !== undefined) {
           form.setValue(`items.${currentItemIndex}.price`, fallbackPrice.toString())
+          }
         }
         
         // Auto-populate category if available
@@ -3050,6 +3068,8 @@ function POSContent() {
                         setNewClientEmail("")
                         setNewClientAddress("")
                         setNewClientContact("")
+                        setNewClientAdditionalEmails([])
+                        setNewClientEmailInput("")
                       }
                     }}
                   >
@@ -3152,13 +3172,77 @@ function POSContent() {
                             value={newClientContact}
                             onChange={(e) => setNewClientContact(e.target.value)}
                             className="h-11 bg-muted/30 border-border/40 focus:border-blue-500/50 focus:ring-blue-500/20 sm:max-w-xs"
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" && e.target instanceof HTMLInputElement) {
-                                e.preventDefault()
-                                handleAddClient()
-                              }
-                            }}
                           />
+                        </div>
+                        
+                        {/* Additional Emails (Friends) Section */}
+                        <div className="space-y-3 pt-2 border-t border-border/30">
+                          <Label className="text-xs font-medium text-muted-foreground flex items-center gap-2">
+                            <Mail className="h-3.5 w-3.5" />
+                            Additional Emails (Friends)
+                          </Label>
+                          {/* List of added emails */}
+                          {newClientAdditionalEmails.length > 0 && (
+                            <div className="space-y-2">
+                              {newClientAdditionalEmails.map((email, index) => (
+                                <div key={index} className="flex items-center gap-2 p-2 rounded-lg bg-muted/30 border border-border/40">
+                                  <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                  <span className="flex-1 text-sm truncate">{email}</span>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                                    onClick={() => {
+                                      setNewClientAdditionalEmails(prev => prev.filter((_, i) => i !== index))
+                                    }}
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {/* Add new email input */}
+                          <div className="flex gap-2">
+                            <Input
+                              type="email"
+                              placeholder="Enter friend's email address..."
+                              value={newClientEmailInput}
+                              onChange={(e) => setNewClientEmailInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault()
+                                  const email = newClientEmailInput.trim()
+                                  if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !newClientAdditionalEmails.includes(email)) {
+                                    setNewClientAdditionalEmails(prev => [...prev, email])
+                                    setNewClientEmailInput("")
+                                  }
+                                }
+                              }}
+                              className="h-10 bg-muted/30 border-border/40 focus:border-blue-500/50 focus:ring-blue-500/20"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const email = newClientEmailInput.trim()
+                                if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !newClientAdditionalEmails.includes(email)) {
+                                  setNewClientAdditionalEmails(prev => [...prev, email])
+                                  setNewClientEmailInput("")
+                                }
+                              }}
+                              disabled={!newClientEmailInput.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newClientEmailInput.trim())}
+                              className="h-10 px-3 gap-1"
+                            >
+                              <Plus className="h-4 w-4" />
+                              Add
+                            </Button>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Add email addresses of contacts who should receive emails about this client's orders.
+                          </p>
                         </div>
                       </div>
                       <DialogFooter className="relative pt-4 border-t border-border/30 gap-3">
@@ -3171,6 +3255,8 @@ function POSContent() {
                             setNewClientEmail("")
                             setNewClientAddress("")
                             setNewClientContact("")
+                            setNewClientAdditionalEmails([])
+                            setNewClientEmailInput("")
                           }}
                         >
                           Cancel
@@ -3346,6 +3432,78 @@ function POSContent() {
                             />
                           </div>
                         </div>
+                        
+                        {/* Additional Emails (Friends) Section */}
+                        <div className="space-y-4 pt-2">
+                          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                            <span className="flex h-5 w-5 items-center justify-center rounded bg-violet-500/10 text-violet-400">4</span>
+                            Additional Emails (Friends)
+                          </div>
+                          <div className="space-y-3">
+                            {/* List of added emails */}
+                            {newCatererAdditionalEmails.length > 0 && (
+                              <div className="space-y-2">
+                                {newCatererAdditionalEmails.map((email, index) => (
+                                  <div key={index} className="flex items-center gap-2 p-2 rounded-lg bg-muted/30 border border-border/40">
+                                    <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                    <span className="flex-1 text-sm truncate">{email}</span>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                                      onClick={() => {
+                                        setNewCatererAdditionalEmails(prev => prev.filter((_, i) => i !== index))
+                                      }}
+                                    >
+                                      <X className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {/* Add new email input */}
+                            <div className="flex gap-2">
+                              <Input
+                                type="email"
+                                placeholder="Enter friend's email address..."
+                                value={newCatererEmailInput}
+                                onChange={(e) => setNewCatererEmailInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault()
+                                    const email = newCatererEmailInput.trim()
+                                    if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !newCatererAdditionalEmails.includes(email)) {
+                                      setNewCatererAdditionalEmails(prev => [...prev, email])
+                                      setNewCatererEmailInput("")
+                                    }
+                                  }
+                                }}
+                                className="h-10 bg-muted/30 border-border/40 focus:border-violet-500/50 focus:ring-violet-500/20"
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  const email = newCatererEmailInput.trim()
+                                  if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !newCatererAdditionalEmails.includes(email)) {
+                                    setNewCatererAdditionalEmails(prev => [...prev, email])
+                                    setNewCatererEmailInput("")
+                                  }
+                                }}
+                                disabled={!newCatererEmailInput.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newCatererEmailInput.trim())}
+                                className="h-10 px-3 gap-1"
+                              >
+                                <Plus className="h-4 w-4" />
+                                Add
+                              </Button>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              Add email addresses of contacts who should receive emails about this caterer's orders.
+                            </p>
+                          </div>
+                        </div>
                       </div>
                       <DialogFooter className="relative pt-4 border-t border-border/30 gap-3">
                         <Button 
@@ -3360,6 +3518,8 @@ function POSContent() {
                             setNewCatererAirportIcao("")
                             setNewCatererTimezone("")
                             setSelectedCatererAirport(undefined)
+                            setNewCatererAdditionalEmails([])
+                            setNewCatererEmailInput("")
                           }}
                         >
                           Cancel

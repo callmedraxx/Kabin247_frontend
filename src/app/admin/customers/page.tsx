@@ -100,6 +100,7 @@ interface Client {
   full_address: string
   email: string | null
   contact_number: string | null
+  additional_emails?: string[]
   created_at: string
   updated_at: string
 }
@@ -125,6 +126,7 @@ const clientSchema = z.object({
   full_address: z.string().min(1, "Full address is required"),
   email: z.string().email("Email is required"),
   contact_number: z.string().optional(),
+  additional_emails: z.array(z.string().email("Invalid email address")).optional(),
 })
 
 type ClientFormValues = z.infer<typeof clientSchema>
@@ -156,6 +158,10 @@ function ClientsContent() {
   const [importDialogOpen, setImportDialogOpen] = React.useState(false)
   const [importErrors, setImportErrors] = React.useState<string[]>([])
   const fileInputRef = React.useRef<HTMLInputElement>(null)
+  
+  // State for managing additional emails (friends)
+  const [additionalEmails, setAdditionalEmails] = React.useState<string[]>([])
+  const [newEmailInput, setNewEmailInput] = React.useState("")
 
 
   const form = useForm<ClientFormValues>({
@@ -165,6 +171,7 @@ function ClientsContent() {
       full_address: "",
       email: "",
       contact_number: "",
+      additional_emails: [],
     },
   })
 
@@ -244,11 +251,14 @@ function ClientsContent() {
   // Open add dialog
   const handleAdd = () => {
     setEditingClient(null)
+    setAdditionalEmails([])
+    setNewEmailInput("")
     form.reset({
       full_name: "",
       full_address: "",
       email: "",
       contact_number: "",
+      additional_emails: [],
     })
     setDialogOpen(true)
   }
@@ -256,13 +266,36 @@ function ClientsContent() {
   // Open edit dialog
   const handleEdit = (client: Client) => {
     setEditingClient(client)
+    setAdditionalEmails(client.additional_emails || [])
+    setNewEmailInput("")
     form.reset({
       full_name: client.full_name,
       full_address: client.full_address,
       email: client.email || "",
       contact_number: client.contact_number || "",
+      additional_emails: client.additional_emails || [],
     })
     setDialogOpen(true)
+  }
+  
+  // Handle adding a new friend email
+  const handleAddFriendEmail = () => {
+    const email = newEmailInput.trim()
+    if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      if (!additionalEmails.includes(email)) {
+        const newEmails = [...additionalEmails, email]
+        setAdditionalEmails(newEmails)
+        form.setValue("additional_emails", newEmails)
+      }
+      setNewEmailInput("")
+    }
+  }
+  
+  // Handle removing a friend email
+  const handleRemoveFriendEmail = (index: number) => {
+    const newEmails = additionalEmails.filter((_, i) => i !== index)
+    setAdditionalEmails(newEmails)
+    form.setValue("additional_emails", newEmails)
   }
 
   // Handle save (create or update)
@@ -279,6 +312,7 @@ function ClientsContent() {
         full_address: values.full_address,
         email: values.email,
         contact_number: values.contact_number,
+        additional_emails: additionalEmails.length > 0 ? additionalEmails : undefined,
       }
 
       const data: Client = await apiCallJson<Client>(url, {
@@ -1006,6 +1040,67 @@ function ClientsContent() {
                         />
                       </div>
                     </div>
+                    
+                    {/* Additional Emails (Friends) Section */}
+                    <div className="space-y-4 pt-2">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        <span className="flex h-5 w-5 items-center justify-center rounded bg-blue-500/10 text-blue-400">3</span>
+                        Additional Emails (Friends)
+                      </div>
+                      <div className="space-y-3">
+                        {/* List of added emails */}
+                        {additionalEmails.length > 0 && (
+                          <div className="space-y-2">
+                            {additionalEmails.map((email, index) => (
+                              <div key={index} className="flex items-center gap-2 p-2 rounded-lg bg-muted/30 border border-border/40">
+                                <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                <span className="flex-1 text-sm truncate">{email}</span>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                                  onClick={() => handleRemoveFriendEmail(index)}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {/* Add new email input */}
+                        <div className="flex gap-2">
+                          <Input
+                            type="email"
+                            placeholder="Enter friend's email address..."
+                            value={newEmailInput}
+                            onChange={(e) => setNewEmailInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault()
+                                handleAddFriendEmail()
+                              }
+                            }}
+                            className="h-10 bg-muted/30 border-border/40 focus:border-blue-500/50 focus:ring-blue-500/20"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleAddFriendEmail}
+                            disabled={!newEmailInput.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmailInput.trim())}
+                            className="h-10 px-3 gap-1"
+                          >
+                            <Plus className="h-4 w-4" />
+                            Add
+                          </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Add email addresses of contacts who should receive emails about this client's orders.
+                        </p>
+                      </div>
+                    </div>
                     <DialogFooter className="relative pt-4 border-t border-border/30 gap-3">
                       <Button
                         type="button"
@@ -1014,6 +1109,8 @@ function ClientsContent() {
                         onClick={() => {
                           setDialogOpen(false)
                           setEditingClient(null)
+                          setAdditionalEmails([])
+                          setNewEmailInput("")
                           form.reset()
                         }}
                       >
@@ -1139,6 +1236,30 @@ function ClientsContent() {
                           </CardContent>
                         </Card>
 
+                        {/* Additional Emails Card */}
+                        {viewingClient.additional_emails && viewingClient.additional_emails.length > 0 && (
+                          <Card className="rounded-xl border border-border/30 bg-muted/20 shadow-sm">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-lg flex items-center gap-2">
+                                <Mail className="h-5 w-5 text-primary" />
+                                Additional Emails (Friends)
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-2">
+                              {viewingClient.additional_emails.map((email, index) => (
+                                <div key={index} className="flex items-center gap-2 p-2 rounded-lg bg-background/50">
+                                  <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                  <a
+                                    href={`mailto:${email}`}
+                                    className="text-sm font-medium text-primary hover:underline break-all"
+                                  >
+                                    {email}
+                                  </a>
+                                </div>
+                              ))}
+                            </CardContent>
+                          </Card>
+                        )}
 
                         {/* Metadata Card */}
                         <Card className="rounded-xl border border-border/30 bg-muted/20 shadow-sm">

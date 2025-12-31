@@ -96,6 +96,7 @@ interface Caterer {
   airport_code_iata: string | null
   airport_code_icao: string | null
   time_zone: string | null
+  additional_emails?: string[]
   created_at: string
   updated_at: string
 }
@@ -142,6 +143,7 @@ const catererSchema = z.object({
   airport_code_iata: z.string().length(3, "IATA code must be exactly 3 characters").optional().or(z.literal("")),
   airport_code_icao: z.string().length(4, "ICAO code must be exactly 4 characters").optional().or(z.literal("")),
   time_zone: z.string().optional(),
+  additional_emails: z.array(z.string().email("Invalid email address")).optional(),
 })
 
 type CatererFormValues = z.infer<typeof catererSchema>
@@ -187,6 +189,10 @@ function CaterersContent() {
   const [selectedAirport, setSelectedAirport] = React.useState<number | undefined>(undefined)
   const [airportSearch, setAirportSearch] = React.useState("")
   const [isLoadingAirports, setIsLoadingAirports] = React.useState(false)
+  
+  // State for managing additional emails (friends)
+  const [additionalEmails, setAdditionalEmails] = React.useState<string[]>([])
+  const [newEmailInput, setNewEmailInput] = React.useState("")
 
   const form = useForm<CatererFormValues>({
     resolver: zodResolver(catererSchema),
@@ -197,6 +203,7 @@ function CaterersContent() {
       airport_code_iata: "",
       airport_code_icao: "",
       time_zone: "",
+      additional_emails: [],
     },
   })
 
@@ -366,6 +373,8 @@ function CaterersContent() {
   const handleAdd = () => {
     setEditingCaterer(null)
     setSelectedAirport(undefined)
+    setAdditionalEmails([])
+    setNewEmailInput("")
     form.reset({
       caterer_name: "",
       caterer_number: "",
@@ -373,6 +382,7 @@ function CaterersContent() {
       airport_code_iata: "",
       airport_code_icao: "",
       time_zone: "",
+      additional_emails: [],
     })
     setDialogOpen(true)
   }
@@ -381,6 +391,8 @@ function CaterersContent() {
   const handleEdit = (caterer: Caterer) => {
     setEditingCaterer(caterer)
     setSelectedAirport(undefined) // Reset airport selection on edit
+    setAdditionalEmails(caterer.additional_emails || [])
+    setNewEmailInput("")
     form.reset({
       caterer_name: caterer.caterer_name,
       caterer_number: caterer.caterer_number,
@@ -388,8 +400,29 @@ function CaterersContent() {
       airport_code_iata: caterer.airport_code_iata || "",
       airport_code_icao: caterer.airport_code_icao || "",
       time_zone: caterer.time_zone || "",
+      additional_emails: caterer.additional_emails || [],
     })
     setDialogOpen(true)
+  }
+  
+  // Handle adding a new friend email
+  const handleAddFriendEmail = () => {
+    const email = newEmailInput.trim()
+    if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      if (!additionalEmails.includes(email)) {
+        const newEmails = [...additionalEmails, email]
+        setAdditionalEmails(newEmails)
+        form.setValue("additional_emails", newEmails)
+      }
+      setNewEmailInput("")
+    }
+  }
+  
+  // Handle removing a friend email
+  const handleRemoveFriendEmail = (index: number) => {
+    const newEmails = additionalEmails.filter((_, i) => i !== index)
+    setAdditionalEmails(newEmails)
+    form.setValue("additional_emails", newEmails)
   }
 
   // Handle save (create or update)
@@ -419,6 +452,9 @@ function CaterersContent() {
       if (values.time_zone && values.time_zone.trim()) {
         body.time_zone = values.time_zone.trim()
       }
+      if (additionalEmails.length > 0) {
+        body.additional_emails = additionalEmails
+      }
 
       const data: Caterer = await apiCallJson<Caterer>(url, {
         method,
@@ -432,6 +468,8 @@ function CaterersContent() {
       setDialogOpen(false)
       setEditingCaterer(null)
       setSelectedAirport(undefined)
+      setAdditionalEmails([])
+      setNewEmailInput("")
       form.reset()
       fetchCaterers()
     } catch (err) {
@@ -1273,6 +1311,67 @@ function CaterersContent() {
                         )}
                       />
                     </div>
+                    
+                    {/* Additional Emails (Friends) Section */}
+                    <div className="space-y-4 pt-2">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        <span className="flex h-5 w-5 items-center justify-center rounded bg-violet-500/10 text-violet-400">3</span>
+                        Additional Emails (Friends)
+                      </div>
+                      <div className="space-y-3">
+                        {/* List of added emails */}
+                        {additionalEmails.length > 0 && (
+                          <div className="space-y-2">
+                            {additionalEmails.map((email, index) => (
+                              <div key={index} className="flex items-center gap-2 p-2 rounded-lg bg-muted/30 border border-border/40">
+                                <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                <span className="flex-1 text-sm truncate">{email}</span>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                                  onClick={() => handleRemoveFriendEmail(index)}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {/* Add new email input */}
+                        <div className="flex gap-2">
+                          <Input
+                            type="email"
+                            placeholder="Enter friend's email address..."
+                            value={newEmailInput}
+                            onChange={(e) => setNewEmailInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault()
+                                handleAddFriendEmail()
+                              }
+                            }}
+                            className="h-10 bg-muted/30 border-border/40 focus:border-violet-500/50 focus:ring-violet-500/20"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleAddFriendEmail}
+                            disabled={!newEmailInput.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmailInput.trim())}
+                            className="h-10 px-3 gap-1"
+                          >
+                            <Plus className="h-4 w-4" />
+                            Add
+                          </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Add email addresses of contacts who should receive emails about this caterer's orders.
+                        </p>
+                      </div>
+                    </div>
                     <DialogFooter className="relative pt-4 border-t border-border/30 gap-3">
                       <Button
                         type="button"
@@ -1282,6 +1381,8 @@ function CaterersContent() {
                           setDialogOpen(false)
                           setEditingCaterer(null)
                           setSelectedAirport(undefined)
+                          setAdditionalEmails([])
+                          setNewEmailInput("")
                           form.reset()
                         }}
                       >
@@ -1444,6 +1545,31 @@ function CaterersContent() {
                             </div>
                           </CardContent>
                         </Card>
+
+                        {/* Additional Emails Card */}
+                        {viewingCaterer.additional_emails && viewingCaterer.additional_emails.length > 0 && (
+                          <Card className="rounded-xl border border-border/30 bg-muted/20 shadow-sm">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-lg flex items-center gap-2">
+                                <Mail className="h-5 w-5 text-primary" />
+                                Additional Emails (Friends)
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-2">
+                              {viewingCaterer.additional_emails.map((email, index) => (
+                                <div key={index} className="flex items-center gap-2 p-2 rounded-lg bg-background/50">
+                                  <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                  <a
+                                    href={`mailto:${email}`}
+                                    className="text-sm font-medium text-primary hover:underline break-all"
+                                  >
+                                    {email}
+                                  </a>
+                                </div>
+                              ))}
+                            </CardContent>
+                          </Card>
+                        )}
                       </div>
                     </div>
                   )}

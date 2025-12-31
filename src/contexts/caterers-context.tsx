@@ -10,6 +10,7 @@ interface Caterer {
   caterer_email: string | null
   airport_code_iata: string | null
   airport_code_icao: string | null
+  additional_emails?: string[]
 }
 
 interface CaterersResponse {

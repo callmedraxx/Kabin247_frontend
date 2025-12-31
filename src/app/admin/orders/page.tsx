@@ -125,6 +125,7 @@ interface OrderClient {
   full_address: string
   email: string
   contact_number: string
+  additional_emails?: string[]
 }
 
 interface OrderCaterer {
@@ -134,6 +135,7 @@ interface OrderCaterer {
   caterer_email: string | null
   airport_code_iata: string | null
   airport_code_icao: string | null
+  additional_emails?: string[]
 }
 
 interface OrderAirport {
@@ -192,6 +194,7 @@ interface Client {
   contact_number: string | null
   full_address: string | null
   airport_code: string | null
+  additional_emails?: string[]
 }
 
 interface Caterer {
@@ -202,6 +205,7 @@ interface Caterer {
   airport_code_iata?: string | null
   airport_code_icao?: string | null
   time_zone?: string | null
+  additional_emails?: string[]
 }
 
 interface Airport {
@@ -275,6 +279,8 @@ function OrdersContent() {
   const [isSendingEmail, setIsSendingEmail] = React.useState(false)
   const [customClientMessage, setCustomClientMessage] = React.useState("")
   const [customCatererMessage, setCustomCatererMessage] = React.useState("")
+  const [selectedFriendEmails, setSelectedFriendEmails] = React.useState<Set<string>>(new Set())
+  const [manualCcEmails, setManualCcEmails] = React.useState("")
   const [pdfPreviewOpen, setPdfPreviewOpen] = React.useState(false)
   const [orderForPdf, setOrderForPdf] = React.useState<Order | null>(null)
   const [pdfHtml, setPdfHtml] = React.useState<string>("")
@@ -706,6 +712,8 @@ function OrdersContent() {
     setEmailRecipient("client")
     setCustomClientMessage("")
     setCustomCatererMessage("")
+    setSelectedFriendEmails(new Set())
+    setManualCcEmails("")
     setEmailDialogOpen(true)
   }
 
@@ -716,7 +724,21 @@ function OrdersContent() {
     try {
       // Determine endpoint and payload based on recipient
       let endpoint = ""
-      let body: Record<string, string> = {}
+      let body: Record<string, any> = {}
+
+      // Collect all CC emails (selected friends + manual input)
+      const ccEmails: string[] = []
+      selectedFriendEmails.forEach(email => ccEmails.push(email))
+      
+      // Parse manual CC emails (comma-separated)
+      if (manualCcEmails.trim()) {
+        const manualEmails = manualCcEmails.split(",").map(e => e.trim()).filter(e => e && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))
+        manualEmails.forEach(email => {
+          if (!ccEmails.includes(email)) {
+            ccEmails.push(email)
+          }
+        })
+      }
 
       if (emailRecipient === "client") {
         endpoint = `/orders/${orderForEmail.id}/send-to-client`
@@ -739,6 +761,11 @@ function OrdersContent() {
         }
       }
 
+      // Add CC emails if any
+      if (ccEmails.length > 0) {
+        body.cc_emails = ccEmails
+      }
+
       await apiCallJson(endpoint, {
         method: "POST",
         body: JSON.stringify(body),
@@ -758,6 +785,8 @@ function OrdersContent() {
       setOrderForEmail(null)
       setCustomClientMessage("")
       setCustomCatererMessage("")
+      setSelectedFriendEmails(new Set())
+      setManualCcEmails("")
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to send email"
       toast.error("Error sending email", {
@@ -2436,12 +2465,100 @@ function OrdersContent() {
                     </div>
                   )}
 
+                  {/* Friend Emails Section */}
+                  {(() => {
+                    const clientEmails = (emailRecipient === "client" || emailRecipient === "both") 
+                      ? (orderForEmail?.client?.additional_emails || []) 
+                      : []
+                    const catererEmails = (emailRecipient === "caterer" || emailRecipient === "both") 
+                      ? (orderForEmail?.caterer_details?.additional_emails || []) 
+                      : []
+                    const allFriendEmails = [...clientEmails, ...catererEmails]
+                    
+                    if (allFriendEmails.length > 0) {
+                      return (
+                        <div className="space-y-3">
+                          <Label className="flex items-center gap-2">
+                            <Mail className="h-4 w-4" />
+                            Include Friend Emails (CC)
+                          </Label>
+                          <div className="space-y-2 rounded-lg bg-muted/30 p-3">
+                            {clientEmails.length > 0 && (emailRecipient === "client" || emailRecipient === "both") && (
+                              <div className="space-y-2">
+                                <span className="text-xs font-medium text-muted-foreground">Client's Friends:</span>
+                                {clientEmails.map((email) => (
+                                  <label key={email} className="flex items-center gap-2 cursor-pointer">
+                                    <Checkbox
+                                      checked={selectedFriendEmails.has(email)}
+                                      onCheckedChange={(checked) => {
+                                        const newSet = new Set(selectedFriendEmails)
+                                        if (checked) {
+                                          newSet.add(email)
+                                        } else {
+                                          newSet.delete(email)
+                                        }
+                                        setSelectedFriendEmails(newSet)
+                                      }}
+                                    />
+                                    <span className="text-sm">{email}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            )}
+                            {catererEmails.length > 0 && (emailRecipient === "caterer" || emailRecipient === "both") && (
+                              <div className="space-y-2">
+                                <span className="text-xs font-medium text-muted-foreground">Caterer's Friends:</span>
+                                {catererEmails.map((email) => (
+                                  <label key={email} className="flex items-center gap-2 cursor-pointer">
+                                    <Checkbox
+                                      checked={selectedFriendEmails.has(email)}
+                                      onCheckedChange={(checked) => {
+                                        const newSet = new Set(selectedFriendEmails)
+                                        if (checked) {
+                                          newSet.add(email)
+                                        } else {
+                                          newSet.delete(email)
+                                        }
+                                        setSelectedFriendEmails(newSet)
+                                      }}
+                                    />
+                                    <span className="text-sm">{email}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    }
+                    return null
+                  })()}
+
+                  {/* Manual CC Emails */}
+                  <div className="space-y-2">
+                    <Label htmlFor="manualCc">
+                      Additional CC Emails
+                      <span className="text-xs text-muted-foreground ml-2">(comma-separated, optional)</span>
+                    </Label>
+                    <Input
+                      id="manualCc"
+                      type="text"
+                      placeholder="email1@example.com, email2@example.com"
+                      value={manualCcEmails}
+                      onChange={(e) => setManualCcEmails(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      These emails will receive a copy of the email but won't be saved.
+                    </p>
+                  </div>
+
                   <div className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
                     <p className="font-medium text-foreground mb-1">Note:</p>
                     <ul className="list-disc list-inside space-y-1">
                       <li>The order PDF will be automatically attached to the email</li>
                       <li>Email subject is determined by the order status template</li>
                       <li>Custom messages will override the template body only</li>
+                      <li>CC recipients will receive copies of all emails sent</li>
                     </ul>
                   </div>
                 </div>
@@ -2453,6 +2570,8 @@ function OrdersContent() {
                       setOrderForEmail(null)
                       setCustomClientMessage("")
                       setCustomCatererMessage("")
+                      setSelectedFriendEmails(new Set())
+                      setManualCcEmails("")
                     }}
                     disabled={isSendingEmail}
                   >

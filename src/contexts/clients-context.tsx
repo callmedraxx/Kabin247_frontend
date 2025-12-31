@@ -11,6 +11,7 @@ interface Client {
   contact_number: string | null
   airport_code: string | null
   fbo_name: string | null
+  additional_emails?: string[]
 }
 
 interface ClientsResponse {

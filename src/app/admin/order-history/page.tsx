@@ -96,6 +96,7 @@ interface OrderClient {
   email: string
   contact_number: string
   full_address: string
+  additional_emails?: string[]
 }
 
 interface OrderCaterer {
@@ -105,6 +106,7 @@ interface OrderCaterer {
   caterer_email: string | null
   airport_code_iata: string | null
   airport_code_icao: string | null
+  additional_emails?: string[]
 }
 
 interface OrderAirport {
@@ -190,6 +192,8 @@ function OrderHistoryContent() {
   const [customClientMessage, setCustomClientMessage] = React.useState("")
   const [customCatererMessage, setCustomCatererMessage] = React.useState("")
   const [isSendingEmail, setIsSendingEmail] = React.useState(false)
+  const [selectedFriendEmails, setSelectedFriendEmails] = React.useState<Set<string>>(new Set())
+  const [manualCcEmails, setManualCcEmails] = React.useState("")
   const [pdfPreviewOpen, setPdfPreviewOpen] = React.useState(false)
   const [orderForPdf, setOrderForPdf] = React.useState<Order | null>(null)
   const [pdfHtml, setPdfHtml] = React.useState<string>("")
@@ -358,6 +362,8 @@ function OrderHistoryContent() {
     setCustomClientMessage("")
     setCustomCatererMessage("")
     setEmailRecipient("client")
+    setSelectedFriendEmails(new Set())
+    setManualCcEmails("")
     setEmailDialogOpen(true)
   }
 
@@ -368,7 +374,21 @@ function OrderHistoryContent() {
     setIsSendingEmail(true)
     try {
       let endpoint = ""
-      let payload: Record<string, string> = {}
+      let payload: Record<string, any> = {}
+
+      // Collect all CC emails (selected friends + manual input)
+      const ccEmails: string[] = []
+      selectedFriendEmails.forEach(email => ccEmails.push(email))
+      
+      // Parse manual CC emails (comma-separated)
+      if (manualCcEmails.trim()) {
+        const manualEmails = manualCcEmails.split(",").map(e => e.trim()).filter(e => e && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))
+        manualEmails.forEach(email => {
+          if (!ccEmails.includes(email)) {
+            ccEmails.push(email)
+          }
+        })
+      }
 
       if (emailRecipient === "client") {
         endpoint = `/orders/${orderForEmail.id}/send-to-client`
@@ -390,6 +410,11 @@ function OrderHistoryContent() {
         }
       }
 
+      // Add CC emails if any
+      if (ccEmails.length > 0) {
+        payload.cc_emails = ccEmails
+      }
+
       await apiCallJson(endpoint, {
         method: "POST",
         body: JSON.stringify(payload),
@@ -400,6 +425,8 @@ function OrderHistoryContent() {
       })
       setEmailDialogOpen(false)
       setOrderForEmail(null)
+      setSelectedFriendEmails(new Set())
+      setManualCcEmails("")
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to send email"
       toast.error("Error sending email", { description: errorMessage })
@@ -1209,9 +1236,100 @@ function OrderHistoryContent() {
                       />
                     </div>
                   )}
+
+                  {/* Friend Emails Section */}
+                  {(() => {
+                    const clientEmails = (emailRecipient === "client" || emailRecipient === "both") 
+                      ? (orderForEmail?.client?.additional_emails || []) 
+                      : []
+                    const catererEmails = (emailRecipient === "caterer" || emailRecipient === "both") 
+                      ? (orderForEmail?.caterer_details?.additional_emails || []) 
+                      : []
+                    const allFriendEmails = [...clientEmails, ...catererEmails]
+                    
+                    if (allFriendEmails.length > 0) {
+                      return (
+                        <div className="space-y-3">
+                          <Label className="flex items-center gap-2">
+                            <Mail className="h-4 w-4" />
+                            Include Friend Emails (CC)
+                          </Label>
+                          <div className="space-y-2 rounded-lg bg-muted/30 p-3">
+                            {clientEmails.length > 0 && (emailRecipient === "client" || emailRecipient === "both") && (
+                              <div className="space-y-2">
+                                <span className="text-xs font-medium text-muted-foreground">Client's Friends:</span>
+                                {clientEmails.map((email) => (
+                                  <label key={email} className="flex items-center gap-2 cursor-pointer">
+                                    <Checkbox
+                                      checked={selectedFriendEmails.has(email)}
+                                      onCheckedChange={(checked) => {
+                                        const newSet = new Set(selectedFriendEmails)
+                                        if (checked) {
+                                          newSet.add(email)
+                                        } else {
+                                          newSet.delete(email)
+                                        }
+                                        setSelectedFriendEmails(newSet)
+                                      }}
+                                    />
+                                    <span className="text-sm">{email}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            )}
+                            {catererEmails.length > 0 && (emailRecipient === "caterer" || emailRecipient === "both") && (
+                              <div className="space-y-2">
+                                <span className="text-xs font-medium text-muted-foreground">Caterer's Friends:</span>
+                                {catererEmails.map((email) => (
+                                  <label key={email} className="flex items-center gap-2 cursor-pointer">
+                                    <Checkbox
+                                      checked={selectedFriendEmails.has(email)}
+                                      onCheckedChange={(checked) => {
+                                        const newSet = new Set(selectedFriendEmails)
+                                        if (checked) {
+                                          newSet.add(email)
+                                        } else {
+                                          newSet.delete(email)
+                                        }
+                                        setSelectedFriendEmails(newSet)
+                                      }}
+                                    />
+                                    <span className="text-sm">{email}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    }
+                    return null
+                  })()}
+
+                  {/* Manual CC Emails */}
+                  <div className="space-y-2">
+                    <Label htmlFor="manualCc">
+                      Additional CC Emails
+                      <span className="text-xs text-muted-foreground ml-2">(comma-separated, optional)</span>
+                    </Label>
+                    <Input
+                      id="manualCc"
+                      type="text"
+                      placeholder="email1@example.com, email2@example.com"
+                      value={manualCcEmails}
+                      onChange={(e) => setManualCcEmails(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      These emails will receive a copy of the email but won't be saved.
+                    </p>
+                  </div>
                 </div>
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => setEmailDialogOpen(false)} disabled={isSendingEmail}>
+                  <Button variant="outline" onClick={() => {
+                    setEmailDialogOpen(false)
+                    setSelectedFriendEmails(new Set())
+                    setManualCcEmails("")
+                  }} disabled={isSendingEmail}>
                     Cancel
                   </Button>
                   <Button onClick={confirmEmailSend} disabled={isSendingEmail} className="gap-2">
