@@ -339,7 +339,7 @@ function OrderHistoryContent() {
       "Caterer": order.caterer_details?.caterer_name || "—",
       "Airport": order.airport_details?.airport_name || "—",
       "Aircraft Tail Number": order.aircraft_tail_number || "",
-      "Delivery Date": new Date(order.delivery_date).toLocaleDateString(),
+      "Delivery Date": formatDateForDisplay(order.delivery_date),
       "Delivery Time": order.delivery_time,
       "Status": statusOptions.find((s) => s.value === order.status)?.label || order.status,
       "Order Type": order.order_type || "—",
@@ -486,13 +486,49 @@ function OrderHistoryContent() {
     }
   }
 
-  // Format date
+  // Format date without timezone conversion issues
   const formatDate = (dateString: string) => {
+    if (!dateString) return ""
+    
+    // If it's in YYYY-MM-DD format, parse directly to avoid timezone issues
+    const match = dateString.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (match) {
+      const [, year, month, day] = match
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+      return `${months[parseInt(month) - 1]} ${parseInt(day)}, ${year}`
+    }
+    
+    // Fallback: use UTC timezone to avoid conversion issues
     return new Date(dateString).toLocaleDateString("en-US", {
       year: "numeric",
       month: "short",
       day: "numeric",
+      timeZone: "UTC"
     })
+  }
+  
+  // Format date for display (MM/DD/YYYY) without timezone issues
+  const formatDateForDisplay = (dateString: string | null | undefined): string => {
+    if (!dateString) return ""
+    
+    // If it's in YYYY-MM-DD format, parse directly
+    const match = dateString.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (match) {
+      const [, year, month, day] = match
+      return `${month}/${day}/${year}`
+    }
+    
+    // Fallback: use UTC methods
+    try {
+      const date = new Date(dateString)
+      if (isNaN(date.getTime())) return ""
+      const m = String(date.getUTCMonth() + 1).padStart(2, "0")
+      const d = String(date.getUTCDate()).padStart(2, "0")
+      const y = date.getUTCFullYear()
+      return `${m}/${d}/${y}`
+    } catch {
+      return ""
+    }
   }
 
   // Get status badge

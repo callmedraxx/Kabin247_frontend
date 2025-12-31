@@ -106,6 +106,30 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/comp
 
 export type { OrderStatus }
 
+// Helper function to format date for display (MM/DD/YYYY) without timezone issues
+const formatDateForDisplay = (dateString: string | null | undefined): string => {
+  if (!dateString) return ""
+  
+  // If it's in YYYY-MM-DD format, parse directly
+  const match = dateString.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (match) {
+    const [, year, month, day] = match
+    return `${month}/${day}/${year}`
+  }
+  
+  // Fallback: use UTC methods
+  try {
+    const date = new Date(dateString)
+    if (isNaN(date.getTime())) return ""
+    const m = String(date.getUTCMonth() + 1).padStart(2, "0")
+    const d = String(date.getUTCDate()).padStart(2, "0")
+    const y = date.getUTCFullYear()
+    return `${m}/${d}/${y}`
+  } catch {
+    return ""
+  }
+}
+
 // Order data structure matching API response
 interface OrderItem {
   id?: number
@@ -1199,7 +1223,7 @@ function OrdersContent() {
                               </div>
                             </TableCell>
                             <TableCell>
-                              {new Date(order.delivery_date).toLocaleDateString()}
+                              {formatDateForDisplay(order.delivery_date)}
                             </TableCell>
                             <TableCell>
                               {order.delivery_time}
@@ -1882,7 +1906,7 @@ function OrdersContent() {
                                   Delivery Date
                                 </Label>
                                 <p className="text-sm font-medium">
-                                  {new Date(viewingOrder.delivery_date).toLocaleDateString()}
+                                  {formatDateForDisplay(viewingOrder.delivery_date)}
                                 </p>
                               </div>
                               <div>

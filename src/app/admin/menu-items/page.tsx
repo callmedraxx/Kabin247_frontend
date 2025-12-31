@@ -690,7 +690,7 @@ function MenuItemsContent() {
       item.item_description || "",
       item.food_type === "veg" ? "Vegetarian" : "Non-Vegetarian",
       categories.find((c) => c.slug === item.category)?.name || item.category,
-      item.variants && item.variants.length > 0 ? `$${item.variants[0].price.toFixed(2)}` : "",
+      item.variants && item.variants.length > 0 ? `$${Number(item.variants[0].price).toFixed(2)}` : "",
       item.tax_rate?.toString() || "0",
       item.service_charge?.toString() || "0",
       item.is_active ? "Active" : "Inactive",
@@ -1137,7 +1137,7 @@ function MenuItemsContent() {
                             </TableCell>
                             <TableCell className="max-w-[200px]">
                               {item.variants && item.variants.length > 0 ? (
-                                <span className="text-sm font-medium">${item.variants[0].price.toFixed(2)}</span>
+                                <span className="text-sm font-medium">${Number(item.variants[0].price).toFixed(2)}</span>
                               ) : (
                                 <span className="text-sm text-muted-foreground">—</span>
                               )}
@@ -1795,7 +1795,7 @@ function MenuItemsContent() {
                             </CardHeader>
                             <CardContent>
                               <div className="text-2xl font-semibold">
-                                ${viewingItem.variants[0].price.toFixed(2)}
+                                ${Number(viewingItem.variants[0].price).toFixed(2)}
                               </div>
                             </CardContent>
                           </Card>
@@ -1911,9 +1911,9 @@ function MenuItemsContent() {
                                     </TableCell>
                                     <TableCell>
                                       {item.variants && item.variants.length > 0 
-                                        ? `$${item.variants[0].price.toFixed(2)}` 
+                                        ? `$${Number(item.variants[0].price).toFixed(2)}` 
                                         : (item as any).price !== undefined 
-                                          ? `$${(item as any).price.toFixed(2)}` 
+                                          ? `$${Number((item as any).price).toFixed(2)}` 
                                           : "—"}
                                     </TableCell>
                                   </TableRow>

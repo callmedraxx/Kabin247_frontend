@@ -75,6 +75,8 @@ import {
   Clock,
   Plane,
   User,
+  Users,
+  UserPlus,
   ShoppingCart,
   Package,
   AlertCircle,
@@ -84,6 +86,9 @@ import {
   UtensilsCrossed,
   Copy,
   HelpCircle,
+  MessageSquare,
+  AtSign,
+  Info,
 } from "lucide-react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -361,26 +366,56 @@ const decodeHtmlEntities = (text: string): string => {
 }
 
 // Helper function to format date for HTML date input (YYYY-MM-DD)
+// Uses UTC methods to avoid timezone conversion issues
 const formatDateForInput = (dateString: string | null | undefined): string => {
   if (!dateString) return ""
+  
+  // If it's already in YYYY-MM-DD format, return as is (most common case)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+    return dateString
+  }
+  
+  // Try to extract YYYY-MM-DD from the beginning of the string (e.g., from ISO datetime)
+  const match = dateString.match(/^(\d{4}-\d{2}-\d{2})/)
+  if (match) {
+    return match[1]
+  }
+  
   try {
     const date = new Date(dateString)
     if (isNaN(date.getTime())) {
-      // If it's already in YYYY-MM-DD format, return as is
-      if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
-        return dateString
-      }
       return ""
     }
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, "0")
-    const day = String(date.getDate()).padStart(2, "0")
+    // Use UTC methods to avoid timezone conversion issues
+    const year = date.getUTCFullYear()
+    const month = String(date.getUTCMonth() + 1).padStart(2, "0")
+    const day = String(date.getUTCDate()).padStart(2, "0")
     return `${year}-${month}-${day}`
   } catch {
-    // If it's already in YYYY-MM-DD format, return as is
-    if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
-      return dateString
-    }
+    return ""
+  }
+}
+
+// Helper function to format date for display (MM/DD/YYYY) without timezone issues
+const formatDateForDisplay = (dateString: string | null | undefined): string => {
+  if (!dateString) return ""
+  
+  // If it's in YYYY-MM-DD format, parse directly
+  const match = dateString.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (match) {
+    const [, year, month, day] = match
+    return `${month}/${day}/${year}`
+  }
+  
+  // Fallback: use UTC methods
+  try {
+    const date = new Date(dateString)
+    if (isNaN(date.getTime())) return ""
+    const month = String(date.getUTCMonth() + 1).padStart(2, "0")
+    const day = String(date.getUTCDate()).padStart(2, "0")
+    const year = date.getUTCFullYear()
+    return `${month}/${day}/${year}`
+  } catch {
     return ""
   }
 }
@@ -1584,13 +1619,26 @@ function OrdersContent() {
     return badge
   }
 
-  // Format date
+  // Format date without timezone conversion issues
   const formatDate = (dateString: string) => {
+    if (!dateString) return ""
+    
+    // If it's in YYYY-MM-DD format, parse directly to avoid timezone issues
+    const match = dateString.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (match) {
+      const [, year, month, day] = match
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+      return `${months[parseInt(month) - 1]} ${parseInt(day)}, ${year}`
+    }
+    
+    // Fallback: use UTC methods
     const date = new Date(dateString)
+    if (isNaN(date.getTime())) return ""
     return date.toLocaleDateString("en-US", {
       year: "numeric",
       month: "short",
       day: "numeric",
+      timeZone: "UTC"
     })
   }
 
@@ -1888,7 +1936,7 @@ function OrdersContent() {
                             <TableCell className="max-w-[120px]">
                               <div className="flex flex-col gap-0.5">
                                 <div className="text-xs text-muted-foreground truncate">
-                                  {new Date(order.delivery_date).toLocaleDateString()}
+                                  {formatDateForDisplay(order.delivery_date)}
                                 </div>
                                 <div className="text-xs text-muted-foreground truncate">
                                   {order.delivery_time}
@@ -3280,63 +3328,72 @@ function OrdersContent() {
 
             {/* Email Send Dialog */}
             <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
-              <DialogContent className="sm:max-w-xl">
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2">
-                    <Mail className="h-5 w-5 text-primary" />
+              <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+                <DialogHeader className="px-6 pt-6 pb-4 bg-gradient-to-r from-blue-600/10 via-indigo-600/10 to-purple-600/10 border-b border-border/50">
+                  <DialogTitle className="flex items-center gap-3 text-lg">
+                    <div className="p-2 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg">
+                      <Mail className="h-5 w-5 text-white" />
+                    </div>
                     Send Order via Email
                   </DialogTitle>
-                  <DialogDescription>
-                    Send order {orderForEmail?.order_number} to the selected recipient(s). 
-                    The email will include the order PDF and use a template based on the current order status ({orderForEmail?.status?.replace(/_/g, " ")}).
+                  <DialogDescription className="text-sm mt-2">
+                    Send order <span className="font-semibold text-foreground">{orderForEmail?.order_number}</span> to the selected recipient(s). 
+                    Status: <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">{orderForEmail?.status?.replace(/_/g, " ")}</span>
                   </DialogDescription>
                 </DialogHeader>
-                <div className="grid gap-4 py-4">
-                  <div className="space-y-2">
-                    <Label>Recipient</Label>
+                <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
+                  <div className="space-y-3 p-4 rounded-xl bg-card border border-border/50 shadow-sm">
+                    <Label className="text-sm font-semibold flex items-center gap-2">
+                      <Users className="h-4 w-4 text-blue-500" />
+                      Recipient
+                    </Label>
                     <Select value={emailRecipient} onValueChange={(value) => setEmailRecipient(value as "client" | "caterer" | "both")}>
-                      <SelectTrigger>
+                      <SelectTrigger className="h-12 bg-muted/30 border-border/50 hover:border-primary/50 transition-colors">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="client">
-                          <div className="flex flex-col">
-                            <span>Client Only</span>
+                          <div className="flex flex-col py-1">
+                            <span className="font-medium">Client Only</span>
                             {orderForEmail?.client?.email && (
                               <span className="text-xs text-muted-foreground">{orderForEmail.client.email}</span>
                             )}
                           </div>
                         </SelectItem>
                         <SelectItem value="caterer">
-                          <div className="flex flex-col">
-                            <span>Caterer Only</span>
+                          <div className="flex flex-col py-1">
+                            <span className="font-medium">Caterer Only</span>
                             {orderForEmail?.caterer_details?.caterer_email && (
                               <span className="text-xs text-muted-foreground">{orderForEmail.caterer_details.caterer_email}</span>
                             )}
                           </div>
                         </SelectItem>
-                        <SelectItem value="both">Both Client and Caterer</SelectItem>
+                        <SelectItem value="both">
+                          <span className="font-medium">Both Client and Caterer</span>
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
                   {/* Custom message for client */}
                   {(emailRecipient === "client" || emailRecipient === "both") && (
-                    <div className="space-y-2">
-                      <Label htmlFor="clientMessage">
+                    <div className="space-y-3 p-4 rounded-xl bg-card border border-border/50 shadow-sm">
+                      <Label htmlFor="clientMessage" className="text-sm font-semibold flex items-center gap-2">
+                        <MessageSquare className="h-4 w-4 text-emerald-500" />
                         Custom Message for Client
-                        <span className="text-xs text-muted-foreground ml-2">(optional - overrides template body)</span>
+                        <span className="text-xs font-normal text-muted-foreground">(optional - overrides template body)</span>
                       </Label>
                       <Textarea
                         id="clientMessage"
                         placeholder="Leave empty to use the default template message..."
                         value={customClientMessage}
                         onChange={(e) => setCustomClientMessage(e.target.value)}
-                        className="min-h-[100px] resize-none"
+                        className="min-h-[80px] resize-none bg-muted/30 border-border/50 focus:border-emerald-500/50 focus:ring-emerald-500/20"
                       />
                       {orderForEmail?.client?.email && (
-                        <p className="text-xs text-muted-foreground">
-                          Will be sent to: {orderForEmail.client.email}
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Send className="h-3 w-3" />
+                          Will be sent to: <span className="font-medium text-foreground">{orderForEmail.client.email}</span>
                         </p>
                       )}
                     </div>
@@ -3344,21 +3401,23 @@ function OrdersContent() {
 
                   {/* Custom message for caterer */}
                   {(emailRecipient === "caterer" || emailRecipient === "both") && (
-                    <div className="space-y-2">
-                      <Label htmlFor="catererMessage">
+                    <div className="space-y-3 p-4 rounded-xl bg-card border border-border/50 shadow-sm">
+                      <Label htmlFor="catererMessage" className="text-sm font-semibold flex items-center gap-2">
+                        <MessageSquare className="h-4 w-4 text-orange-500" />
                         Custom Message for Caterer
-                        <span className="text-xs text-muted-foreground ml-2">(optional - overrides template body)</span>
+                        <span className="text-xs font-normal text-muted-foreground">(optional - overrides template body)</span>
                       </Label>
                       <Textarea
                         id="catererMessage"
                         placeholder="Leave empty to use the default template message..."
                         value={customCatererMessage}
                         onChange={(e) => setCustomCatererMessage(e.target.value)}
-                        className="min-h-[100px] resize-none"
+                        className="min-h-[80px] resize-none bg-muted/30 border-border/50 focus:border-orange-500/50 focus:ring-orange-500/20"
                       />
                       {orderForEmail?.caterer_details?.caterer_email && (
-                        <p className="text-xs text-muted-foreground">
-                          Will be sent to: {orderForEmail.caterer_details.caterer_email}
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Send className="h-3 w-3" />
+                          Will be sent to: <span className="font-medium text-foreground">{orderForEmail.caterer_details.caterer_email}</span>
                         </p>
                       )}
                     </div>
@@ -3376,54 +3435,62 @@ function OrdersContent() {
                     
                     if (allFriendEmails.length > 0) {
                       return (
-                        <div className="space-y-3">
-                          <Label className="flex items-center gap-2">
-                            <Mail className="h-4 w-4" />
+                        <div className="space-y-3 p-4 rounded-xl bg-gradient-to-br from-violet-500/5 to-purple-500/5 border border-violet-500/20 shadow-sm">
+                          <Label className="text-sm font-semibold flex items-center gap-2">
+                            <UserPlus className="h-4 w-4 text-violet-500" />
                             Include Friend Emails (CC)
                           </Label>
-                          <div className="space-y-2 rounded-lg bg-muted/30 p-3">
+                          <div className="space-y-4">
                             {clientEmails.length > 0 && (emailRecipient === "client" || emailRecipient === "both") && (
                               <div className="space-y-2">
-                                <span className="text-xs font-medium text-muted-foreground">Client's Friends:</span>
-                                {clientEmails.map((email) => (
-                                  <label key={email} className="flex items-center gap-2 cursor-pointer">
-                                    <Checkbox
-                                      checked={selectedFriendEmails.has(email)}
-                                      onCheckedChange={(checked) => {
-                                        const newSet = new Set(selectedFriendEmails)
-                                        if (checked) {
-                                          newSet.add(email)
-                                        } else {
-                                          newSet.delete(email)
-                                        }
-                                        setSelectedFriendEmails(newSet)
-                                      }}
-                                    />
-                                    <span className="text-sm">{email}</span>
-                                  </label>
-                                ))}
+                                <span className="text-xs font-semibold text-violet-400 uppercase tracking-wide">Client's Friends:</span>
+                                <div className="grid gap-2">
+                                  {clientEmails.map((email) => (
+                                    <label key={email} className="flex items-center gap-3 p-2.5 rounded-lg bg-card/50 border border-border/30 cursor-pointer hover:bg-card hover:border-violet-500/30 transition-all group">
+                                      <Checkbox
+                                        checked={selectedFriendEmails.has(email)}
+                                        onCheckedChange={(checked) => {
+                                          const newSet = new Set(selectedFriendEmails)
+                                          if (checked) {
+                                            newSet.add(email)
+                                          } else {
+                                            newSet.delete(email)
+                                          }
+                                          setSelectedFriendEmails(newSet)
+                                        }}
+                                        className="data-[state=checked]:bg-violet-500 data-[state=checked]:border-violet-500"
+                                      />
+                                      <Mail className="h-4 w-4 text-muted-foreground group-hover:text-violet-400 transition-colors" />
+                                      <span className="text-sm font-medium truncate flex-1">{email}</span>
+                                    </label>
+                                  ))}
+                                </div>
                               </div>
                             )}
                             {catererEmails.length > 0 && (emailRecipient === "caterer" || emailRecipient === "both") && (
                               <div className="space-y-2">
-                                <span className="text-xs font-medium text-muted-foreground">Caterer's Friends:</span>
-                                {catererEmails.map((email) => (
-                                  <label key={email} className="flex items-center gap-2 cursor-pointer">
-                                    <Checkbox
-                                      checked={selectedFriendEmails.has(email)}
-                                      onCheckedChange={(checked) => {
-                                        const newSet = new Set(selectedFriendEmails)
-                                        if (checked) {
-                                          newSet.add(email)
-                                        } else {
-                                          newSet.delete(email)
-                                        }
-                                        setSelectedFriendEmails(newSet)
-                                      }}
-                                    />
-                                    <span className="text-sm">{email}</span>
-                                  </label>
-                                ))}
+                                <span className="text-xs font-semibold text-violet-400 uppercase tracking-wide">Caterer's Friends:</span>
+                                <div className="grid gap-2">
+                                  {catererEmails.map((email) => (
+                                    <label key={email} className="flex items-center gap-3 p-2.5 rounded-lg bg-card/50 border border-border/30 cursor-pointer hover:bg-card hover:border-violet-500/30 transition-all group">
+                                      <Checkbox
+                                        checked={selectedFriendEmails.has(email)}
+                                        onCheckedChange={(checked) => {
+                                          const newSet = new Set(selectedFriendEmails)
+                                          if (checked) {
+                                            newSet.add(email)
+                                          } else {
+                                            newSet.delete(email)
+                                          }
+                                          setSelectedFriendEmails(newSet)
+                                        }}
+                                        className="data-[state=checked]:bg-violet-500 data-[state=checked]:border-violet-500"
+                                      />
+                                      <Mail className="h-4 w-4 text-muted-foreground group-hover:text-violet-400 transition-colors" />
+                                      <span className="text-sm font-medium truncate flex-1">{email}</span>
+                                    </label>
+                                  ))}
+                                </div>
                               </div>
                             )}
                           </div>
@@ -3434,10 +3501,11 @@ function OrdersContent() {
                   })()}
 
                   {/* Manual CC Emails */}
-                  <div className="space-y-2">
-                    <Label htmlFor="manualCc">
+                  <div className="space-y-3 p-4 rounded-xl bg-card border border-border/50 shadow-sm">
+                    <Label htmlFor="manualCc" className="text-sm font-semibold flex items-center gap-2">
+                      <AtSign className="h-4 w-4 text-cyan-500" />
                       Additional CC Emails
-                      <span className="text-xs text-muted-foreground ml-2">(comma-separated, optional)</span>
+                      <span className="text-xs font-normal text-muted-foreground">(comma-separated, optional)</span>
                     </Label>
                     <Input
                       id="manualCc"
@@ -3445,31 +3513,57 @@ function OrdersContent() {
                       placeholder="email1@example.com, email2@example.com"
                       value={manualCcEmails}
                       onChange={(e) => setManualCcEmails(e.target.value)}
+                      className="h-11 bg-muted/30 border-border/50 focus:border-cyan-500/50 focus:ring-cyan-500/20"
                     />
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Info className="h-3 w-3" />
                       These emails will receive a copy of the email but won't be saved.
                     </p>
                   </div>
 
-                  <div className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
-                    <p className="font-medium text-foreground mb-1">Note:</p>
-                    <ul className="list-disc list-inside space-y-1">
-                      <li>The order PDF will be automatically attached to the email</li>
-                      <li>Email subject is determined by the order status template</li>
-                      <li>Custom messages will override the template body only</li>
-                      <li>CC recipients will receive copies of all emails sent</li>
+                  <div className="rounded-xl bg-gradient-to-br from-amber-500/5 to-orange-500/5 border border-amber-500/20 p-4 text-sm">
+                    <p className="font-semibold text-foreground mb-2 flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4 text-amber-500" />
+                      Note:
+                    </p>
+                    <ul className="space-y-1.5 text-muted-foreground">
+                      <li className="flex items-start gap-2">
+                        <FileText className="h-4 w-4 mt-0.5 text-amber-500/70 flex-shrink-0" />
+                        <span>The order PDF will be automatically attached to the email</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <Mail className="h-4 w-4 mt-0.5 text-amber-500/70 flex-shrink-0" />
+                        <span>Email subject is determined by the order status template</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <MessageSquare className="h-4 w-4 mt-0.5 text-amber-500/70 flex-shrink-0" />
+                        <span>Custom messages will override the template body only</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <Users className="h-4 w-4 mt-0.5 text-amber-500/70 flex-shrink-0" />
+                        <span>CC recipients will receive copies of all emails sent</span>
+                      </li>
                     </ul>
                   </div>
                 </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => {
-                    setEmailDialogOpen(false)
-                    setSelectedFriendEmails(new Set())
-                    setManualCcEmails("")
-                  }} disabled={isSendingEmail}>
+                <DialogFooter className="px-6 py-4 bg-muted/30 border-t border-border/50 flex-shrink-0">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => {
+                      setEmailDialogOpen(false)
+                      setSelectedFriendEmails(new Set())
+                      setManualCcEmails("")
+                    }} 
+                    disabled={isSendingEmail}
+                    className="px-6"
+                  >
                     Cancel
                   </Button>
-                  <Button onClick={confirmEmailSend} disabled={isSendingEmail} className="gap-2">
+                  <Button 
+                    onClick={confirmEmailSend} 
+                    disabled={isSendingEmail} 
+                    className="gap-2 px-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-500/20"
+                  >
                     {isSendingEmail ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin" />

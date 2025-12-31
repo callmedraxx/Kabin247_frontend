@@ -298,26 +298,32 @@ const decodeHtmlEntities = (text: string): string => {
 }
 
 // Helper function to format date for HTML date input (YYYY-MM-DD)
+// Uses UTC methods to avoid timezone conversion issues
 const formatDateForInput = (dateString: string | null | undefined): string => {
   if (!dateString) return ""
+  
+  // If it's already in YYYY-MM-DD format, return as is (most common case)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+    return dateString
+  }
+  
+  // Try to extract YYYY-MM-DD from the beginning of the string (e.g., from ISO datetime)
+  const match = dateString.match(/^(\d{4}-\d{2}-\d{2})/)
+  if (match) {
+    return match[1]
+  }
+  
   try {
     const date = new Date(dateString)
     if (isNaN(date.getTime())) {
-      // If it's already in YYYY-MM-DD format, return as is
-      if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
-        return dateString
-      }
       return ""
     }
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, "0")
-    const day = String(date.getDate()).padStart(2, "0")
+    // Use UTC methods to avoid timezone conversion issues
+    const year = date.getUTCFullYear()
+    const month = String(date.getUTCMonth() + 1).padStart(2, "0")
+    const day = String(date.getUTCDate()).padStart(2, "0")
     return `${year}-${month}-${day}`
   } catch {
-    // If it's already in YYYY-MM-DD format, return as is
-    if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
-      return dateString
-    }
     return ""
   }
 }
@@ -2374,16 +2380,31 @@ function POSContent() {
                                                     const catererId = form.getValues("caterer_id")
                                                     
                                                     // Resolve price based on caterer_id and portion size
-                                                    const price = resolveMenuItemPrice(selectedItem, currentPortionSize || undefined, catererId)
+                                                    let resolvedPrice = resolveMenuItemPrice(selectedItem, currentPortionSize || undefined, catererId)
                                                     
-                                                    // If no price resolved, try first variant as fallback
-                                                    const fallbackPrice = price ?? 
-                                                      (selectedItem.variants && selectedItem.variants.length > 0
-                                                        ? selectedItem.variants[0].price
-                                                        : (selectedItem as any).price)
+                                                    // If no price resolved, try first variant with caterer-specific price or base price
+                                                    if (resolvedPrice === undefined && selectedItem.variants && selectedItem.variants.length > 0) {
+                                                      const firstVariant = selectedItem.variants[0]
+                                                      // Check for caterer-specific price in first variant
+                                                      if (catererId && firstVariant.caterer_prices && firstVariant.caterer_prices.length > 0) {
+                                                        const catererPrice = firstVariant.caterer_prices.find(cp => cp.caterer_id === catererId)
+                                                        if (catererPrice) {
+                                                          resolvedPrice = catererPrice.price
+                                                        }
+                                                      }
+                                                      // Fallback to first variant's base price
+                                                      if (resolvedPrice === undefined) {
+                                                        resolvedPrice = firstVariant.price
+                                                      }
+                                                    }
                                                     
-                                                    if (fallbackPrice !== undefined && fallbackPrice !== null) {
-                                                      form.setValue(`items.${index}.price`, fallbackPrice.toString())
+                                                    // Ultimate fallback: check for price directly on menu item (legacy support)
+                                                    if (resolvedPrice === undefined && (selectedItem as any).price !== undefined) {
+                                                      resolvedPrice = (selectedItem as any).price
+                                                    }
+                                                    
+                                                    if (resolvedPrice !== undefined && resolvedPrice !== null) {
+                                                      form.setValue(`items.${index}.price`, resolvedPrice.toString())
                                                     }
                                                     
                                                     // Auto-populate description if available
