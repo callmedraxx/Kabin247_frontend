@@ -3260,6 +3260,42 @@ function POSContent() {
                                         <span className="font-medium">${parseFloat(formValues.deliveryFee).toFixed(2)}</span>
                                       </div>
                                     )}
+                                    {formValues.coordinationFee && parseFloat(formValues.coordinationFee) > 0 && (
+                                      <div className="flex justify-between items-center text-sm">
+                                        <span className="text-muted-foreground">Coordination Fee</span>
+                                        <span className="font-medium">${parseFloat(formValues.coordinationFee).toFixed(2)}</span>
+                                      </div>
+                                    )}
+                                    {formValues.airportFee && parseFloat(formValues.airportFee) > 0 && (
+                                      <div className="flex justify-between items-center text-sm">
+                                        <span className="text-muted-foreground">Airport Fee</span>
+                                        <span className="font-medium">${parseFloat(formValues.airportFee).toFixed(2)}</span>
+                                      </div>
+                                    )}
+                                    {formValues.fboFee && parseFloat(formValues.fboFee) > 0 && (
+                                      <div className="flex justify-between items-center text-sm">
+                                        <span className="text-muted-foreground">FBO Fee</span>
+                                        <span className="font-medium">${parseFloat(formValues.fboFee).toFixed(2)}</span>
+                                      </div>
+                                    )}
+                                    {formValues.shoppingFee && parseFloat(formValues.shoppingFee) > 0 && (
+                                      <div className="flex justify-between items-center text-sm">
+                                        <span className="text-muted-foreground">Shopping Fee</span>
+                                        <span className="font-medium">${parseFloat(formValues.shoppingFee).toFixed(2)}</span>
+                                      </div>
+                                    )}
+                                    {formValues.restaurantPickupFee && parseFloat(formValues.restaurantPickupFee) > 0 && (
+                                      <div className="flex justify-between items-center text-sm">
+                                        <span className="text-muted-foreground">Restaurant Pickup Fee</span>
+                                        <span className="font-medium">${parseFloat(formValues.restaurantPickupFee).toFixed(2)}</span>
+                                      </div>
+                                    )}
+                                    {formValues.airportPickupFee && parseFloat(formValues.airportPickupFee) > 0 && (
+                                      <div className="flex justify-between items-center text-sm">
+                                        <span className="text-muted-foreground">Airport Pickup Fee</span>
+                                        <span className="font-medium">${parseFloat(formValues.airportPickupFee).toFixed(2)}</span>
+                                      </div>
+                                    )}
                                     <div className="flex justify-between items-center pt-3 border-t border-primary/20">
                                       <span className="font-semibold">Total</span>
                                       <span className="text-2xl font-bold bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-transparent">
@@ -3270,7 +3306,13 @@ function POSContent() {
                                             return sum + (price * quantity)
                                           }, 0) +
                                           (parseFloat(formValues.serviceCharge || "0")) +
-                                          (parseFloat(formValues.deliveryFee || "0"))
+                                          (parseFloat(formValues.deliveryFee || "0")) +
+                                          (parseFloat(formValues.coordinationFee || "0")) +
+                                          (parseFloat(formValues.airportFee || "0")) +
+                                          (parseFloat(formValues.fboFee || "0")) +
+                                          (parseFloat(formValues.shoppingFee || "0")) +
+                                          (parseFloat(formValues.restaurantPickupFee || "0")) +
+                                          (parseFloat(formValues.airportPickupFee || "0"))
                                         ).toFixed(2)}
                                       </span>
                                     </div>
