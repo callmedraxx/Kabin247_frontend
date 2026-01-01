@@ -625,7 +625,7 @@ function POSContent() {
   // Use context fetch function - it handles all state management
   // Note: showLoading parameter is ignored as context handles loading state
   const fetchMenuItems = React.useCallback(async (search?: string, _showLoading?: boolean) => {
-    await fetchMenuItemsFromContext(search)
+    return await fetchMenuItemsFromContext(search)
   }, [fetchMenuItemsFromContext])
   
   // Initial fetch on mount - fetch all data using contexts
@@ -916,31 +916,36 @@ function POSContent() {
           // We need to ensure context data is loaded before we try to map items
           // Use IIFE to handle async operations in useEffect
           ;(async () => {
-            const promises: Promise<any>[] = []
+            const otherPromises: Promise<any>[] = []
             
-            // Always fetch menu items - they're critical for item matching
-            promises.push(fetchMenuItems())
+            // Fetch menu items and capture the result directly (don't rely on React state)
+            const fetchedMenuItems = await fetchMenuItems()
             
             if (catererOptions.length === 0) {
-              promises.push(fetchCaterers())
+              otherPromises.push(fetchCaterers())
             }
             if (airportOptions.length === 0) {
-              promises.push(fetchAirports())
+              otherPromises.push(fetchAirports())
             }
             if (clientOptions.length === 0) {
-              promises.push(fetchClients())
+              otherPromises.push(fetchClients())
             }
             
-            // Wait for all fetches to complete
-            await Promise.all(promises)
+            // Wait for other fetches to complete
+            await Promise.all(otherPromises)
             
-            // Wait a bit longer to ensure React state has updated
-            // Context state updates are async, so we need to wait for them
+            // Wait a bit longer to ensure React state has updated for other contexts
             await new Promise(resolve => setTimeout(resolve, 300))
             
+            // Helper function to find menu item by name using the fetched data directly
+            const findMenuItemByName = (name: string) => {
+              return fetchedMenuItems.find(mi => 
+                mi.item_name?.toLowerCase() === name?.toLowerCase()
+              )
+            }
+            
           // Reset form with duplicate data - include all fields
-            // Now menuItemOptions should be populated from context
-            // IMPORTANT: Use getMenuItemByName and getMenuItemById from context to get latest values
+            // Use the directly fetched menu items for reliable matching
           form.reset({
             order_number: "",
             client_id: duplicateData.client_id || undefined,
@@ -952,20 +957,20 @@ function POSContent() {
               // First try itemName, item_id, or menu_item_id
               let itemName = item.itemName || item.item_id?.toString() || item.menu_item_id?.toString() || ""
               
-              // If no ID, try to find by name using context getter (context should be loaded now)
+              // If no ID, try to find by name using the freshly fetched menu items
               // Try item_name first (from duplicate data), then itemName (legacy), then itemDescription (fallback)
               if (!itemName) {
                 const itemNameToSearch = item.item_name || item.itemName || item.itemDescription
                 if (itemNameToSearch) {
-                  const foundMenuItem = getMenuItemByName(itemNameToSearch)
+                  const foundMenuItem = findMenuItemByName(itemNameToSearch)
                   if (foundMenuItem) {
                     itemName = foundMenuItem.id.toString()
                   }
                 }
               }
               
-              // Verify itemName exists in options using context getter (more reliable than closure variable)
-              const itemExists = itemName ? (getMenuItemOptionById(parseInt(itemName)) !== undefined) : false
+              // Verify itemName exists in the fetched options
+              const itemExists = itemName ? fetchedMenuItems.some(mi => mi.id.toString() === itemName) : false
               
               return {
                 itemName,
@@ -1039,31 +1044,27 @@ function POSContent() {
               form.setValue("fbo_id", duplicateData.fbo_id, { shouldValidate: false })
             }
             
-            // Set menu items explicitly using context getter
-            // CRITICAL: Use context getters to access latest state, not closure variables
+            // Set menu items explicitly using the fetched data directly
             if (duplicateData.items && duplicateData.items.length > 0) {
               duplicateData.items.forEach((item: any, index: number) => {
                 let itemName = item.itemName || item.item_id?.toString() || item.menu_item_id?.toString() || ""
                 
-                // If itemName is empty, try to find by name using context getter (accesses latest context state)
+                // If itemName is empty, try to find by name using the fetched menu items
                 // Try item_name first (from duplicate data), then itemName (legacy), then itemDescription (fallback)
                 if (!itemName) {
                   const itemNameToSearch = item.item_name || item.itemName || item.itemDescription
                   if (itemNameToSearch) {
-                    const foundMenuItem = getMenuItemByName(itemNameToSearch)
+                    const foundMenuItem = findMenuItemByName(itemNameToSearch)
                     if (foundMenuItem) {
                       itemName = foundMenuItem.id.toString()
-                    } else {
                     }
                   }
                 }
                 
-                // Verify itemName exists using context getter (more reliable than closure variable)
-                const itemId = itemName ? parseInt(itemName) : NaN
-                const itemExists = !isNaN(itemId) && getMenuItemOptionById(itemId) !== undefined
+                // Verify itemName exists in the fetched menu items
+                const itemExists = itemName ? fetchedMenuItems.some(mi => mi.id.toString() === itemName) : false
                 if (itemName && itemExists) {
                   form.setValue(`items.${index}.itemName`, itemName, { shouldValidate: false })
-                } else if (itemName && !itemExists) {
                 }
                 if (item.itemDescription) {
                   form.setValue(`items.${index}.itemDescription`, item.itemDescription, { shouldValidate: false })

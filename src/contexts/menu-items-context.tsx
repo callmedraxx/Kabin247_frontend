@@ -35,7 +35,7 @@ type MenuItemsContextType = {
   menuItems: MenuItem[]
   menuItemOptions: MenuItemOption[]
   isLoading: boolean
-  fetchMenuItems: (search?: string) => Promise<void>
+  fetchMenuItems: (search?: string) => Promise<MenuItem[]>
   getMenuItemById: (id: number) => MenuItem | undefined
   getMenuItemOptionById: (id: number) => MenuItemOption | undefined
   getMenuItemByName: (name: string) => MenuItem | undefined
@@ -48,7 +48,7 @@ export function MenuItemsProvider({ children }: { children: React.ReactNode }) {
   const [menuItemOptions, setMenuItemOptions] = React.useState<MenuItemOption[]>([])
   const [isLoading, setIsLoading] = React.useState(false)
 
-  const fetchMenuItems = React.useCallback(async (search?: string) => {
+  const fetchMenuItems = React.useCallback(async (search?: string): Promise<MenuItem[]> => {
     setIsLoading(true)
     try {
       const params = new URLSearchParams()
@@ -71,8 +71,12 @@ export function MenuItemsProvider({ children }: { children: React.ReactNode }) {
       }))
       
       setMenuItemOptions(options)
+      
+      // Return the data so callers can use it immediately without waiting for state
+      return allMenuItems
     } catch (err) {
       console.error("Error fetching menu items:", err)
+      return []
     } finally {
       setIsLoading(false)
     }
