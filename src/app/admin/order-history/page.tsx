@@ -145,6 +145,7 @@ interface Order {
   packaging_instructions: string | null
   dietary_restrictions: string | null
   service_charge: string | number
+  coordination_fee: string | number | null
   subtotal: string | number
   total: string | number
   created_at: string
@@ -1111,6 +1112,10 @@ function OrderHistoryContent() {
                                   <div className="flex justify-between text-sm">
                                     <span className="text-muted-foreground">Delivery Fee</span>
                                     <span>${formatPrice(viewingOrder.delivery_fee)}</span>
+                                  </div>
+                                  <div className="flex justify-between text-sm">
+                                    <span className="text-muted-foreground">Coordination Fee</span>
+                                    <span>${formatPrice(viewingOrder.coordination_fee)}</span>
                                   </div>
                                   <div className="flex justify-between font-semibold text-base pt-2 border-t">
                                     <span>Total</span>

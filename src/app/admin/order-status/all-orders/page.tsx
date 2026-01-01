@@ -279,6 +279,7 @@ interface Order {
   dietary_restrictions: string | null
   service_charge: string | number
   delivery_fee: string | number | null
+  coordination_fee: string | number | null
   subtotal: string | number
   total: string | number
   items?: OrderItem[]
@@ -334,6 +335,9 @@ const orderSchema = z.object({
   }),
   deliveryFee: z.string().optional().refine((val) => !val || (!isNaN(parseFloat(val)) && parseFloat(val) >= 0), {
     message: "Please enter a valid delivery fee amount",
+  }),
+  coordinationFee: z.string().optional().refine((val) => !val || (!isNaN(parseFloat(val)) && parseFloat(val) >= 0), {
+    message: "Please enter a valid coordination fee amount",
   }),
   aircraftTailNumber: z.string().optional(),
   deliveryDate: z.string().min(1, "Please select a delivery date"),
@@ -532,6 +536,7 @@ function OrdersContent() {
       dietaryRestrictions: "",
       serviceCharge: "",
       deliveryFee: "",
+      coordinationFee: "",
       aircraftTailNumber: "",
       deliveryDate: "",
       deliveryTime: "",
@@ -829,6 +834,7 @@ function OrdersContent() {
           dietaryRestrictions: editingOrder.dietary_restrictions || "",
           serviceCharge: editingOrder.service_charge?.toString() || "0",
           deliveryFee: editingOrder.delivery_fee?.toString() || "0",
+          coordinationFee: editingOrder.coordination_fee?.toString() || "0",
           paymentMethod: (editingOrder.payment_method as "card" | "ACH") || undefined,
           items: formItems,
         })
@@ -1128,6 +1134,7 @@ function OrdersContent() {
         dietaryRestrictions: fullOrder.dietary_restrictions || "",
         serviceCharge: fullOrder.service_charge?.toString() || "0",
         deliveryFee: fullOrder.delivery_fee?.toString() || "0",
+        coordinationFee: fullOrder.coordination_fee?.toString() || "0",
         paymentMethod: (fullOrder.payment_method as "card" | "ACH") || undefined,
         items: formItems,
       })
@@ -1226,6 +1233,7 @@ function OrdersContent() {
         status: values.status,
         service_charge: values.serviceCharge && values.serviceCharge.trim() ? parseFloat(values.serviceCharge) : 0,
         delivery_fee: values.deliveryFee && values.deliveryFee.trim() ? parseFloat(values.deliveryFee) : 0,
+        coordination_fee: values.coordinationFee && values.coordinationFee.trim() ? parseFloat(values.coordinationFee) : 0,
         description: values.description || null,
         notes: values.notes || null,
         reheating_instructions: values.reheatingInstructions || null,
@@ -2470,6 +2478,12 @@ function OrdersContent() {
                                       <span className="font-medium">${parseFloat(String(viewingOrder.service_charge)).toFixed(2)}</span>
                                     </div>
                                   )}
+                                  {parseFloat(String(viewingOrder.coordination_fee || 0)) > 0 && (
+                                    <div className="flex justify-between text-sm">
+                                      <span className="text-muted-foreground">Coordination Fee:</span>
+                                      <span className="font-medium">${parseFloat(String(viewingOrder.coordination_fee)).toFixed(2)}</span>
+                                    </div>
+                                  )}
                                   <div className="flex justify-between text-lg font-bold pt-2 border-t border-border/50">
                                     <span>Total:</span>
                                     <span className="text-primary">${parseFloat(String(viewingOrder.total)).toFixed(2)}</span>
@@ -2830,6 +2844,23 @@ function OrdersContent() {
                             render={({ field }) => (
                               <FormItem>
                                 <FormLabel className="text-xs font-medium text-muted-foreground">Delivery Fee</FormLabel>
+                                <FormControl>
+                                  <div className="relative">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                                    <Input type="number" step="0.01" placeholder="0.00" className="pl-7" {...field} />
+                                  </div>
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name="coordinationFee"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs font-medium text-muted-foreground">Coordination Fee</FormLabel>
                                 <FormControl>
                                   <div className="relative">
                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>

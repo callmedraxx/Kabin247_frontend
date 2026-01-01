@@ -233,6 +233,9 @@ const formSchema = z.object({
   deliveryFee: z.string().optional().refine((val) => !val || (!isNaN(parseFloat(val)) && parseFloat(val) >= 0), {
     message: "Please enter a valid delivery fee amount",
   }),
+  coordinationFee: z.string().optional().refine((val) => !val || (!isNaN(parseFloat(val)) && parseFloat(val) >= 0), {
+    message: "Please enter a valid coordination fee amount",
+  }),
   aircraftTailNumber: z.string().optional(),
   deliveryDate: z.string().min(1, "Please select a delivery date"),
   deliveryTime: z.string().min(1, "Please select a delivery time"),
@@ -735,6 +738,7 @@ function POSContent() {
       dietaryRestrictions: "",
       serviceCharge: "",
       deliveryFee: "",
+      coordinationFee: "",
       aircraftTailNumber: "",
       deliveryDate: "",
       deliveryTime: "",
@@ -748,6 +752,7 @@ function POSContent() {
   const watchedItems = form.watch("items") || []
   const watchedServiceCharge = form.watch("serviceCharge") || ""
   const watchedDeliveryFee = form.watch("deliveryFee") || ""
+  const watchedCoordinationFee = form.watch("coordinationFee") || ""
   const watchedPriority = form.watch("orderPriority")
   const watchedOrderType = form.watch("orderType")
   const watchedPayment = form.watch("paymentMethod")
@@ -952,6 +957,7 @@ function POSContent() {
             dietaryRestrictions: duplicateData.dietary_restrictions || "",
             serviceCharge: duplicateData.service_charge?.toString() || "0",
             deliveryFee: duplicateData.delivery_fee?.toString() || "0",
+            coordinationFee: duplicateData.coordination_fee?.toString() || "0",
             aircraftTailNumber: duplicateData.aircraft_tail_number || "",
             deliveryDate: formattedDeliveryDate, // Use formatted delivery date
             deliveryTime: duplicateData.delivery_time || "", // Use delivery time from duplicate
@@ -1293,17 +1299,20 @@ function POSContent() {
     const serviceCharge = Number.isFinite(serviceChargeValue) ? serviceChargeValue : 0
     const deliveryFeeValue = parseFloat(watchedDeliveryFee || "0")
     const deliveryFee = Number.isFinite(deliveryFeeValue) ? deliveryFeeValue : 0
-    const total = subtotal + serviceCharge + deliveryFee
+    const coordinationFeeValue = parseFloat(watchedCoordinationFee || "0")
+    const coordinationFee = Number.isFinite(coordinationFeeValue) ? coordinationFeeValue : 0
+    const total = subtotal + serviceCharge + deliveryFee + coordinationFee
 
     return {
       subtotal,
       serviceCharge,
       deliveryFee,
+      coordinationFee,
       total,
       totalQuantity,
       itemCount: itemsArray.length,
     }
-  }, [watchedItems, watchedServiceCharge, watchedDeliveryFee])
+  }, [watchedItems, watchedServiceCharge, watchedDeliveryFee, watchedCoordinationFee])
 
   const selectedClientLabel = React.useMemo(
     () => clientOptions.find((o) => o.value === selectedClient?.toString())?.label || clientsData.find((c) => c.id === selectedClient)?.full_name || "Not selected",
@@ -1695,6 +1704,7 @@ function POSContent() {
       dietaryRestrictions: "",
       serviceCharge: "",
       deliveryFee: "",
+      coordinationFee: "",
       aircraftTailNumber: "",
       deliveryDate: "",
       deliveryTime: "",
@@ -1747,6 +1757,7 @@ function POSContent() {
         payment_method: formData.paymentMethod,
         service_charge: formData.serviceCharge && formData.serviceCharge.trim() ? parseFloat(formData.serviceCharge) : 0,
         delivery_fee: formData.deliveryFee && formData.deliveryFee.trim() ? parseFloat(formData.deliveryFee) : 0,
+        coordination_fee: formData.coordinationFee && formData.coordinationFee.trim() ? parseFloat(formData.coordinationFee) : 0,
         description: formData.description || null,
         notes: formData.notes || null,
         reheating_instructions: formData.reheatingInstructions || null,
@@ -2119,6 +2130,23 @@ function POSContent() {
                                 render={({ field }) => (
                                   <FormItem>
                                     <FormLabel className="text-xs font-medium text-muted-foreground">Delivery Fee</FormLabel>
+                                    <FormControl>
+                                      <div className="relative">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                                        <Input type="number" step="0.01" placeholder="0.00" className="pl-7" {...field} />
+                                      </div>
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={form.control}
+                                name="coordinationFee"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-xs font-medium text-muted-foreground">Coordination Fee</FormLabel>
                                     <FormControl>
                                       <div className="relative">
                                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
@@ -2695,6 +2723,10 @@ function POSContent() {
                               <div className="flex items-center justify-between text-sm">
                                 <span className="text-muted-foreground">Delivery fee</span>
                                 <span className="font-medium">{formatCurrency(summary.deliveryFee)}</span>
+                              </div>
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-muted-foreground">Coordination fee</span>
+                                <span className="font-medium">{formatCurrency(summary.coordinationFee)}</span>
                               </div>
                               <div className="flex items-center justify-between pt-3 border-t border-primary/20">
                                 <span className="text-sm font-semibold">Total</span>
