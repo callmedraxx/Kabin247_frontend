@@ -280,6 +280,11 @@ interface Order {
   service_charge: string | number
   delivery_fee: string | number | null
   coordination_fee: string | number | null
+  airport_fee: string | number | null
+  fbo_fee: string | number | null
+  shopping_fee: string | number | null
+  restaurant_pickup_fee: string | number | null
+  airport_pickup_fee: string | number | null
   subtotal: string | number
   total: string | number
   items?: OrderItem[]
@@ -338,6 +343,21 @@ const orderSchema = z.object({
   }),
   coordinationFee: z.string().optional().refine((val) => !val || (!isNaN(parseFloat(val)) && parseFloat(val) >= 0), {
     message: "Please enter a valid coordination fee amount",
+  }),
+  airportFee: z.string().optional().refine((val) => !val || (!isNaN(parseFloat(val)) && parseFloat(val) >= 0), {
+    message: "Please enter a valid airport fee amount",
+  }),
+  fboFee: z.string().optional().refine((val) => !val || (!isNaN(parseFloat(val)) && parseFloat(val) >= 0), {
+    message: "Please enter a valid FBO fee amount",
+  }),
+  shoppingFee: z.string().optional().refine((val) => !val || (!isNaN(parseFloat(val)) && parseFloat(val) >= 0), {
+    message: "Please enter a valid shopping fee amount",
+  }),
+  restaurantPickupFee: z.string().optional().refine((val) => !val || (!isNaN(parseFloat(val)) && parseFloat(val) >= 0), {
+    message: "Please enter a valid restaurant pickup fee amount",
+  }),
+  airportPickupFee: z.string().optional().refine((val) => !val || (!isNaN(parseFloat(val)) && parseFloat(val) >= 0), {
+    message: "Please enter a valid airport pickup fee amount",
   }),
   aircraftTailNumber: z.string().optional(),
   deliveryDate: z.string().min(1, "Please select a delivery date"),
@@ -537,6 +557,11 @@ function OrdersContent() {
       serviceCharge: "",
       deliveryFee: "",
       coordinationFee: "",
+      airportFee: "",
+      fboFee: "",
+      shoppingFee: "",
+      restaurantPickupFee: "",
+      airportPickupFee: "",
       aircraftTailNumber: "",
       deliveryDate: "",
       deliveryTime: "",
@@ -835,6 +860,11 @@ function OrdersContent() {
           serviceCharge: editingOrder.service_charge?.toString() || "0",
           deliveryFee: editingOrder.delivery_fee?.toString() || "0",
           coordinationFee: editingOrder.coordination_fee?.toString() || "0",
+          airportFee: editingOrder.airport_fee?.toString() || "0",
+          fboFee: editingOrder.fbo_fee?.toString() || "0",
+          shoppingFee: editingOrder.shopping_fee?.toString() || "0",
+          restaurantPickupFee: editingOrder.restaurant_pickup_fee?.toString() || "0",
+          airportPickupFee: editingOrder.airport_pickup_fee?.toString() || "0",
           paymentMethod: (editingOrder.payment_method as "card" | "ACH") || undefined,
           items: formItems,
         })
@@ -1135,6 +1165,11 @@ function OrdersContent() {
         serviceCharge: fullOrder.service_charge?.toString() || "0",
         deliveryFee: fullOrder.delivery_fee?.toString() || "0",
         coordinationFee: fullOrder.coordination_fee?.toString() || "0",
+        airportFee: fullOrder.airport_fee?.toString() || "0",
+        fboFee: fullOrder.fbo_fee?.toString() || "0",
+        shoppingFee: fullOrder.shopping_fee?.toString() || "0",
+        restaurantPickupFee: fullOrder.restaurant_pickup_fee?.toString() || "0",
+        airportPickupFee: fullOrder.airport_pickup_fee?.toString() || "0",
         paymentMethod: (fullOrder.payment_method as "card" | "ACH") || undefined,
         items: formItems,
       })
@@ -1234,6 +1269,11 @@ function OrdersContent() {
         service_charge: values.serviceCharge && values.serviceCharge.trim() ? parseFloat(values.serviceCharge) : 0,
         delivery_fee: values.deliveryFee && values.deliveryFee.trim() ? parseFloat(values.deliveryFee) : 0,
         coordination_fee: values.coordinationFee && values.coordinationFee.trim() ? parseFloat(values.coordinationFee) : 0,
+        airport_fee: values.airportFee && values.airportFee.trim() ? parseFloat(values.airportFee) : 0,
+        fbo_fee: values.fboFee && values.fboFee.trim() ? parseFloat(values.fboFee) : 0,
+        shopping_fee: values.shoppingFee && values.shoppingFee.trim() ? parseFloat(values.shoppingFee) : 0,
+        restaurant_pickup_fee: values.restaurantPickupFee && values.restaurantPickupFee.trim() ? parseFloat(values.restaurantPickupFee) : 0,
+        airport_pickup_fee: values.airportPickupFee && values.airportPickupFee.trim() ? parseFloat(values.airportPickupFee) : 0,
         description: values.description || null,
         notes: values.notes || null,
         reheating_instructions: values.reheatingInstructions || null,
@@ -2484,6 +2524,36 @@ function OrdersContent() {
                                       <span className="font-medium">${parseFloat(String(viewingOrder.coordination_fee)).toFixed(2)}</span>
                                     </div>
                                   )}
+                                  {parseFloat(String(viewingOrder.airport_fee || 0)) > 0 && (
+                                    <div className="flex justify-between text-sm">
+                                      <span className="text-muted-foreground">Airport Fee:</span>
+                                      <span className="font-medium">${parseFloat(String(viewingOrder.airport_fee)).toFixed(2)}</span>
+                                    </div>
+                                  )}
+                                  {parseFloat(String(viewingOrder.fbo_fee || 0)) > 0 && (
+                                    <div className="flex justify-between text-sm">
+                                      <span className="text-muted-foreground">FBO Fee:</span>
+                                      <span className="font-medium">${parseFloat(String(viewingOrder.fbo_fee)).toFixed(2)}</span>
+                                    </div>
+                                  )}
+                                  {parseFloat(String(viewingOrder.shopping_fee || 0)) > 0 && (
+                                    <div className="flex justify-between text-sm">
+                                      <span className="text-muted-foreground">Shopping Fee:</span>
+                                      <span className="font-medium">${parseFloat(String(viewingOrder.shopping_fee)).toFixed(2)}</span>
+                                    </div>
+                                  )}
+                                  {parseFloat(String(viewingOrder.restaurant_pickup_fee || 0)) > 0 && (
+                                    <div className="flex justify-between text-sm">
+                                      <span className="text-muted-foreground">Restaurant Pickup Fee:</span>
+                                      <span className="font-medium">${parseFloat(String(viewingOrder.restaurant_pickup_fee)).toFixed(2)}</span>
+                                    </div>
+                                  )}
+                                  {parseFloat(String(viewingOrder.airport_pickup_fee || 0)) > 0 && (
+                                    <div className="flex justify-between text-sm">
+                                      <span className="text-muted-foreground">Airport Pickup Fee:</span>
+                                      <span className="font-medium">${parseFloat(String(viewingOrder.airport_pickup_fee)).toFixed(2)}</span>
+                                    </div>
+                                  )}
                                   <div className="flex justify-between text-lg font-bold pt-2 border-t border-border/50">
                                     <span>Total:</span>
                                     <span className="text-primary">${parseFloat(String(viewingOrder.total)).toFixed(2)}</span>
@@ -2861,6 +2931,91 @@ function OrdersContent() {
                             render={({ field }) => (
                               <FormItem>
                                 <FormLabel className="text-xs font-medium text-muted-foreground">Coordination Fee</FormLabel>
+                                <FormControl>
+                                  <div className="relative">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                                    <Input type="number" step="0.01" placeholder="0.00" className="pl-7" {...field} />
+                                  </div>
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name="airportFee"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs font-medium text-muted-foreground">Airport Fee</FormLabel>
+                                <FormControl>
+                                  <div className="relative">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                                    <Input type="number" step="0.01" placeholder="0.00" className="pl-7" {...field} />
+                                  </div>
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name="fboFee"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs font-medium text-muted-foreground">FBO Fee</FormLabel>
+                                <FormControl>
+                                  <div className="relative">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                                    <Input type="number" step="0.01" placeholder="0.00" className="pl-7" {...field} />
+                                  </div>
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name="shoppingFee"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs font-medium text-muted-foreground">Shopping Fee</FormLabel>
+                                <FormControl>
+                                  <div className="relative">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                                    <Input type="number" step="0.01" placeholder="0.00" className="pl-7" {...field} />
+                                  </div>
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name="restaurantPickupFee"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs font-medium text-muted-foreground">Restaurant Pickup Fee</FormLabel>
+                                <FormControl>
+                                  <div className="relative">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                                    <Input type="number" step="0.01" placeholder="0.00" className="pl-7" {...field} />
+                                  </div>
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name="airportPickupFee"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs font-medium text-muted-foreground">Airport Pickup Fee</FormLabel>
                                 <FormControl>
                                   <div className="relative">
                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>

@@ -146,6 +146,11 @@ interface Order {
   dietary_restrictions: string | null
   service_charge: string | number
   coordination_fee: string | number | null
+  airport_fee: string | number | null
+  fbo_fee: string | number | null
+  shopping_fee: string | number | null
+  restaurant_pickup_fee: string | number | null
+  airport_pickup_fee: string | number | null
   subtotal: string | number
   total: string | number
   created_at: string
@@ -1113,10 +1118,42 @@ function OrderHistoryContent() {
                                     <span className="text-muted-foreground">Delivery Fee</span>
                                     <span>${formatPrice(viewingOrder.delivery_fee)}</span>
                                   </div>
-                                  <div className="flex justify-between text-sm">
-                                    <span className="text-muted-foreground">Coordination Fee</span>
-                                    <span>${formatPrice(viewingOrder.coordination_fee)}</span>
-                                  </div>
+                                  {parseFloat(String(viewingOrder.coordination_fee || 0)) > 0 && (
+                                    <div className="flex justify-between text-sm">
+                                      <span className="text-muted-foreground">Coordination Fee</span>
+                                      <span>${formatPrice(viewingOrder.coordination_fee)}</span>
+                                    </div>
+                                  )}
+                                  {parseFloat(String(viewingOrder.airport_fee || 0)) > 0 && (
+                                    <div className="flex justify-between text-sm">
+                                      <span className="text-muted-foreground">Airport Fee</span>
+                                      <span>${formatPrice(viewingOrder.airport_fee)}</span>
+                                    </div>
+                                  )}
+                                  {parseFloat(String(viewingOrder.fbo_fee || 0)) > 0 && (
+                                    <div className="flex justify-between text-sm">
+                                      <span className="text-muted-foreground">FBO Fee</span>
+                                      <span>${formatPrice(viewingOrder.fbo_fee)}</span>
+                                    </div>
+                                  )}
+                                  {parseFloat(String(viewingOrder.shopping_fee || 0)) > 0 && (
+                                    <div className="flex justify-between text-sm">
+                                      <span className="text-muted-foreground">Shopping Fee</span>
+                                      <span>${formatPrice(viewingOrder.shopping_fee)}</span>
+                                    </div>
+                                  )}
+                                  {parseFloat(String(viewingOrder.restaurant_pickup_fee || 0)) > 0 && (
+                                    <div className="flex justify-between text-sm">
+                                      <span className="text-muted-foreground">Restaurant Pickup Fee</span>
+                                      <span>${formatPrice(viewingOrder.restaurant_pickup_fee)}</span>
+                                    </div>
+                                  )}
+                                  {parseFloat(String(viewingOrder.airport_pickup_fee || 0)) > 0 && (
+                                    <div className="flex justify-between text-sm">
+                                      <span className="text-muted-foreground">Airport Pickup Fee</span>
+                                      <span>${formatPrice(viewingOrder.airport_pickup_fee)}</span>
+                                    </div>
+                                  )}
                                   <div className="flex justify-between font-semibold text-base pt-2 border-t">
                                     <span>Total</span>
                                     <span>${formatPrice(viewingOrder.total)}</span>

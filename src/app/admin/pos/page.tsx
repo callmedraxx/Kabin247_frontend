@@ -236,6 +236,21 @@ const formSchema = z.object({
   coordinationFee: z.string().optional().refine((val) => !val || (!isNaN(parseFloat(val)) && parseFloat(val) >= 0), {
     message: "Please enter a valid coordination fee amount",
   }),
+  airportFee: z.string().optional().refine((val) => !val || (!isNaN(parseFloat(val)) && parseFloat(val) >= 0), {
+    message: "Please enter a valid airport fee amount",
+  }),
+  fboFee: z.string().optional().refine((val) => !val || (!isNaN(parseFloat(val)) && parseFloat(val) >= 0), {
+    message: "Please enter a valid FBO fee amount",
+  }),
+  shoppingFee: z.string().optional().refine((val) => !val || (!isNaN(parseFloat(val)) && parseFloat(val) >= 0), {
+    message: "Please enter a valid shopping fee amount",
+  }),
+  restaurantPickupFee: z.string().optional().refine((val) => !val || (!isNaN(parseFloat(val)) && parseFloat(val) >= 0), {
+    message: "Please enter a valid restaurant pickup fee amount",
+  }),
+  airportPickupFee: z.string().optional().refine((val) => !val || (!isNaN(parseFloat(val)) && parseFloat(val) >= 0), {
+    message: "Please enter a valid airport pickup fee amount",
+  }),
   aircraftTailNumber: z.string().optional(),
   deliveryDate: z.string().min(1, "Please select a delivery date"),
   deliveryTime: z.string().min(1, "Please select a delivery time"),
@@ -419,7 +434,16 @@ const loadDraft = (): FormValues | null => {
     try {
       const draftData = localStorage.getItem(DRAFT_STORAGE_KEY)
       if (draftData) {
-        return JSON.parse(draftData) as FormValues
+        const parsed = JSON.parse(draftData) as FormValues
+        // Ensure backward compatibility with old drafts that don't have new fee fields
+        return {
+          ...parsed,
+          airportFee: parsed.airportFee || "",
+          fboFee: parsed.fboFee || "",
+          shoppingFee: parsed.shoppingFee || "",
+          restaurantPickupFee: parsed.restaurantPickupFee || "",
+          airportPickupFee: parsed.airportPickupFee || "",
+        }
       }
     } catch (error) {
       console.warn("Failed to load draft from localStorage:", error)
@@ -739,6 +763,11 @@ function POSContent() {
       serviceCharge: "",
       deliveryFee: "",
       coordinationFee: "",
+      airportFee: "",
+      fboFee: "",
+      shoppingFee: "",
+      restaurantPickupFee: "",
+      airportPickupFee: "",
       aircraftTailNumber: "",
       deliveryDate: "",
       deliveryTime: "",
@@ -753,6 +782,11 @@ function POSContent() {
   const watchedServiceCharge = form.watch("serviceCharge") || ""
   const watchedDeliveryFee = form.watch("deliveryFee") || ""
   const watchedCoordinationFee = form.watch("coordinationFee") || ""
+  const watchedAirportFee = form.watch("airportFee") || ""
+  const watchedFboFee = form.watch("fboFee") || ""
+  const watchedShoppingFee = form.watch("shoppingFee") || ""
+  const watchedRestaurantPickupFee = form.watch("restaurantPickupFee") || ""
+  const watchedAirportPickupFee = form.watch("airportPickupFee") || ""
   const watchedPriority = form.watch("orderPriority")
   const watchedOrderType = form.watch("orderType")
   const watchedPayment = form.watch("paymentMethod")
@@ -958,6 +992,11 @@ function POSContent() {
             serviceCharge: duplicateData.service_charge?.toString() || "0",
             deliveryFee: duplicateData.delivery_fee?.toString() || "0",
             coordinationFee: duplicateData.coordination_fee?.toString() || "0",
+            airportFee: duplicateData.airport_fee?.toString() || "0",
+            fboFee: duplicateData.fbo_fee?.toString() || "0",
+            shoppingFee: duplicateData.shopping_fee?.toString() || "0",
+            restaurantPickupFee: duplicateData.restaurant_pickup_fee?.toString() || "0",
+            airportPickupFee: duplicateData.airport_pickup_fee?.toString() || "0",
             aircraftTailNumber: duplicateData.aircraft_tail_number || "",
             deliveryDate: formattedDeliveryDate, // Use formatted delivery date
             deliveryTime: duplicateData.delivery_time || "", // Use delivery time from duplicate
@@ -1301,18 +1340,33 @@ function POSContent() {
     const deliveryFee = Number.isFinite(deliveryFeeValue) ? deliveryFeeValue : 0
     const coordinationFeeValue = parseFloat(watchedCoordinationFee || "0")
     const coordinationFee = Number.isFinite(coordinationFeeValue) ? coordinationFeeValue : 0
-    const total = subtotal + serviceCharge + deliveryFee + coordinationFee
+    const airportFeeValue = parseFloat(watchedAirportFee || "0")
+    const airportFee = Number.isFinite(airportFeeValue) ? airportFeeValue : 0
+    const fboFeeValue = parseFloat(watchedFboFee || "0")
+    const fboFee = Number.isFinite(fboFeeValue) ? fboFeeValue : 0
+    const shoppingFeeValue = parseFloat(watchedShoppingFee || "0")
+    const shoppingFee = Number.isFinite(shoppingFeeValue) ? shoppingFeeValue : 0
+    const restaurantPickupFeeValue = parseFloat(watchedRestaurantPickupFee || "0")
+    const restaurantPickupFee = Number.isFinite(restaurantPickupFeeValue) ? restaurantPickupFeeValue : 0
+    const airportPickupFeeValue = parseFloat(watchedAirportPickupFee || "0")
+    const airportPickupFee = Number.isFinite(airportPickupFeeValue) ? airportPickupFeeValue : 0
+    const total = subtotal + serviceCharge + deliveryFee + coordinationFee + airportFee + fboFee + shoppingFee + restaurantPickupFee + airportPickupFee
 
     return {
       subtotal,
       serviceCharge,
       deliveryFee,
       coordinationFee,
+      airportFee,
+      fboFee,
+      shoppingFee,
+      restaurantPickupFee,
+      airportPickupFee,
       total,
       totalQuantity,
       itemCount: itemsArray.length,
     }
-  }, [watchedItems, watchedServiceCharge, watchedDeliveryFee, watchedCoordinationFee])
+  }, [watchedItems, watchedServiceCharge, watchedDeliveryFee, watchedCoordinationFee, watchedAirportFee, watchedFboFee, watchedShoppingFee, watchedRestaurantPickupFee, watchedAirportPickupFee])
 
   const selectedClientLabel = React.useMemo(
     () => clientOptions.find((o) => o.value === selectedClient?.toString())?.label || clientsData.find((c) => c.id === selectedClient)?.full_name || "Not selected",
@@ -1705,6 +1759,11 @@ function POSContent() {
       serviceCharge: "",
       deliveryFee: "",
       coordinationFee: "",
+      airportFee: "",
+      fboFee: "",
+      shoppingFee: "",
+      restaurantPickupFee: "",
+      airportPickupFee: "",
       aircraftTailNumber: "",
       deliveryDate: "",
       deliveryTime: "",
@@ -1758,6 +1817,11 @@ function POSContent() {
         service_charge: formData.serviceCharge && formData.serviceCharge.trim() ? parseFloat(formData.serviceCharge) : 0,
         delivery_fee: formData.deliveryFee && formData.deliveryFee.trim() ? parseFloat(formData.deliveryFee) : 0,
         coordination_fee: formData.coordinationFee && formData.coordinationFee.trim() ? parseFloat(formData.coordinationFee) : 0,
+        airport_fee: formData.airportFee && formData.airportFee.trim() ? parseFloat(formData.airportFee) : 0,
+        fbo_fee: formData.fboFee && formData.fboFee.trim() ? parseFloat(formData.fboFee) : 0,
+        shopping_fee: formData.shoppingFee && formData.shoppingFee.trim() ? parseFloat(formData.shoppingFee) : 0,
+        restaurant_pickup_fee: formData.restaurantPickupFee && formData.restaurantPickupFee.trim() ? parseFloat(formData.restaurantPickupFee) : 0,
+        airport_pickup_fee: formData.airportPickupFee && formData.airportPickupFee.trim() ? parseFloat(formData.airportPickupFee) : 0,
         description: formData.description || null,
         notes: formData.notes || null,
         reheating_instructions: formData.reheatingInstructions || null,
@@ -1822,6 +1886,12 @@ function POSContent() {
         dietaryRestrictions: "",
         serviceCharge: "",
         deliveryFee: "",
+        coordinationFee: "",
+        airportFee: "",
+        fboFee: "",
+        shoppingFee: "",
+        restaurantPickupFee: "",
+        airportPickupFee: "",
         aircraftTailNumber: "",
         deliveryDate: "",
         deliveryTime: "",
@@ -2147,6 +2217,91 @@ function POSContent() {
                                 render={({ field }) => (
                                   <FormItem>
                                     <FormLabel className="text-xs font-medium text-muted-foreground">Coordination Fee</FormLabel>
+                                    <FormControl>
+                                      <div className="relative">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                                        <Input type="number" step="0.01" placeholder="0.00" className="pl-7" {...field} />
+                                      </div>
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={form.control}
+                                name="airportFee"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-xs font-medium text-muted-foreground">Airport Fee</FormLabel>
+                                    <FormControl>
+                                      <div className="relative">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                                        <Input type="number" step="0.01" placeholder="0.00" className="pl-7" {...field} />
+                                      </div>
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={form.control}
+                                name="fboFee"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-xs font-medium text-muted-foreground">FBO Fee</FormLabel>
+                                    <FormControl>
+                                      <div className="relative">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                                        <Input type="number" step="0.01" placeholder="0.00" className="pl-7" {...field} />
+                                      </div>
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={form.control}
+                                name="shoppingFee"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-xs font-medium text-muted-foreground">Shopping Fee</FormLabel>
+                                    <FormControl>
+                                      <div className="relative">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                                        <Input type="number" step="0.01" placeholder="0.00" className="pl-7" {...field} />
+                                      </div>
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={form.control}
+                                name="restaurantPickupFee"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-xs font-medium text-muted-foreground">Restaurant Pickup Fee</FormLabel>
+                                    <FormControl>
+                                      <div className="relative">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                                        <Input type="number" step="0.01" placeholder="0.00" className="pl-7" {...field} />
+                                      </div>
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={form.control}
+                                name="airportPickupFee"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-xs font-medium text-muted-foreground">Airport Pickup Fee</FormLabel>
                                     <FormControl>
                                       <div className="relative">
                                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
@@ -2728,6 +2883,36 @@ function POSContent() {
                                 <span className="text-muted-foreground">Coordination fee</span>
                                 <span className="font-medium">{formatCurrency(summary.coordinationFee)}</span>
                               </div>
+                              {summary.airportFee > 0 && (
+                                <div className="flex items-center justify-between text-sm">
+                                  <span className="text-muted-foreground">Airport fee</span>
+                                  <span className="font-medium">{formatCurrency(summary.airportFee)}</span>
+                                </div>
+                              )}
+                              {summary.fboFee > 0 && (
+                                <div className="flex items-center justify-between text-sm">
+                                  <span className="text-muted-foreground">FBO fee</span>
+                                  <span className="font-medium">{formatCurrency(summary.fboFee)}</span>
+                                </div>
+                              )}
+                              {summary.shoppingFee > 0 && (
+                                <div className="flex items-center justify-between text-sm">
+                                  <span className="text-muted-foreground">Shopping fee</span>
+                                  <span className="font-medium">{formatCurrency(summary.shoppingFee)}</span>
+                                </div>
+                              )}
+                              {summary.restaurantPickupFee > 0 && (
+                                <div className="flex items-center justify-between text-sm">
+                                  <span className="text-muted-foreground">Restaurant pickup fee</span>
+                                  <span className="font-medium">{formatCurrency(summary.restaurantPickupFee)}</span>
+                                </div>
+                              )}
+                              {summary.airportPickupFee > 0 && (
+                                <div className="flex items-center justify-between text-sm">
+                                  <span className="text-muted-foreground">Airport pickup fee</span>
+                                  <span className="font-medium">{formatCurrency(summary.airportPickupFee)}</span>
+                                </div>
+                              )}
                               <div className="flex items-center justify-between pt-3 border-t border-primary/20">
                                 <span className="text-sm font-semibold">Total</span>
                                 <span className="text-xl font-bold bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-transparent">{formatCurrency(summary.total)}</span>
