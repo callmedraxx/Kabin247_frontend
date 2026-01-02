@@ -317,7 +317,50 @@ function DashboardContent() {
 
   // Format delivery date
   const formatDeliveryDate = (dateString: string) => {
+    if (!dateString) return ""
+    
+    // Parse YYYY-MM-DD format directly to avoid timezone issues
+    const match = dateString.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (match) {
+      const [, year, month, day] = match
+      const orderYear = parseInt(year)
+      const orderMonth = parseInt(month) - 1 // 0-indexed
+      const orderDay = parseInt(day)
+      
+      // Get today's date components in user's local timezone
+      const now = new Date()
+      const todayYear = now.getFullYear()
+      const todayMonth = now.getMonth()
+      const todayDay = now.getDate()
+      
+      // Compare date components directly
+      if (orderYear === todayYear && orderMonth === todayMonth && orderDay === todayDay) {
+        return "Today"
+      }
+      
+      // Check if it's tomorrow
+      const tomorrow = new Date(now)
+      tomorrow.setDate(tomorrow.getDate() + 1)
+      const tomorrowYear = tomorrow.getFullYear()
+      const tomorrowMonth = tomorrow.getMonth()
+      const tomorrowDay = tomorrow.getDate()
+      
+      if (orderYear === tomorrowYear && orderMonth === tomorrowMonth && orderDay === tomorrowDay) {
+        return "Tomorrow"
+      }
+      
+      // Format the date using the parsed components (in local timezone for display)
+      const orderDate = new Date(orderYear, orderMonth, orderDay)
+      return orderDate.toLocaleDateString("en-US", { 
+        month: "short", 
+        day: "numeric"
+      })
+    }
+    
+    // Fallback for other date formats
     const date = new Date(dateString)
+    if (isNaN(date.getTime())) return ""
+    
     const today = new Date()
     const tomorrow = new Date(today)
     tomorrow.setDate(tomorrow.getDate() + 1)
