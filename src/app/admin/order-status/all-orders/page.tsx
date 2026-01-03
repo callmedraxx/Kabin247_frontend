@@ -221,6 +221,18 @@ interface MenuItem {
   }>
 }
 
+// Menu item form schema for creating new menu items
+const menuItemFormSchema = z.object({
+  item_name: z.string().min(1, "Please enter an item name"),
+  item_description: z.string().optional(),
+  food_type: z.enum(["veg", "non_veg"], { message: "Please select a food type" }),
+  category: z.string().optional(),
+  price: z.number().positive("Price must be greater than 0").optional(),
+  is_active: z.boolean(),
+})
+
+type MenuItemFormValues = z.infer<typeof menuItemFormSchema>
+
 interface Category {
   id: number
   name: string
@@ -629,6 +641,24 @@ function OrdersContent() {
   const [fboSearch, setFboSearch] = React.useState("")
   const [menuItemSearch, setMenuItemSearch] = React.useState("")
 
+  // Menu item dialog states
+  const [menuItemDialogOpen, setMenuItemDialogOpen] = React.useState(false)
+  const [currentItemIndex, setCurrentItemIndex] = React.useState<number | undefined>(undefined)
+  const [isSavingMenuItem, setIsSavingMenuItem] = React.useState(false)
+
+  // Menu item form
+  const menuItemForm = useForm<MenuItemFormValues>({
+    resolver: zodResolver(menuItemFormSchema),
+    defaultValues: {
+      item_name: "",
+      item_description: "",
+      food_type: "non_veg",
+      category: "",
+      price: undefined,
+      is_active: true,
+    },
+  })
+
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "items",
@@ -762,6 +792,53 @@ function OrdersContent() {
     }
   }, [fboOptions.length, isLoadingFBOs, fetchFBOs])
 
+  // Handler for adding new menu item
+  const handleAddMenuItem = async (values: MenuItemFormValues) => {
+    setIsSavingMenuItem(true)
+    try {
+      const newMenuItem: MenuItem = await apiCallJson<MenuItem>("/menu-items", {
+        method: "POST",
+        body: JSON.stringify(values),
+      })
+
+      toast.success("Menu item added", {
+        description: `${newMenuItem.item_name} has been added to the system.`,
+      })
+
+      // Refresh menu items list
+      await fetchMenuItems()
+
+      // If we have a current item index, set the new menu item as the selected item
+      if (currentItemIndex !== undefined) {
+        form.setValue(`items.${currentItemIndex}.itemName`, newMenuItem.id.toString())
+        // Set description if available
+        if (newMenuItem.item_description) {
+          form.setValue(`items.${currentItemIndex}.itemDescription`, newMenuItem.item_description)
+        }
+        // Set price if available
+        if (values.price) {
+          form.setValue(`items.${currentItemIndex}.price`, values.price.toString())
+        } else if (newMenuItem.variants && newMenuItem.variants.length > 0) {
+          form.setValue(`items.${currentItemIndex}.price`, newMenuItem.variants[0].price.toString())
+        }
+        // Set category if available
+        if (newMenuItem.category) {
+          form.setValue(`items.${currentItemIndex}.category`, newMenuItem.category)
+        }
+      }
+
+      setMenuItemDialogOpen(false)
+      menuItemForm.reset()
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to add menu item"
+      toast.error("Error adding menu item", {
+        description: errorMessage,
+      })
+    } finally {
+      setIsSavingMenuItem(false)
+    }
+  }
+
   // Filter options based on search (for client-side filtering when server-side search is not enough)
   // Note: Server-side search is already done via fetchCaterers/fetchAirports, but we also filter
   // client-side to support multi-field search (name + airport for caterers, code + FBO + name for airports)
@@ -813,16 +890,30 @@ function OrdersContent() {
         setIsLoadingFormData(true)
         
         // Map order items to form format
+        // Try to find menu item by ID first, then by name if ID is not available
         const formItems = editingOrder.items && editingOrder.items.length > 0
-          ? editingOrder.items.map((item) => ({
-              itemName: item.item_id?.toString() || item.menu_item_id?.toString() || "",
-              itemDescription: item.item_description || "",
-              portionSize: item.portion_size || "1",
-              portionServing: item.portion_serving || "",
-              price: typeof item.price === 'number' ? item.price.toString() : (item.price || "0"),
-              category: item.category || "",
-              packaging: item.packaging || "",
-            }))
+          ? editingOrder.items.map((item) => {
+              // First try item_id or menu_item_id
+              let itemName = item.item_id?.toString() || item.menu_item_id?.toString() || ""
+              
+              // If no ID, try to find by name using context getter
+              if (!itemName && item.item_name) {
+                const foundMenuItem = getMenuItemByName(item.item_name)
+                if (foundMenuItem) {
+                  itemName = foundMenuItem.id.toString()
+                }
+              }
+              
+              return {
+                itemName,
+                itemDescription: item.item_description || "",
+                portionSize: item.portion_size || "1",
+                portionServing: item.portion_serving || "",
+                price: typeof item.price === 'number' ? item.price.toString() : (item.price || "0"),
+                category: item.category || "",
+                packaging: item.packaging || "",
+              }
+            })
           : [{
               itemName: "",
               itemDescription: "",
@@ -922,7 +1013,7 @@ function OrdersContent() {
         }, 200)
       }
     }
-  }, [dialogOpen, editingOrder, clientOptions.length, catererOptions.length, airportOptions.length, menuItemOptions.length, form])
+  }, [dialogOpen, editingOrder, clientOptions.length, catererOptions.length, airportOptions.length, menuItemOptions.length, form, getMenuItemByName])
 
   // Debounced server-side search for caterers
   React.useEffect(() => {
@@ -3286,37 +3377,57 @@ function OrdersContent() {
                                       render={({ field }) => (
                                         <FormItem className="lg:col-span-1">
                                           <FormLabel className="text-xs font-medium text-muted-foreground">Menu Item *</FormLabel>
-                                          <FormControl>
-                                            <Combobox
-                                              options={menuItemOptions}
-                                              value={field.value}
-                                              onValueChange={(value) => {
-                                                field.onChange(value)
-                                                if (value) {
-                                                  const selectedItem = menuItemsData.find((item) => item.id.toString() === value)
-                                                  if (selectedItem) {
-                                                    const price = (selectedItem.variants && selectedItem.variants.length > 0)
-                                                      ? selectedItem.variants[0].price
-                                                      : (selectedItem as any).price
-                                                    if (price !== undefined && price !== null) {
-                                                      form.setValue(`items.${index}.price`, price.toString())
-                                                    }
-                                                    if (selectedItem.item_description) {
-                                                      form.setValue(`items.${index}.itemDescription`, selectedItem.item_description)
-                                                    }
-                                                    if (selectedItem.category) {
-                                                      form.setValue(`items.${index}.category`, selectedItem.category)
+                                          <div className="flex gap-2">
+                                            <FormControl>
+                                              <Combobox
+                                                options={menuItemOptions}
+                                                value={field.value}
+                                                onValueChange={(value) => {
+                                                  field.onChange(value)
+                                                  if (value) {
+                                                    const selectedItem = menuItemsData.find((item) => item.id.toString() === value)
+                                                    if (selectedItem) {
+                                                      const price = (selectedItem.variants && selectedItem.variants.length > 0)
+                                                        ? selectedItem.variants[0].price
+                                                        : (selectedItem as any).price
+                                                      if (price !== undefined && price !== null) {
+                                                        form.setValue(`items.${index}.price`, price.toString())
+                                                      }
+                                                      if (selectedItem.item_description) {
+                                                        form.setValue(`items.${index}.itemDescription`, selectedItem.item_description)
+                                                      }
+                                                      if (selectedItem.category) {
+                                                        form.setValue(`items.${index}.category`, selectedItem.category)
+                                                      }
                                                     }
                                                   }
-                                                }
+                                                }}
+                                                placeholder="Select item..."
+                                                searchPlaceholder="Search items..."
+                                                emptyMessage="No items found."
+                                                onAddNew={() => {
+                                                  setCurrentItemIndex(index)
+                                                  setMenuItemDialogOpen(true)
+                                                }}
+                                                addNewLabel="Add New Item"
+                                                onSearchChange={setMenuItemSearch}
+                                                isLoading={isLoadingMenuItems}
+                                              />
+                                            </FormControl>
+                                            <Button
+                                              type="button"
+                                              variant="outline"
+                                              size="icon"
+                                              className="h-11 w-11 shrink-0"
+                                              onClick={() => {
+                                                setCurrentItemIndex(index)
+                                                setMenuItemDialogOpen(true)
                                               }}
-                                              placeholder="Select item..."
-                                              searchPlaceholder="Search items..."
-                                              emptyMessage="No items found."
-                                              onSearchChange={setMenuItemSearch}
-                                              isLoading={isLoadingMenuItems}
-                                            />
-                                          </FormControl>
+                                              title="Add New Item"
+                                            >
+                                              <Plus className="h-4 w-4" />
+                                            </Button>
+                                          </div>
                                           <FormMessage />
                                         </FormItem>
                                       )}
@@ -4000,6 +4111,209 @@ function OrdersContent() {
                     Delete
                   </Button>
                 </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            {/* Add New Menu Item Dialog */}
+            <Dialog
+              open={menuItemDialogOpen}
+              onOpenChange={(open) => {
+                setMenuItemDialogOpen(open)
+                if (!open) {
+                  menuItemForm.reset()
+                  setCurrentItemIndex(undefined)
+                }
+              }}
+            >
+              <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <div className="flex items-center gap-4">
+                    <div className="relative">
+                      <div className="absolute inset-0 bg-emerald-500/20 rounded-xl blur-md" />
+                      <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg">
+                        <UtensilsCrossed className="h-6 w-6 text-white" />
+                      </div>
+                    </div>
+                    <div>
+                      <DialogTitle className="text-xl font-bold">Add New Menu Item</DialogTitle>
+                      <DialogDescription className="text-sm">
+                        Enter the details of the new menu item to add to the system
+                      </DialogDescription>
+                    </div>
+                  </div>
+                </DialogHeader>
+                <Form {...menuItemForm}>
+                  <form onSubmit={menuItemForm.handleSubmit(handleAddMenuItem)} className="space-y-6 py-4">
+                    {/* Basic Information */}
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        <span className="flex h-5 w-5 items-center justify-center rounded bg-emerald-500/10 text-emerald-400">1</span>
+                        Basic Information
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <FormField
+                          control={menuItemForm.control}
+                          name="item_name"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs font-medium text-muted-foreground">Item Name *</FormLabel>
+                              <FormControl>
+                                <Input placeholder="Enter item name..." {...field} className="h-11 bg-muted/30 border-border/40" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={menuItemForm.control}
+                          name="food_type"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs font-medium text-muted-foreground">Food Type *</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select food type..." />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="veg">Vegetarian</SelectItem>
+                                  <SelectItem value="non_veg">Non-Vegetarian</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Description */}
+                    <FormField
+                      control={menuItemForm.control}
+                      name="item_description"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs font-medium text-muted-foreground">Description</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              placeholder="Enter item description..."
+                              rows={3}
+                              {...field}
+                              className="resize-none bg-muted/30 border-border/40"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    {/* Category & Status */}
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        <span className="flex h-5 w-5 items-center justify-center rounded bg-emerald-500/10 text-emerald-400">2</span>
+                        Category & Status
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <FormField
+                          control={menuItemForm.control}
+                          name="category"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs font-medium text-muted-foreground">Category</FormLabel>
+                              <FormControl>
+                                <Input placeholder="Enter category..." {...field} className="h-11 bg-muted/30 border-border/40" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={menuItemForm.control}
+                          name="is_active"
+                          render={({ field }) => (
+                            <FormItem className="flex flex-row items-center justify-between rounded-xl border border-border/40 bg-muted/20 p-4">
+                              <div className="space-y-0.5">
+                                <FormLabel className="text-sm font-medium">Active Status</FormLabel>
+                                <div className="text-xs text-muted-foreground">
+                                  Item will be visible in menu
+                                </div>
+                              </div>
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                  className="data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Pricing */}
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        <span className="flex h-5 w-5 items-center justify-center rounded bg-emerald-500/10 text-emerald-400">3</span>
+                        Pricing
+                      </div>
+                      <FormField
+                        control={menuItemForm.control}
+                        name="price"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs font-medium text-muted-foreground">Price ($)</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                placeholder="0.00"
+                                {...field}
+                                value={field.value || ""}
+                                onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
+                                className="h-11 bg-muted/30 border-border/40"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <DialogFooter className="flex flex-col sm:flex-row gap-2 pt-4">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setMenuItemDialogOpen(false)
+                          menuItemForm.reset()
+                          setCurrentItemIndex(undefined)
+                        }}
+                        className="w-full sm:w-auto"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="submit"
+                        disabled={isSavingMenuItem}
+                        className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700"
+                      >
+                        {isSavingMenuItem ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Creating...
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="mr-2 h-4 w-4" />
+                            Create Menu Item
+                          </>
+                        )}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </Form>
               </DialogContent>
             </Dialog>
           </div>
