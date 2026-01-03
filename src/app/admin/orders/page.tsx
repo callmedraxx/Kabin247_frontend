@@ -103,6 +103,38 @@ import { apiCall, apiCallJson } from "@/lib/api-client"
 import type { OrderStatus } from "@/lib/order-status-config"
 import { getStatusOptions, getOrderStatusConfig, getStatusTooltipContent } from "@/lib/order-status-config"
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"
+import { useMenuItems } from "@/contexts/menu-items-context"
+
+// Menu item interface
+interface MenuItem {
+  id: number
+  item_name: string
+  item_description: string | null
+  category: string
+  variants: Array<{
+    id: number
+    menu_item_id?: number
+    portion_size: string
+    price: number
+    sort_order?: number
+    caterer_prices?: Array<{
+      caterer_id: number
+      price: number
+    }>
+  }>
+}
+
+// Menu item form schema for creating new menu items
+const menuItemFormSchema = z.object({
+  item_name: z.string().min(1, "Please enter an item name"),
+  item_description: z.string().optional(),
+  food_type: z.enum(["veg", "non_veg"], { message: "Please select a food type" }),
+  category: z.string().optional(),
+  price: z.number().positive("Price must be greater than 0").optional(),
+  is_active: z.boolean(),
+})
+
+type MenuItemFormValues = z.infer<typeof menuItemFormSchema>
 
 export type { OrderStatus }
 
@@ -315,6 +347,34 @@ function OrdersContent() {
   const [airports, setAirports] = React.useState<Airport[]>([])
   const [isLoadingSupportingData, setIsLoadingSupportingData] = React.useState(false)
 
+  // Menu items from context
+  const {
+    menuItems: menuItemsData,
+    menuItemOptions,
+    isLoading: isLoadingMenuItems,
+    fetchMenuItems: fetchMenuItemsFromContext,
+    getMenuItemById,
+  } = useMenuItems()
+
+  // Menu item dialog states
+  const [menuItemDialogOpen, setMenuItemDialogOpen] = React.useState(false)
+  const [currentItemIndex, setCurrentItemIndex] = React.useState<number | undefined>(undefined)
+  const [menuItemSearch, setMenuItemSearch] = React.useState("")
+  const [isSavingMenuItem, setIsSavingMenuItem] = React.useState(false)
+
+  // Menu item form
+  const menuItemForm = useForm<MenuItemFormValues>({
+    resolver: zodResolver(menuItemFormSchema),
+    defaultValues: {
+      item_name: "",
+      item_description: "",
+      food_type: "non_veg",
+      category: "",
+      price: undefined,
+      is_active: true,
+    },
+  })
+
   const form = useForm<OrderFormValues>({
     resolver: zodResolver(orderSchema),
     defaultValues: {
@@ -375,6 +435,64 @@ function OrdersContent() {
   React.useEffect(() => {
     fetchSupportingData()
   }, [fetchSupportingData])
+
+  // Fetch menu items on mount
+  React.useEffect(() => {
+    fetchMenuItemsFromContext()
+  }, [fetchMenuItemsFromContext])
+
+  // Fetch menu items when search changes
+  React.useEffect(() => {
+    if (menuItemSearch) {
+      const timer = setTimeout(() => {
+        fetchMenuItemsFromContext(menuItemSearch)
+      }, 300)
+      return () => clearTimeout(timer)
+    }
+  }, [menuItemSearch, fetchMenuItemsFromContext])
+
+  // Handler for adding new menu item
+  const handleAddMenuItem = async (values: MenuItemFormValues) => {
+    setIsSavingMenuItem(true)
+    try {
+      const newMenuItem: MenuItem = await apiCallJson<MenuItem>("/menu-items", {
+        method: "POST",
+        body: JSON.stringify(values),
+      })
+
+      toast.success("Menu item added", {
+        description: `${newMenuItem.item_name} has been added to the system.`,
+      })
+
+      // Refresh menu items list
+      await fetchMenuItemsFromContext()
+
+      // If we have a current item index, set the new menu item as the selected item
+      if (currentItemIndex !== undefined) {
+        form.setValue(`items.${currentItemIndex}.item_name`, newMenuItem.item_name)
+        // Set description if available
+        if (newMenuItem.item_description) {
+          form.setValue(`items.${currentItemIndex}.item_description`, newMenuItem.item_description)
+        }
+        // Set price if available
+        if (values.price) {
+          form.setValue(`items.${currentItemIndex}.price`, values.price)
+        } else if (newMenuItem.variants && newMenuItem.variants.length > 0) {
+          form.setValue(`items.${currentItemIndex}.price`, newMenuItem.variants[0].price)
+        }
+      }
+
+      setMenuItemDialogOpen(false)
+      menuItemForm.reset()
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to add menu item"
+      toast.error("Error adding menu item", {
+        description: errorMessage,
+      })
+    } finally {
+      setIsSavingMenuItem(false)
+    }
+  }
 
   // Fetch orders from API
   const fetchOrders = React.useCallback(async () => {
@@ -1739,13 +1857,56 @@ function OrdersContent() {
                                 render={({ field }) => (
                                   <FormItem>
                                     <FormLabel>Item Name *</FormLabel>
-                                    <FormControl>
-                                      <Input
-                                        placeholder="Enter item name..."
-                                        {...field}
-                                        className="bg-background/50"
-                                      />
-                                    </FormControl>
+                                    <div className="flex gap-2">
+                                      <FormControl>
+                                        <Combobox
+                                          options={menuItemOptions}
+                                          value={menuItemOptions.find(opt => opt.label === field.value)?.value || ""}
+                                          onValueChange={(value) => {
+                                            if (value) {
+                                              const itemId = parseInt(value)
+                                              const selectedItem = !isNaN(itemId) ? getMenuItemById(itemId) : undefined
+                                              if (selectedItem) {
+                                                field.onChange(selectedItem.item_name)
+                                                // Auto-populate description if available
+                                                if (selectedItem.item_description) {
+                                                  form.setValue(`items.${index}.item_description`, selectedItem.item_description)
+                                                }
+                                                // Auto-populate price if available
+                                                if (selectedItem.variants && selectedItem.variants.length > 0) {
+                                                  form.setValue(`items.${index}.price`, selectedItem.variants[0].price)
+                                                }
+                                              }
+                                            } else {
+                                              field.onChange("")
+                                            }
+                                          }}
+                                          placeholder="Select or search item..."
+                                          searchPlaceholder="Search items..."
+                                          emptyMessage="No items found."
+                                          onAddNew={() => {
+                                            setCurrentItemIndex(index)
+                                            setMenuItemDialogOpen(true)
+                                          }}
+                                          addNewLabel="Add New Item"
+                                          onSearchChange={setMenuItemSearch}
+                                          isLoading={isLoadingMenuItems}
+                                        />
+                                      </FormControl>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="icon"
+                                        className="h-11 w-11 shrink-0"
+                                        onClick={() => {
+                                          setCurrentItemIndex(index)
+                                          setMenuItemDialogOpen(true)
+                                        }}
+                                        title="Add New Item"
+                                      >
+                                        <Plus className="h-4 w-4" />
+                                      </Button>
+                                    </div>
                                     <FormMessage />
                                   </FormItem>
                                 )}
@@ -2775,6 +2936,209 @@ function OrdersContent() {
                     Delete
                   </Button>
                 </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            {/* Add New Menu Item Dialog */}
+            <Dialog
+              open={menuItemDialogOpen}
+              onOpenChange={(open) => {
+                setMenuItemDialogOpen(open)
+                if (!open) {
+                  menuItemForm.reset()
+                  setCurrentItemIndex(undefined)
+                }
+              }}
+            >
+              <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <div className="flex items-center gap-4">
+                    <div className="relative">
+                      <div className="absolute inset-0 bg-emerald-500/20 rounded-xl blur-md" />
+                      <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg">
+                        <UtensilsCrossed className="h-6 w-6 text-white" />
+                      </div>
+                    </div>
+                    <div>
+                      <DialogTitle className="text-xl font-bold">Add New Menu Item</DialogTitle>
+                      <DialogDescription className="text-sm">
+                        Enter the details of the new menu item to add to the system
+                      </DialogDescription>
+                    </div>
+                  </div>
+                </DialogHeader>
+                <Form {...menuItemForm}>
+                  <form onSubmit={menuItemForm.handleSubmit(handleAddMenuItem)} className="space-y-6 py-4">
+                    {/* Basic Information */}
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        <span className="flex h-5 w-5 items-center justify-center rounded bg-emerald-500/10 text-emerald-400">1</span>
+                        Basic Information
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <FormField
+                          control={menuItemForm.control}
+                          name="item_name"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs font-medium text-muted-foreground">Item Name *</FormLabel>
+                              <FormControl>
+                                <Input placeholder="Enter item name..." {...field} className="h-11 bg-muted/30 border-border/40" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={menuItemForm.control}
+                          name="food_type"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs font-medium text-muted-foreground">Food Type *</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select food type..." />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="veg">Vegetarian</SelectItem>
+                                  <SelectItem value="non_veg">Non-Vegetarian</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Description */}
+                    <FormField
+                      control={menuItemForm.control}
+                      name="item_description"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs font-medium text-muted-foreground">Description</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              placeholder="Enter item description..."
+                              rows={3}
+                              {...field}
+                              className="resize-none bg-muted/30 border-border/40"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    {/* Category & Status */}
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        <span className="flex h-5 w-5 items-center justify-center rounded bg-emerald-500/10 text-emerald-400">2</span>
+                        Category & Status
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <FormField
+                          control={menuItemForm.control}
+                          name="category"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs font-medium text-muted-foreground">Category</FormLabel>
+                              <FormControl>
+                                <Input placeholder="Enter category..." {...field} className="h-11 bg-muted/30 border-border/40" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={menuItemForm.control}
+                          name="is_active"
+                          render={({ field }) => (
+                            <FormItem className="flex flex-row items-center justify-between rounded-xl border border-border/40 bg-muted/20 p-4">
+                              <div className="space-y-0.5">
+                                <FormLabel className="text-sm font-medium">Active Status</FormLabel>
+                                <div className="text-xs text-muted-foreground">
+                                  Item will be visible in menu
+                                </div>
+                              </div>
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                  className="data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Pricing */}
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        <span className="flex h-5 w-5 items-center justify-center rounded bg-emerald-500/10 text-emerald-400">3</span>
+                        Pricing
+                      </div>
+                      <FormField
+                        control={menuItemForm.control}
+                        name="price"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs font-medium text-muted-foreground">Price ($)</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                placeholder="0.00"
+                                {...field}
+                                value={field.value || ""}
+                                onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
+                                className="h-11 bg-muted/30 border-border/40"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <DialogFooter className="flex flex-col sm:flex-row gap-2 pt-4">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setMenuItemDialogOpen(false)
+                          menuItemForm.reset()
+                          setCurrentItemIndex(undefined)
+                        }}
+                        className="w-full sm:w-auto"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="submit"
+                        disabled={isSavingMenuItem}
+                        className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700"
+                      >
+                        {isSavingMenuItem ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Creating...
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="mr-2 h-4 w-4" />
+                            Create Menu Item
+                          </>
+                        )}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </Form>
               </DialogContent>
             </Dialog>
           </div>
