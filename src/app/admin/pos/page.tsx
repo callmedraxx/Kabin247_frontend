@@ -1397,6 +1397,41 @@ function POSContent() {
     name: "items",
   })
 
+  // Detect if user is on Mac for keyboard shortcut display
+  const [isMac, setIsMac] = React.useState(false)
+  React.useEffect(() => {
+    setIsMac(typeof window !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0)
+  }, [])
+
+  // Keyboard shortcut for adding items (Ctrl/Cmd + I)
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Check for Ctrl+I (Windows/Linux) or Cmd+I (Mac)
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'i') {
+        // Don't trigger if user is typing in an input, textarea, or select
+        const activeElement = document.activeElement
+        const tagName = activeElement?.tagName?.toLowerCase()
+        if (tagName === 'input' || tagName === 'textarea' || tagName === 'select') {
+          return
+        }
+
+        e.preventDefault()
+        append({
+          itemName: "",
+          itemDescription: "",
+          portionSize: "",
+          portionServing: "",
+          price: "",
+          category: "",
+          packaging: "",
+        })
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [append])
+
   // Handle add client - save to backend API
   const handleAddClient = async () => {
     if (!newClientName.trim() || !newClientAddress.trim()) {
@@ -2505,6 +2540,9 @@ function POSContent() {
                                 >
                                   <Plus className="h-3.5 w-3.5" />
                                   Add Item
+                                  <span className="ml-1.5 text-[10px] opacity-80 font-normal">
+                                    {isMac ? '⌘I' : 'Ctrl+I'}
+                                  </span>
                                 </Button>
                               </div>
 

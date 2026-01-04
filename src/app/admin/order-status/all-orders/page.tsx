@@ -664,6 +664,43 @@ function OrdersContent() {
     name: "items",
   })
 
+  // Detect if user is on Mac for keyboard shortcut display
+  const [isMac, setIsMac] = React.useState(false)
+  React.useEffect(() => {
+    setIsMac(typeof window !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0)
+  }, [])
+
+  // Keyboard shortcut for adding items (Ctrl/Cmd + I)
+  React.useEffect(() => {
+    if (!dialogOpen) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Check for Ctrl+I (Windows/Linux) or Cmd+I (Mac)
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'i') {
+        // Don't trigger if user is typing in an input, textarea, or select
+        const activeElement = document.activeElement
+        const tagName = activeElement?.tagName?.toLowerCase()
+        if (tagName === 'input' || tagName === 'textarea' || tagName === 'select') {
+          return
+        }
+
+        e.preventDefault()
+        append({
+          itemName: "",
+          itemDescription: "",
+          portionSize: "",
+          portionServing: "",
+          price: "",
+          category: "",
+          packaging: "",
+        })
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [dialogOpen, append])
+
   // Fetch orders from API
   const fetchOrders = React.useCallback(async () => {
     setIsLoading(true)
@@ -1512,17 +1549,16 @@ function OrdersContent() {
     }
   }
 
-  // Helper function to determine which PDF endpoint to use based on order status
-  // PDF A (with prices): awaiting_client_approval, paid - for client quotes/invoices
-  // PDF B (no prices): awaiting_quote, awaiting_caterer, caterer_confirmed, in_preparation, ready_for_delivery, delivered, cancelled, order_changed - for confirmations
+  // Helper function to get PDF endpoint
+  // Backend now routes automatically based on order status:
+  // - caterer_confirmed -> PDF B (no pricing, client info, status "caterer confirmed")
+  // - delivered -> PDF A (with pricing, client info)
+  // - Other statuses -> PDF A (default)
   const getPdfEndpoint = (orderId: number, status: OrderStatus, type: "preview" | "download"): string => {
-    const pdfAStatuses: OrderStatus[] = ["awaiting_client_approval", "paid"]
-    const usePdfA = pdfAStatuses.includes(status)
-    
     if (type === "preview") {
-      return usePdfA ? `${API_BASE_URL}/orders/${orderId}/preview` : `${API_BASE_URL}/orders/${orderId}/preview-b`
+      return `${API_BASE_URL}/orders/${orderId}/preview`
     } else {
-      return usePdfA ? `${API_BASE_URL}/orders/${orderId}/pdf?regenerate=true` : `${API_BASE_URL}/orders/${orderId}/pdf-b?regenerate=true`
+      return `${API_BASE_URL}/orders/${orderId}/pdf?regenerate=true`
     }
   }
 
@@ -3333,6 +3369,9 @@ function OrdersContent() {
                                 >
                                   <Plus className="h-3.5 w-3.5" />
                                   Add Item
+                                  <span className="ml-1.5 text-[10px] opacity-80 font-normal">
+                                    {isMac ? '⌘I' : 'Ctrl+I'}
+                                  </span>
                                 </Button>
                               </div>
 
