@@ -278,21 +278,42 @@ function OrderHistoryContent() {
       filtered = filtered.filter((order) => order.status === statusFilter)
     }
 
-    // Filter by date range
+    // Filter by date range - parse dates directly to avoid timezone issues
     if (dateRange.start) {
-      filtered = filtered.filter((order) => {
-        const orderDate = new Date(order.delivery_date)
-        const startDate = new Date(dateRange.start)
-        return orderDate >= startDate
-      })
+      // Parse start date string (YYYY-MM-DD format)
+      const startMatch = dateRange.start.match(/^(\d{4})-(\d{2})-(\d{2})/)
+      if (startMatch) {
+        const [, startYear, startMonth, startDay] = startMatch
+        filtered = filtered.filter((order) => {
+          // Parse order delivery date string (YYYY-MM-DD format)
+          const orderMatch = order.delivery_date?.match(/^(\d{4})-(\d{2})-(\d{2})/)
+          if (!orderMatch) return false
+          const [, orderYear, orderMonth, orderDay] = orderMatch
+          
+          // Compare as strings (YYYY-MM-DD format is naturally sortable)
+          const orderDateStr = `${orderYear}-${orderMonth}-${orderDay}`
+          const startDateStr = `${startYear}-${startMonth}-${startDay}`
+          return orderDateStr >= startDateStr
+        })
+      }
     }
     if (dateRange.end) {
-      filtered = filtered.filter((order) => {
-        const orderDate = new Date(order.delivery_date)
-        const endDate = new Date(dateRange.end)
-        endDate.setHours(23, 59, 59, 999)
-        return orderDate <= endDate
-      })
+      // Parse end date string (YYYY-MM-DD format)
+      const endMatch = dateRange.end.match(/^(\d{4})-(\d{2})-(\d{2})/)
+      if (endMatch) {
+        const [, endYear, endMonth, endDay] = endMatch
+        filtered = filtered.filter((order) => {
+          // Parse order delivery date string (YYYY-MM-DD format)
+          const orderMatch = order.delivery_date?.match(/^(\d{4})-(\d{2})-(\d{2})/)
+          if (!orderMatch) return false
+          const [, orderYear, orderMonth, orderDay] = orderMatch
+          
+          // Compare as strings (YYYY-MM-DD format is naturally sortable)
+          const orderDateStr = `${orderYear}-${orderMonth}-${orderDay}`
+          const endDateStr = `${endYear}-${endMonth}-${endDay}`
+          return orderDateStr <= endDateStr
+        })
+      }
     }
 
     // Filter by search query

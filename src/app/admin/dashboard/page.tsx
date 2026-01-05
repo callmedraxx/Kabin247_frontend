@@ -250,9 +250,25 @@ function DashboardContent() {
     )
 
     const todaysDeliveries = orders.filter(o => {
-      const deliveryDate = new Date(o.delivery_date)
-      deliveryDate.setHours(0, 0, 0, 0)
-      return deliveryDate.getTime() === today.getTime() && o.status !== "delivered" && o.status !== "cancelled"
+      // Parse YYYY-MM-DD format directly to avoid timezone issues
+      const match = o.delivery_date?.match(/^(\d{4})-(\d{2})-(\d{2})/)
+      if (!match) return false
+      
+      const [, year, month, day] = match
+      const orderYear = parseInt(year)
+      const orderMonth = parseInt(month) - 1 // 0-indexed
+      const orderDay = parseInt(day)
+      
+      // Get today's date components in user's local timezone
+      const now = new Date()
+      const todayYear = now.getFullYear()
+      const todayMonth = now.getMonth()
+      const todayDay = now.getDate()
+      
+      // Compare date components directly (no timezone conversion)
+      const isToday = orderYear === todayYear && orderMonth === todayMonth && orderDay === todayDay
+      
+      return isToday && o.status !== "delivered" && o.status !== "cancelled"
     })
 
     const urgentOrders = orders.filter(o => 
