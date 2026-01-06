@@ -530,6 +530,8 @@ function OrdersContent() {
   const [paymentOrder, setPaymentOrder] = React.useState<Order | null>(null)
   const [paymentModalOpen, setPaymentModalOpen] = React.useState(false)
   const [paymentStoredCards, setPaymentStoredCards] = React.useState<StoredCard[]>([])
+  const [invoiceOrder, setInvoiceOrder] = React.useState<Order | null>(null)
+  const [invoiceModalOpen, setInvoiceModalOpen] = React.useState(false)
   const [isLoadingFormData, setIsLoadingFormData] = React.useState(false)
   const lastResetOrderId = React.useRef<number | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
@@ -2258,25 +2260,41 @@ function OrdersContent() {
                                   </DropdownMenuItem>
                                   {/* Payment processing - Admin only, show for non-paid orders */}
                                   {isAuthenticated && order.status !== 'paid' && (
-                                    <DropdownMenuItem
-                                      onClick={async () => {
-                                        setPaymentOrder(order)
-                                        setPaymentModalOpen(true)
-                                        if (order.client_id) {
-                                          try {
-                                            const response = await getStoredCards(order.client_id)
-                                            setPaymentStoredCards(response.cards)
-                                          } catch (error) {
-                                            console.error('Failed to load stored cards:', error)
-                                            setPaymentStoredCards([])
+                                    <>
+                                      <DropdownMenuItem
+                                        onClick={async (e) => {
+                                          e.preventDefault()
+                                          e.stopPropagation()
+                                          setPaymentOrder(order)
+                                          setPaymentModalOpen(true)
+                                          if (order.client_id) {
+                                            try {
+                                              const response = await getStoredCards(order.client_id)
+                                              setPaymentStoredCards(response.cards)
+                                            } catch (error) {
+                                              console.error('Failed to load stored cards:', error)
+                                              setPaymentStoredCards([])
+                                            }
                                           }
-                                        }
-                                      }}
-                                      className="cursor-pointer"
-                                    >
-                                      <CreditCard className="mr-2 h-4 w-4" />
-                                      Process Payment
-                                    </DropdownMenuItem>
+                                        }}
+                                        className="cursor-pointer"
+                                      >
+                                        <CreditCard className="mr-2 h-4 w-4" />
+                                        Process Payment
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onClick={(e) => {
+                                          e.preventDefault()
+                                          e.stopPropagation()
+                                          setInvoiceOrder(order)
+                                          setInvoiceModalOpen(true)
+                                        }}
+                                        className="cursor-pointer"
+                                      >
+                                        <Send className="mr-2 h-4 w-4" />
+                                        Send Invoice
+                                      </DropdownMenuItem>
+                                    </>
                                   )}
                                   <DropdownMenuItem
                                     onClick={() => handleEdit(order)}
@@ -4503,6 +4521,28 @@ function OrdersContent() {
                 setPaymentOrder(null)
                 setPaymentModalOpen(false)
                 toast.success('Payment processed successfully')
+              }}
+            />
+          )}
+
+          {/* Invoice Modal */}
+          {invoiceOrder && (
+            <SendInvoiceButton
+              orderId={invoiceOrder.id!}
+              orderNumber={invoiceOrder.order_number}
+              orderTotal={parseFloat(invoiceOrder.total.toString())}
+              clientEmail={invoiceOrder.client?.email}
+              open={invoiceModalOpen}
+              onOpenChange={(open) => {
+                setInvoiceModalOpen(open)
+                if (!open) {
+                  setInvoiceOrder(null)
+                }
+              }}
+              onInvoiceCreated={() => {
+                fetchOrders()
+                setInvoiceOrder(null)
+                setInvoiceModalOpen(false)
               }}
             />
           )}

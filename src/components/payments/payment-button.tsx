@@ -30,7 +30,9 @@ export function PaymentButton({
   const [storedCards, setStoredCards] = useState<StoredCard[]>([])
   const [loadingCards, setLoadingCards] = useState(false)
 
-  const handleOpen = async () => {
+  const handleOpen = async (e?: React.MouseEvent) => {
+    e?.preventDefault()
+    e?.stopPropagation()
     setOpen(true)
     if (clientId) {
       setLoadingCards(true)
@@ -49,7 +51,7 @@ export function PaymentButton({
     <>
       <Button
         type="button"
-        onClick={handleOpen}
+        onClick={(e) => handleOpen(e)}
         variant={variant}
         size={size}
       >

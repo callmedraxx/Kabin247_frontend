@@ -31,6 +31,8 @@ interface SendInvoiceButtonProps {
   orderTotal: number
   clientEmail?: string
   onInvoiceCreated?: () => void
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
 export function SendInvoiceButton({
@@ -39,8 +41,12 @@ export function SendInvoiceButton({
   orderTotal,
   clientEmail,
   onInvoiceCreated,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }: SendInvoiceButtonProps) {
-  const [open, setOpen] = useState(false)
+  const [internalOpen, setInternalOpen] = useState(false)
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen
+  const setOpen = controlledOnOpenChange || setInternalOpen
   const [deliveryMethod, setDeliveryMethod] = useState<'EMAIL' | 'SHARE_MANUALLY'>('EMAIL')
   const [recipientEmail, setRecipientEmail] = useState(clientEmail || '')
   const [creating, setCreating] = useState(false)
@@ -126,26 +132,36 @@ export function SendInvoiceButton({
     }
   }
 
-  const handleClose = () => {
-    setOpen(false)
-    setError(null)
-    setCreatedInvoice(null)
-    setDeliveryMethod('EMAIL')
-    setRecipientEmail(clientEmail || '')
+  const handleClose = (newOpen: boolean) => {
+    setOpen(newOpen)
+    if (!newOpen) {
+      setError(null)
+      setCreatedInvoice(null)
+      setDeliveryMethod('EMAIL')
+      setRecipientEmail(clientEmail || '')
+    }
+  }
+
+  const handleOpen = (e?: React.MouseEvent) => {
+    e?.preventDefault()
+    e?.stopPropagation()
+    setOpen(true)
   }
 
   return (
     <>
-      <Button
-        type="button"
-        onClick={() => setOpen(true)}
-        variant="outline"
-        size="sm"
-        className="gap-2"
-      >
-        <Send className="h-4 w-4" />
-        Send Invoice
-      </Button>
+      {controlledOpen === undefined && (
+        <Button
+          type="button"
+          onClick={(e) => handleOpen(e)}
+          variant="outline"
+          size="sm"
+          className="gap-2"
+        >
+          <Send className="h-4 w-4" />
+          Send Invoice
+        </Button>
+      )}
 
       <Dialog open={open} onOpenChange={handleClose}>
         <DialogContent className="sm:max-w-[500px]">
@@ -296,7 +312,7 @@ export function SendInvoiceButton({
           )}
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={handleClose} disabled={creating || sending}>
+            <Button type="button" variant="outline" onClick={() => handleClose(false)} disabled={creating || sending}>
               {createdInvoice ? 'Close' : 'Cancel'}
             </Button>
             {!createdInvoice ? (
