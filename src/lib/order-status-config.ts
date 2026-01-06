@@ -134,12 +134,15 @@ export function getOrderStatusConfig(status: OrderStatus): OrderStatusConfig | u
 }
 
 // Helper function to get status options for dropdowns/selects
+// Note: "paid" status is excluded from dropdown options as it can only be set automatically via payment processing
 export function getStatusOptions(): Array<{ value: OrderStatus; label: string; color: string }> {
-  return orderStatusConfig.map((config) => ({
-    value: config.value,
-    label: config.label,
-    color: config.color,
-  }))
+  return orderStatusConfig
+    .filter((config) => config.value !== 'paid') // Remove "paid" from dropdown options
+    .map((config) => ({
+      value: config.value,
+      label: config.label,
+      color: config.color,
+    }))
 }
 
 // Helper function to get tooltip content for a status

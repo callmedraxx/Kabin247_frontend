@@ -114,6 +114,11 @@ import { apiCall, apiCallJson } from "@/lib/api-client"
 import { getStatusOptions, getOrderStatusConfig, getStatusTooltipContent, orderStatusConfig } from "@/lib/order-status-config"
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"
 import { useAuth } from "@/contexts/auth-context"
+import { PaymentModal } from "@/components/payments/payment-modal"
+import { PaymentButton } from "@/components/payments/payment-button"
+import { PaymentHistory } from "@/components/payments/payment-history"
+import { getStoredCards, getOrderPayments, StoredCard } from "@/lib/payment-api"
+import { CreditCard } from "lucide-react"
 
 // Order status types - imported from centralized config
 import type { OrderStatus } from "@/lib/order-status-config"
@@ -520,6 +525,9 @@ function OrdersContent() {
   
   const [dialogOpen, setDialogOpen] = React.useState(false)
   const [editingOrder, setEditingOrder] = React.useState<Order | null>(null)
+  const [paymentOrder, setPaymentOrder] = React.useState<Order | null>(null)
+  const [paymentModalOpen, setPaymentModalOpen] = React.useState(false)
+  const [paymentStoredCards, setPaymentStoredCards] = React.useState<StoredCard[]>([])
   const [isLoadingFormData, setIsLoadingFormData] = React.useState(false)
   const lastResetOrderId = React.useRef<number | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
@@ -541,6 +549,32 @@ function OrdersContent() {
   const [pdfPreviewOpen, setPdfPreviewOpen] = React.useState(false)
   const [orderForPdf, setOrderForPdf] = React.useState<Order | null>(null)
   const [pdfHtml, setPdfHtml] = React.useState<string>("")
+
+  // Payment history component for edit modal
+  const PaymentHistoryWrapper = ({ orderId }: { orderId: number }) => {
+    const [transactions, setTransactions] = React.useState<any[]>([])
+    const [loading, setLoading] = React.useState(true)
+
+    React.useEffect(() => {
+      const loadPayments = async () => {
+        try {
+          const response = await getOrderPayments(orderId)
+          setTransactions(response.transactions)
+        } catch (error) {
+          console.error('Failed to load payment history:', error)
+        } finally {
+          setLoading(false)
+        }
+      }
+      loadPayments()
+    }, [orderId])
+
+    if (loading) {
+      return <div className="text-sm text-muted-foreground">Loading payment history...</div>
+    }
+
+    return <PaymentHistory transactions={transactions} />
+  }
 
   const form = useForm<OrderFormValues>({
     resolver: zodResolver(orderSchema) as any,
@@ -2209,6 +2243,28 @@ function OrdersContent() {
                                     <Package className="mr-2 h-4 w-4" />
                                     Update Status
                                   </DropdownMenuItem>
+                                  {/* Payment processing - Admin only, show for non-paid orders */}
+                                  {isAuthenticated && order.status !== 'paid' && (
+                                    <DropdownMenuItem
+                                      onClick={async () => {
+                                        setPaymentOrder(order)
+                                        setPaymentModalOpen(true)
+                                        if (order.client_id) {
+                                          try {
+                                            const response = await getStoredCards(order.client_id)
+                                            setPaymentStoredCards(response.cards)
+                                          } catch (error) {
+                                            console.error('Failed to load stored cards:', error)
+                                            setPaymentStoredCards([])
+                                          }
+                                        }
+                                      }}
+                                      className="cursor-pointer"
+                                    >
+                                      <CreditCard className="mr-2 h-4 w-4" />
+                                      Process Payment
+                                    </DropdownMenuItem>
+                                  )}
                                   <DropdownMenuItem
                                     onClick={() => handleEdit(order)}
                                     className="cursor-pointer"
@@ -3588,6 +3644,42 @@ function OrdersContent() {
                                 </p>
                               )}
                             </section>
+
+                            {/* Payment Section - Admin only */}
+                            {isAuthenticated && editingOrder && editingOrder.status !== 'paid' && (
+                              <section className="space-y-5">
+                                <div className="flex items-center gap-3 pb-3">
+                                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-green-500/20 to-green-600/10 ring-1 ring-green-500/20">
+                                    <CreditCard className="h-4 w-4 text-green-400" />
+                                  </div>
+                                  <h2 className="text-sm font-semibold tracking-wide text-foreground">Payment</h2>
+                                  <div className="flex-1 h-px bg-gradient-to-r from-border/50 to-transparent" />
+                                </div>
+                                <div className="p-4 border rounded-lg bg-muted/50">
+                                  <div className="flex items-center justify-between mb-4">
+                                    <div>
+                                      <div className="text-sm font-medium">Order Total</div>
+                                      <div className="text-2xl font-bold">${parseFloat(editingOrder.total.toString()).toFixed(2)}</div>
+                                    </div>
+                                    <PaymentButton
+                                      orderId={editingOrder.id!}
+                                      orderNumber={editingOrder.order_number}
+                                      amount={parseFloat(editingOrder.total.toString())}
+                                      clientId={editingOrder.client_id || undefined}
+                                      onPaymentSuccess={() => {
+                                        fetchOrders()
+                                        setDialogOpen(false)
+                                        setEditingOrder(null)
+                                        toast.success('Payment processed successfully')
+                                      }}
+                                    />
+                                  </div>
+                                  {editingOrder.id && (
+                                    <PaymentHistoryWrapper orderId={editingOrder.id} />
+                                  )}
+                                </div>
+                              </section>
+                            )}
                           </form>
                         </Form>
                       </CardContent>
@@ -4356,6 +4448,25 @@ function OrdersContent() {
               </DialogContent>
             </Dialog>
           </div>
+
+          {/* Payment Modal */}
+          {paymentOrder && (
+            <PaymentModal
+              open={paymentModalOpen}
+              onOpenChange={setPaymentModalOpen}
+              orderId={paymentOrder.id!}
+              orderNumber={paymentOrder.order_number}
+              amount={parseFloat(paymentOrder.total.toString())}
+              clientId={paymentOrder.client_id || undefined}
+              storedCards={paymentStoredCards}
+              onPaymentSuccess={() => {
+                fetchOrders()
+                setPaymentOrder(null)
+                setPaymentModalOpen(false)
+                toast.success('Payment processed successfully')
+              }}
+            />
+          )}
         </SidebarInset>
       </SidebarProvider>
     </SidebarCategoryProvider>
