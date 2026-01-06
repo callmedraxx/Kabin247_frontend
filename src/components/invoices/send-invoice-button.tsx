@@ -137,6 +137,7 @@ export function SendInvoiceButton({
   return (
     <>
       <Button
+        type="button"
         onClick={() => setOpen(true)}
         variant="outline"
         size="sm"
@@ -252,6 +253,7 @@ export function SendInvoiceButton({
                       className="font-mono text-xs"
                     />
                     <Button
+                      type="button"
                       variant="outline"
                       size="sm"
                       onClick={() => window.open(createdInvoice.public_url, '_blank')}
@@ -294,11 +296,11 @@ export function SendInvoiceButton({
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={handleClose} disabled={creating || sending}>
+            <Button type="button" variant="outline" onClick={handleClose} disabled={creating || sending}>
               {createdInvoice ? 'Close' : 'Cancel'}
             </Button>
             {!createdInvoice ? (
-              <Button onClick={handleCreateInvoice} disabled={creating}>
+              <Button type="button" onClick={handleCreateInvoice} disabled={creating}>
                 {creating ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -312,7 +314,7 @@ export function SendInvoiceButton({
                 )}
               </Button>
             ) : deliveryMethod === 'SHARE_MANUALLY' ? (
-              <Button onClick={handleSendEmail} disabled={sending || !recipientEmail}>
+              <Button type="button" onClick={handleSendEmail} disabled={sending || !recipientEmail}>
                 {sending ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />

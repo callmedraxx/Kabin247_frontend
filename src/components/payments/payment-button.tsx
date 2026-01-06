@@ -48,6 +48,7 @@ export function PaymentButton({
   return (
     <>
       <Button
+        type="button"
         onClick={handleOpen}
         variant={variant}
         size={size}
