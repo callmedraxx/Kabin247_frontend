@@ -118,6 +118,8 @@ import { PaymentModal } from "@/components/payments/payment-modal"
 import { PaymentButton } from "@/components/payments/payment-button"
 import { PaymentHistory } from "@/components/payments/payment-history"
 import { getStoredCards, getOrderPayments, StoredCard } from "@/lib/payment-api"
+import { SendInvoiceButton } from "@/components/invoices/send-invoice-button"
+import { InvoiceList } from "@/components/invoices/invoice-list"
 import { CreditCard } from "lucide-react"
 
 // Order status types - imported from centralized config
@@ -574,6 +576,17 @@ function OrdersContent() {
     }
 
     return <PaymentHistory transactions={transactions} />
+  }
+
+  // Invoice list component for edit modal
+  const InvoiceListWrapper = ({ 
+    orderId, 
+    onInvoiceUpdate 
+  }: { 
+    orderId: number
+    onInvoiceUpdate?: () => void 
+  }) => {
+    return <InvoiceList orderId={orderId} onInvoiceUpdate={onInvoiceUpdate} />
   }
 
   const form = useForm<OrderFormValues>({
@@ -3661,21 +3674,47 @@ function OrdersContent() {
                                       <div className="text-sm font-medium">Order Total</div>
                                       <div className="text-2xl font-bold">${parseFloat(editingOrder.total.toString()).toFixed(2)}</div>
                                     </div>
-                                    <PaymentButton
-                                      orderId={editingOrder.id!}
-                                      orderNumber={editingOrder.order_number}
-                                      amount={parseFloat(editingOrder.total.toString())}
-                                      clientId={editingOrder.client_id || undefined}
-                                      onPaymentSuccess={() => {
-                                        fetchOrders()
-                                        setDialogOpen(false)
-                                        setEditingOrder(null)
-                                        toast.success('Payment processed successfully')
-                                      }}
-                                    />
+                                    <div className="flex items-center gap-2">
+                                      <PaymentButton
+                                        orderId={editingOrder.id!}
+                                        orderNumber={editingOrder.order_number}
+                                        amount={parseFloat(editingOrder.total.toString())}
+                                        clientId={editingOrder.client_id || undefined}
+                                        onPaymentSuccess={() => {
+                                          fetchOrders()
+                                          setDialogOpen(false)
+                                          setEditingOrder(null)
+                                          toast.success('Payment processed successfully')
+                                        }}
+                                      />
+                                      <SendInvoiceButton
+                                        orderId={editingOrder.id!}
+                                        orderNumber={editingOrder.order_number}
+                                        orderTotal={parseFloat(editingOrder.total.toString())}
+                                        clientEmail={editingOrder.client?.email}
+                                        onInvoiceCreated={() => {
+                                          fetchOrders()
+                                        }}
+                                      />
+                                    </div>
                                   </div>
                                   {editingOrder.id && (
-                                    <PaymentHistoryWrapper orderId={editingOrder.id} />
+                                    <>
+                                      <PaymentHistoryWrapper orderId={editingOrder.id} />
+                                      <section className="space-y-4">
+                                        <div className="flex items-center gap-3 pb-3">
+                                          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500/20 to-violet-600/10 ring-1 ring-violet-500/20">
+                                            <CreditCard className="h-4 w-4 text-violet-400" />
+                                          </div>
+                                          <h3 className="text-sm font-semibold tracking-wide text-foreground">Invoices</h3>
+                                          <div className="flex-1 h-px bg-gradient-to-r from-border/50 to-transparent" />
+                                        </div>
+                                        <InvoiceListWrapper 
+                                          orderId={editingOrder.id}
+                                          onInvoiceUpdate={() => fetchOrders()}
+                                        />
+                                      </section>
+                                    </>
                                   )}
                                 </div>
                               </section>
