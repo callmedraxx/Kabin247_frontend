@@ -48,15 +48,31 @@ export async function initializeSquarePayments(): Promise<any> {
   // Get application ID from backend
   if (!squareApplicationId) {
     try {
+      const token = localStorage.getItem('kabin247_access_token') || '';
+      
       const response = await fetch(`${API_BASE_URL}/payments/application-id`, {
         credentials: 'include',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('kabin247_access_token') || ''}`,
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
       });
 
       if (!response.ok) {
-        throw new Error('Failed to get Square application ID');
+        const errorText = await response.text();
+        let errorMessage = 'Failed to get Square application ID';
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error || errorMessage;
+        } catch (e) {
+          errorMessage = errorText || errorMessage;
+        }
+        console.error('Square Application ID fetch failed:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorMessage,
+        });
+        throw new Error(`${errorMessage} (Status: ${response.status})`);
       }
 
       const data = await response.json();

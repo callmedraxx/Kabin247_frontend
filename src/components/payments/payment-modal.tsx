@@ -21,7 +21,10 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Loader2, CreditCard, AlertCircle, CheckCircle2 } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Loader2, CreditCard, AlertCircle, CheckCircle2, DollarSign, Lock, Shield, Wallet } from "lucide-react"
+import { Separator } from "@/components/ui/separator"
+import { Card, CardContent } from "@/components/ui/card"
 import { getSquarePayments } from "@/lib/square-config"
 import { processPayment, ProcessPaymentRequest, StoredCard } from "@/lib/payment-api"
 import { toast } from "sonner"
@@ -53,33 +56,113 @@ export function PaymentModal({
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [cardElement, setCardElement] = useState<any>(null)
+  const [isInitializing, setIsInitializing] = useState(false)
   const cardContainerRef = useRef<HTMLDivElement>(null)
 
-  // Initialize Square card element
+  // Reset state when modal closes
   useEffect(() => {
-    if (open && paymentMethod === 'card' && cardContainerRef.current && !cardElement) {
-      initializeCardElement()
+    if (!open) {
+      setError(null)
+      setPaymentMethod('card')
+      setSelectedStoredCard(null)
+      setStoreCard(false)
+      setIsInitializing(false)
+      // Clean up card element
+      setCardElement((prev: any) => {
+        if (prev) {
+          try {
+            prev.destroy()
+          } catch (e) {
+            // Ignore destroy errors
+          }
+        }
+        return null
+      })
+    }
+  }, [open])
+
+  // Initialize Square card element when modal opens and payment method is card
+  useEffect(() => {
+    if (!open || paymentMethod !== 'card' || cardElement || isInitializing) {
+      return
     }
 
+    let mounted = true
+    let cardInstance: any = null
+
+    const initializeCardElement = async () => {
+      if (!cardContainerRef.current) {
+        // Wait a bit for DOM to be ready
+        setTimeout(() => initializeCardElement(), 100)
+        return
+      }
+
+      setIsInitializing(true)
+      setError(null)
+
+      try {
+        const payments = await getSquarePayments()
+        if (!mounted || !cardContainerRef.current) return
+
+        // Customize card element styling
+        // Note: Square SDK only accepts limited style properties (borderColor, borderRadius, color, etc.)
+        // Most styling (padding, shadows, etc.) is handled via CSS in globals.css
+        const card = await payments.card({
+          style: {
+            '.input-container': {
+              borderColor: '#94a3b8', // slate-400 - visible border
+              borderRadius: '8px',
+            },
+            '.input-container.is-focus': {
+              borderColor: '#3b82f6', // primary blue
+            },
+            '.input-container.is-error': {
+              borderColor: '#ef4444', // destructive red
+            },
+          },
+        })
+        if (!mounted || !cardContainerRef.current) {
+          card.destroy()
+          return
+        }
+
+        await card.attach(cardContainerRef.current)
+        
+        if (mounted) {
+          cardInstance = card
+          setCardElement(card)
+        } else {
+          card.destroy()
+        }
+      } catch (err: any) {
+        console.error('Failed to initialize card element:', err)
+        if (mounted) {
+          setError(`Failed to initialize payment form: ${err.message || 'Please refresh and try again.'}`)
+        }
+      } finally {
+        if (mounted) {
+          setIsInitializing(false)
+        }
+      }
+    }
+
+    // Small delay to ensure DOM is ready
+    const timer = setTimeout(() => {
+      initializeCardElement()
+    }, 200)
+
     return () => {
-      if (cardElement) {
-        cardElement.destroy()
-        setCardElement(null)
+      mounted = false
+      clearTimeout(timer)
+      if (cardInstance) {
+        try {
+          cardInstance.destroy()
+        } catch (e) {
+          // Ignore destroy errors
+        }
       }
     }
   }, [open, paymentMethod])
-
-  const initializeCardElement = async () => {
-    try {
-      const payments = await getSquarePayments()
-      const card = await payments.card()
-      await card.attach(cardContainerRef.current!)
-      setCardElement(card)
-    } catch (err: any) {
-      console.error('Failed to initialize card element:', err)
-      setError('Failed to initialize payment form. Please refresh and try again.')
-    }
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -154,23 +237,54 @@ export function PaymentModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
-          <DialogTitle>Process Payment</DialogTitle>
-          <DialogDescription>
-            Process payment for order {orderNumber}
-          </DialogDescription>
+        <DialogContent className="sm:max-w-[750px] max-w-[95vw] p-0 gap-0 overflow-hidden bg-background/95 backdrop-blur-sm shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] border-2 border-border/50 [transform:perspective(1000px)_rotateX(1deg)_translateZ(0)] hover:[transform:perspective(1000px)_rotateX(0deg)_translateZ(5px)] transition-all duration-300 ease-out">
+        {/* Header with gradient */}
+        <DialogHeader className="px-6 pt-5 pb-4 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border-b border-border/50 sticky top-0 z-10 backdrop-blur-sm">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/80 shadow-lg shadow-primary/25 [transform:translateZ(10px)]">
+              <CreditCard className="h-5 w-5 text-primary-foreground" />
+            </div>
+            <div className="flex-1">
+              <DialogTitle className="text-xl font-bold">Process Payment</DialogTitle>
+              <DialogDescription className="text-sm mt-1">
+                Order #{orderNumber}
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label>Amount</Label>
-            <div className="text-2xl font-semibold">${amount.toFixed(2)}</div>
-          </div>
+        {/* Scrollable Content Area */}
+        <div className="overflow-y-auto overflow-x-hidden max-h-[calc(100vh-280px)] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+          <form id="payment-form" onSubmit={handleSubmit} className="space-y-0">
+            {/* Compact Amount Display */}
+            <div className="px-6 pt-5 pb-4">
+              <div className="flex items-center justify-between p-4 rounded-lg bg-gradient-to-r from-primary/5 via-primary/3 to-transparent border border-primary/10">
+                <div className="flex items-center gap-3">
+                  <DollarSign className="h-5 w-5 text-primary" />
+                  <div>
+                    <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Total Amount
+                    </Label>
+                    <div className="text-2xl font-bold text-foreground mt-0.5">
+                      ${amount.toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+                <Badge variant="secondary" className="text-xs bg-green-500/10 text-green-600 border-green-500/20">
+                  <Shield className="h-3 w-3 mr-1" />
+                  Secure
+                </Badge>
+              </div>
+            </div>
+
+            <div className="px-6 pb-6 space-y-5">
 
           {storedCards.length > 0 && (
-            <div className="space-y-2">
-              <Label>Payment Method</Label>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Wallet className="h-4 w-4 text-muted-foreground" />
+                <Label className="text-sm font-semibold">Payment Method</Label>
+              </div>
               <Select
                 value={paymentMethod}
                 onValueChange={(value) => {
@@ -178,20 +292,33 @@ export function PaymentModal({
                   setError(null)
                 }}
               >
-                <SelectTrigger>
+                <SelectTrigger className="h-11">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="card">New Card</SelectItem>
-                  <SelectItem value="stored_card">Stored Card</SelectItem>
+                  <SelectItem value="card">
+                    <div className="flex items-center gap-2">
+                      <CreditCard className="h-4 w-4" />
+                      <span>New Card</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="stored_card">
+                    <div className="flex items-center gap-2">
+                      <Wallet className="h-4 w-4" />
+                      <span>Stored Card</span>
+                    </div>
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
           )}
 
           {paymentMethod === 'stored_card' ? (
-            <div className="space-y-2">
-              <Label>Select Card</Label>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <CreditCard className="h-4 w-4 text-muted-foreground" />
+                <Label className="text-sm font-semibold">Select Card</Label>
+              </div>
               <Select
                 value={selectedStoredCard?.toString() || ''}
                 onValueChange={(value) => {
@@ -199,18 +326,20 @@ export function PaymentModal({
                   setError(null)
                 }}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a stored card" />
+                <SelectTrigger className="h-11">
+                  <SelectValue placeholder="Choose a stored card" />
                 </SelectTrigger>
                 <SelectContent>
                   {storedCards.map((card) => (
                     <SelectItem key={card.id} value={card.id.toString()}>
                       <div className="flex items-center gap-2">
                         <CreditCard className="h-4 w-4" />
-                        <span>
+                        <span className="font-medium">
                           {card.card_brand} •••• {card.card_last_4}
-                          {card.is_default && ' (Default)'}
                         </span>
+                        {card.is_default && (
+                          <span className="text-xs text-primary font-medium">(Default)</span>
+                        )}
                       </div>
                     </SelectItem>
                   ))}
@@ -218,28 +347,61 @@ export function PaymentModal({
               </Select>
 
               {selectedCard && (
-                <div className="p-3 bg-muted rounded-md">
-                  <div className="text-sm font-medium">
-                    {selectedCard.card_brand} •••• {selectedCard.card_last_4}
-                  </div>
-                  {selectedCard.card_exp_month && selectedCard.card_exp_year && (
-                    <div className="text-xs text-muted-foreground">
-                      Expires {selectedCard.card_exp_month}/{selectedCard.card_exp_year}
+                <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                          <CreditCard className="h-5 w-5 text-primary" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-semibold">
+                            {selectedCard.card_brand} •••• {selectedCard.card_last_4}
+                          </div>
+                          {selectedCard.card_exp_month && selectedCard.card_exp_year && (
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                              Expires {selectedCard.card_exp_month}/{selectedCard.card_exp_year}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {selectedCard.is_default && (
+                        <Badge variant="secondary" className="text-xs">
+                          Default
+                        </Badge>
+                      )}
                     </div>
-                  )}
-                </div>
+                  </CardContent>
+                </Card>
               )}
             </div>
           ) : (
-            <div className="space-y-2">
-              <Label>Card Information</Label>
-              <div
-                ref={cardContainerRef}
-                id="card-container"
-                className="p-3 border rounded-md min-h-[50px]"
-              />
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <CreditCard className="h-4 w-4 text-muted-foreground" />
+                <Label className="text-sm font-semibold">Card Information</Label>
+              </div>
+              {isInitializing && (
+                <Card className="border-dashed">
+                  <CardContent className="p-6 flex items-center justify-center min-h-[80px]">
+                    <div className="flex flex-col items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                      <span>Initializing secure payment form...</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+              <Card className={`border-2 border-border/50 ${isInitializing ? 'hidden' : ''}`}>
+                <CardContent className="p-4">
+                  <div
+                    ref={cardContainerRef}
+                    id="card-container"
+                    className="min-h-[60px] [&_.input-container]:border [&_.input-container]:border-border [&_.input-container]:rounded-lg [&_.input-container]:bg-background [&_.input-container]:px-3 [&_.input-container]:py-2.5 [&_.input-container]:transition-all [&_.input-container]:duration-200 [&_.input-container.is-focus]:border-primary [&_.input-container.is-focus]:ring-2 [&_.input-container.is-focus]:ring-primary/20 [&_.input-container.is-error]:border-destructive [&_.input-container.is-error]:ring-2 [&_.input-container.is-error]:ring-destructive/20 [&_input]:outline-none [&_input]:w-full [&_input]:text-foreground [&_input::placeholder]:text-muted-foreground [&_input::placeholder]:opacity-60"
+                  />
+                </CardContent>
+              </Card>
               {clientId && (
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-2 p-3 bg-muted/50 rounded-lg border">
                   <Checkbox
                     id="store-card"
                     checked={storeCard}
@@ -247,9 +409,10 @@ export function PaymentModal({
                   />
                   <Label
                     htmlFor="store-card"
-                    className="text-sm font-normal cursor-pointer"
+                    className="text-sm font-normal cursor-pointer flex items-center gap-2"
                   >
-                    Save card for future use
+                    <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+                    Save card securely for future use
                   </Label>
                 </div>
               )}
@@ -257,36 +420,66 @@ export function PaymentModal({
           )}
 
           {error && (
-            <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md flex items-start gap-2">
-              <AlertCircle className="h-4 w-4 text-destructive mt-0.5" />
-              <div className="text-sm text-destructive">{error}</div>
-            </div>
+            <Card className="border-destructive/50 bg-destructive/5">
+              <CardContent className="p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-destructive/10 flex-shrink-0">
+                    <AlertCircle className="h-4 w-4 text-destructive" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-sm font-medium text-destructive mb-1">Payment Error</div>
+                    <div className="text-sm text-destructive/80">{error}</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           )}
+            </div>
+          </form>
+        </div>
 
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={processing}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={processing || (paymentMethod === 'stored_card' && !selectedStoredCard)}>
-              {processing ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <CreditCard className="mr-2 h-4 w-4" />
-                  Process Payment
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </form>
+        {/* Footer with Action Buttons */}
+        <div className="border-t border-border/50 bg-muted/20 backdrop-blur-sm sticky bottom-0 z-10">
+          <div className="px-6 py-4">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={processing}
+                className="flex-1 sm:flex-initial order-2 sm:order-1"
+              >
+                Cancel
+              </Button>
+              <Button 
+                type="submit" 
+                form="payment-form"
+                disabled={processing || isInitializing || (paymentMethod === 'stored_card' && !selectedStoredCard) || (paymentMethod === 'card' && !cardElement)}
+                className="flex-1 sm:flex-initial order-1 sm:order-2 bg-gradient-to-r from-primary via-primary/95 to-primary/90 hover:from-primary/90 hover:via-primary/85 hover:to-primary/80 text-white font-semibold shadow-[0_4px_14px_0_rgba(0,118,255,0.39)] hover:shadow-[0_6px_20px_rgba(0,118,255,0.5)] [transform:translateY(0px)_translateZ(0)] hover:[transform:translateY(-2px)_translateZ(10px)] active:[transform:translateY(0px)_translateZ(0)] transition-all duration-200 ease-out"
+              >
+                {processing ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Processing Payment...
+                  </>
+                ) : (
+                  <>
+                    <Lock className="mr-2 h-4 w-4" />
+                    Process Payment
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+          
+          {/* Security Footer */}
+          <div className="px-6 py-3 border-t border-border/30 bg-muted/10">
+            <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+              <Shield className="h-3.5 w-3.5" />
+              <span>Your payment is secured by Square</span>
+            </div>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   )
