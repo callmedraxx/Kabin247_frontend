@@ -86,7 +86,9 @@ import {
   Building2,
   Leaf,
   Circle,
-  CheckCircle2
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react"
 import { toast } from "sonner"
 import { API_BASE_URL } from "@/lib/api-config"
@@ -321,9 +323,9 @@ const formatDateForInput = (dateString: string | null | undefined): string => {
   if (!dateString) return ""
   
   // If it's already in YYYY-MM-DD format, return as is (most common case)
-  if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
-    return dateString
-  }
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+        return dateString
+      }
   
   // Try to extract YYYY-MM-DD from the beginning of the string (e.g., from ISO datetime)
   const match = dateString.match(/^(\d{4}-\d{2}-\d{2})/)
@@ -533,6 +535,37 @@ function POSContent() {
   const [fboDialogOpen, setFboDialogOpen] = React.useState(false)
   const [menuItemDialogOpen, setMenuItemDialogOpen] = React.useState(false)
   const [currentItemIndex, setCurrentItemIndex] = React.useState<number | undefined>(undefined)
+  
+  // Collapse state for items
+  const [collapsedItems, setCollapsedItems] = React.useState<Set<number>>(new Set())
+  
+  // Helper function to get item display name
+  const getItemDisplayName = React.useCallback((itemName: string | undefined): string => {
+    if (!itemName) return "No item selected"
+    const itemId = parseInt(itemName)
+    if (!isNaN(itemId)) {
+      const menuItem = getMenuItemById(itemId)
+      if (menuItem) {
+        return menuItem.item_name
+      }
+    }
+    // Fallback to menuItemOptions
+    const option = menuItemOptions.find(opt => opt.value === itemName)
+    return option?.label || "No item selected"
+  }, [getMenuItemById, menuItemOptions])
+  
+  // Toggle collapse state for an item
+  const toggleItemCollapse = React.useCallback((index: number) => {
+    setCollapsedItems(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(index)) {
+        newSet.delete(index)
+      } else {
+        newSet.add(index)
+      }
+      return newSet
+    })
+  }, [])
   
   // Form states for adding new items
   const [newClientName, setNewClientName] = React.useState("")
@@ -2546,7 +2579,12 @@ function POSContent() {
                                 </Button>
                               </div>
 
-                              {fields.map((field, index) => (
+                              {fields.map((field, index) => {
+                                const isCollapsed = collapsedItems.has(index)
+                                const itemName = form.watch(`items.${index}.itemName`)
+                                const displayName = getItemDisplayName(itemName)
+                                
+                                return (
                                 <div 
                                   key={field.id} 
                                   className="group relative p-5 rounded-xl border border-border/30 bg-gradient-to-b from-muted/30 to-muted/10 space-y-4 hover:border-primary/20 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300"
@@ -2554,18 +2592,39 @@ function POSContent() {
                                   <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-border/50 to-transparent" />
                                   {/* Item Header */}
                                   <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-3 flex-1 min-w-0">
                                       <div className="relative">
                                         <div className="absolute inset-0 bg-emerald-500/20 rounded-lg blur-sm group-hover:blur-md transition-all" />
                                         <span className="relative flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 text-xs font-bold text-white shadow-md">
                                           {index + 1}
                                         </span>
                                       </div>
+                                      {isCollapsed ? (
+                                        <div className="flex-1 min-w-0">
+                                          <span className="text-sm font-semibold text-foreground">{displayName}</span>
+                                        </div>
+                                      ) : (
                                       <div>
                                         <span className="text-sm font-semibold">Item {index + 1}</span>
                                         <p className="text-[11px] text-muted-foreground">Add menu item details</p>
                                       </div>
+                                      )}
                                     </div>
+                                    <div className="flex items-center gap-2">
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => toggleItemCollapse(index)}
+                                        className="h-8 w-8 p-0 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                                        title={isCollapsed ? "Expand item" : "Collapse item"}
+                                      >
+                                        {isCollapsed ? (
+                                          <ChevronDown className="h-4 w-4" />
+                                        ) : (
+                                          <ChevronUp className="h-4 w-4" />
+                                        )}
+                                      </Button>
                                     {fields.length > 1 && (
                                       <Button
                                         type="button"
@@ -2577,9 +2636,12 @@ function POSContent() {
                                         <X className="h-4 w-4" />
                                       </Button>
                                     )}
+                                    </div>
                                   </div>
 
                                   {/* Item Fields */}
+                                  {!isCollapsed && (
+                                    <>
                                   <div className="grid gap-4 sm:grid-cols-2">
                                     <FormField
                                       control={form.control}
@@ -2787,8 +2849,11 @@ function POSContent() {
                                       </FormItem>
                                     )}
                                   />
+                                    </>
+                                  )}
                                 </div>
-                              ))}
+                                )
+                              })}
                               {form.formState.errors.items && (
                                 <p className="text-sm text-destructive">
                                   {form.formState.errors.items.message}
