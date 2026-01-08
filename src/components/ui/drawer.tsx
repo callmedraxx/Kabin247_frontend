@@ -51,8 +51,18 @@ const DrawerContent = React.forwardRef<
 >(({ className, children, side = "right", resizable = true, ...props }, ref) => {
   const [width, setWidth] = React.useState(760)
   const [isResizing, setIsResizing] = React.useState(false)
+  const [isMobile, setIsMobile] = React.useState(false)
   const minWidth = 400
   const maxWidth = typeof window !== "undefined" ? window.innerWidth * 0.9 : 1200
+
+  React.useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768)
+    }
+    checkMobile()
+    window.addEventListener("resize", checkMobile)
+    return () => window.removeEventListener("resize", checkMobile)
+  }, [])
 
   const handleMouseDown = React.useCallback((e: React.MouseEvent) => {
     e.preventDefault()
@@ -108,6 +118,7 @@ const DrawerContent = React.forwardRef<
           "fixed z-50 flex flex-col border-0 bg-card",
           "shadow-2xl shadow-black/50 ring-1 ring-white/[0.05]",
           side === "top" || side === "bottom" ? "max-h-[92vh]" : "h-screen",
+          (side === "right" || side === "left") && isMobile && "w-full",
           sideClasses[side],
           animationClasses[side],
           "data-[state=closed]:animate-out",
@@ -118,7 +129,7 @@ const DrawerContent = React.forwardRef<
           "data-[state=closed]:duration-200",
           className
         )}
-        style={side === "right" && resizable ? { width: `${width}px` } : undefined}
+        style={side === "right" && resizable && !isMobile ? { width: `${width}px` } : undefined}
         {...props}
       >
         {/* Gradient top edge */}
@@ -126,8 +137,8 @@ const DrawerContent = React.forwardRef<
           <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
         )}
         
-        {/* Resize Handle for right drawer */}
-        {side === "right" && resizable && (
+        {/* Resize Handle for right drawer - only on desktop */}
+        {side === "right" && resizable && !isMobile && (
           <div
             onMouseDown={handleMouseDown}
             className={cn(

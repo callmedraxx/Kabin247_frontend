@@ -72,6 +72,7 @@ function DialogContent({
           "data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%]",
           "data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]",
           "duration-300 sm:max-w-lg",
+          "max-h-[calc(100vh-2rem)] overflow-hidden",
           className
         )}
         {...props}

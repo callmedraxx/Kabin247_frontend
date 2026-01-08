@@ -93,6 +93,7 @@ import {
 import { toast } from "sonner"
 import { API_BASE_URL } from "@/lib/api-config"
 import { apiCallJson } from "@/lib/api-client"
+import { useIsMobile } from "@/hooks/use-mobile"
 
 // Data structures matching API responses
 interface Client {
@@ -467,6 +468,7 @@ const clearDraft = () => {
 function POSContent() {
   const searchParams = useSearchParams()
   const pathname = usePathname()
+  const isMobileDevice = useIsMobile()
   const [previewOpen, setPreviewOpen] = React.useState(false)
   const [previewHtml, setPreviewHtml] = React.useState<string>("")
   
@@ -3081,7 +3083,7 @@ function POSContent() {
                       <Trash2 className="h-4 w-4" />
                       Clear
                     </Button>
-                    <Drawer open={previewOpen} onOpenChange={setPreviewOpen} direction="right">
+                    <Drawer open={previewOpen} onOpenChange={setPreviewOpen} direction={isMobileDevice ? "bottom" : "right"}>
                       <DrawerTrigger asChild>
                         <Button
                           type="button"
@@ -3093,7 +3095,7 @@ function POSContent() {
                           Preview Order
                         </Button>
                       </DrawerTrigger>
-                      <DrawerContent side="right" resizable>
+                      <DrawerContent side={isMobileDevice ? "bottom" : "right"} resizable={!isMobileDevice}>
                         <div className="flex flex-col h-full">
                           <DrawerHeader className="flex-shrink-0">
                             <div className="flex items-center gap-4">
@@ -3111,7 +3113,7 @@ function POSContent() {
                               </div>
                             </div>
                           </DrawerHeader>
-                          <div className="flex-1 overflow-y-auto scrollbar-hide px-6 py-4">
+                          <div className={`flex-1 overflow-y-auto scrollbar-hide px-4 sm:px-6 py-4 ${isMobileDevice ? 'pb-24' : ''}`}>
                             {previewHtml ? (
                               <div 
                                 className="prose prose-invert max-w-none"
@@ -3425,7 +3427,7 @@ function POSContent() {
                               </div>
                             )}
                           </div>
-                          <DrawerFooter className="flex-shrink-0 flex-row gap-3">
+                          <DrawerFooter className="flex-shrink-0 flex-row gap-3 sticky bottom-0 bg-card border-t border-border/30 z-10">
                             <DrawerClose asChild>
                               <Button variant="ghost" className="flex-1 text-muted-foreground hover:text-foreground">Cancel</Button>
                             </DrawerClose>

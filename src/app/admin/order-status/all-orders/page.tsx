@@ -121,6 +121,7 @@ import { getStoredCards, getOrderPayments, StoredCard } from "@/lib/payment-api"
 import { SendInvoiceButton } from "@/components/invoices/send-invoice-button"
 import { InvoiceList } from "@/components/invoices/invoice-list"
 import { CreditCard } from "lucide-react"
+import { useIsMobile } from "@/hooks/use-mobile"
 
 // Order status types - imported from centralized config
 import type { OrderStatus } from "@/lib/order-status-config"
@@ -525,6 +526,7 @@ function OrdersContent() {
   const [sortBy, setSortBy] = React.useState<string>("created_at")
   const [sortOrder, setSortOrder] = React.useState<"asc" | "desc">("desc")
   
+  const isMobile = useIsMobile()
   const [dialogOpen, setDialogOpen] = React.useState(false)
   const [editingOrder, setEditingOrder] = React.useState<Order | null>(null)
   const [paymentOrder, setPaymentOrder] = React.useState<Order | null>(null)
@@ -2862,7 +2864,7 @@ function OrdersContent() {
                 setIsLoadingFormData(false)
               }
             }}>
-              <DialogContent className="!max-w-[98vw] w-[98vw] max-h-[95vh] overflow-hidden flex flex-col p-0 gap-0">
+              <DialogContent className={isMobile ? "!max-w-[100vw] w-[100vw] h-[100vh] max-h-[100vh] m-0 rounded-none overflow-hidden flex flex-col p-0 gap-0" : "!max-w-[98vw] w-[98vw] max-h-[95vh] overflow-hidden flex flex-col p-0 gap-0"}>
                 <DialogHeader className="px-4 sm:px-6 lg:px-8 pt-6 pb-4 border-b border-border/30 bg-gradient-to-b from-background to-background/95 shrink-0">
                   <div className="flex items-center gap-4">
                     <div className="relative">
@@ -2881,7 +2883,7 @@ function OrdersContent() {
                     </div>
                   </div>
                 </DialogHeader>
-                <div className="flex-1 overflow-y-auto scrollbar-hide relative">
+                <div className="flex-1 overflow-y-auto scrollbar-hide relative" style={{ maxHeight: isMobile ? 'calc(100vh - 140px)' : undefined }}>
                   {isLoadingFormData && (
                     <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
                       <div className="flex flex-col items-center gap-3">
@@ -2891,7 +2893,7 @@ function OrdersContent() {
                       </div>
                     </div>
                   )}
-                  <div className="p-4 sm:p-6 lg:p-8">
+                  <div className={`p-4 sm:p-6 lg:p-8 ${isMobile ? 'pb-24' : ''}`}>
                     <Card className="group relative overflow-hidden rounded-2xl border-0 bg-gradient-to-b from-card via-card to-card/95 shadow-2xl shadow-black/40 ring-1 ring-white/[0.05]">
                       <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.02] via-transparent to-transparent" />
                       <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
@@ -3743,7 +3745,7 @@ function OrdersContent() {
                     </Card>
                   </div>
                 </div>
-                <DialogFooter className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6 border-t border-border/30 bg-gradient-to-b from-background/95 to-background shrink-0 flex-col sm:flex-row gap-2 sm:gap-3">
+                <DialogFooter className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6 border-t border-border/30 bg-gradient-to-b from-background/95 to-background shrink-0 flex-col sm:flex-row gap-2 sm:gap-3 sticky bottom-0 z-10">
                   <Button
                     type="button"
                     variant="outline"
