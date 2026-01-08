@@ -2909,7 +2909,7 @@ function OrdersContent() {
                           <h2 className="text-sm font-semibold tracking-wide text-foreground">Client & Order Information</h2>
                           <div className="flex-1 h-px bg-gradient-to-r from-border/50 to-transparent" />
                         </div>
-                        <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+                        <div className={`grid gap-4 sm:gap-5 ${isMobile ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6'}`}>
                           <FormField
                             control={form.control}
                             name="order_number"
@@ -3352,7 +3352,7 @@ function OrdersContent() {
                           <h2 className="text-sm font-semibold tracking-wide text-foreground">Special Instructions</h2>
                           <div className="flex-1 h-px bg-gradient-to-r from-border/50 to-transparent" />
                         </div>
-                        <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+                        <div className={`grid gap-4 sm:gap-5 ${isMobile ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'}`}>
                           <FormField
                             control={form.control}
                             name="reheatingInstructions"
@@ -3498,7 +3498,7 @@ function OrdersContent() {
                                   </div>
 
                                   {/* Item Fields - Row 1: Menu Item, Qty, Serving Size, Price, Category */}
-                                  <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
+                                  <div className={`grid gap-4 ${isMobile ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-5'}`}>
                                     <FormField
                                       control={form.control}
                                       name={`items.${index}.itemName`}
@@ -3632,7 +3632,7 @@ function OrdersContent() {
                                   </div>
 
                                   {/* Item Fields - Row 2: Notes and Packaging */}
-                                  <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
+                                  <div className={`grid gap-4 ${isMobile ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
                                     <FormField
                                       control={form.control}
                                       name={`items.${index}.itemDescription`}
@@ -3689,33 +3689,37 @@ function OrdersContent() {
                                   <div className="flex-1 h-px bg-gradient-to-r from-border/50 to-transparent" />
                                 </div>
                                 <div className="p-4 border rounded-lg bg-muted/50">
-                                  <div className="flex items-center justify-between mb-4">
+                                  <div className={`flex ${isMobile ? 'flex-col gap-4' : 'items-center justify-between'} mb-4`}>
                                     <div>
                                       <div className="text-sm font-medium">Order Total</div>
                                       <div className="text-2xl font-bold">${parseFloat(editingOrder.total.toString()).toFixed(2)}</div>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                      <PaymentButton
-                                        orderId={editingOrder.id!}
-                                        orderNumber={editingOrder.order_number}
-                                        amount={parseFloat(editingOrder.total.toString())}
-                                        clientId={editingOrder.client_id || undefined}
-                                        onPaymentSuccess={() => {
-                                          fetchOrders()
-                                          setDialogOpen(false)
-                                          setEditingOrder(null)
-                                          toast.success('Payment processed successfully')
-                                        }}
-                                      />
-                                      <SendInvoiceButton
-                                        orderId={editingOrder.id!}
-                                        orderNumber={editingOrder.order_number}
-                                        orderTotal={parseFloat(editingOrder.total.toString())}
-                                        clientEmail={editingOrder.client?.email}
-                                        onInvoiceCreated={() => {
-                                          fetchOrders()
-                                        }}
-                                      />
+                                    <div className={`flex ${isMobile ? 'flex-col gap-2 w-full' : 'items-center gap-2'}`}>
+                                      <div className={isMobile ? 'w-full [&>button]:w-full' : ''}>
+                                        <PaymentButton
+                                          orderId={editingOrder.id!}
+                                          orderNumber={editingOrder.order_number}
+                                          amount={parseFloat(editingOrder.total.toString())}
+                                          clientId={editingOrder.client_id || undefined}
+                                          onPaymentSuccess={() => {
+                                            fetchOrders()
+                                            setDialogOpen(false)
+                                            setEditingOrder(null)
+                                            toast.success('Payment processed successfully')
+                                          }}
+                                        />
+                                      </div>
+                                      <div className={isMobile ? 'w-full [&>button]:w-full' : ''}>
+                                        <SendInvoiceButton
+                                          orderId={editingOrder.id!}
+                                          orderNumber={editingOrder.order_number}
+                                          orderTotal={parseFloat(editingOrder.total.toString())}
+                                          clientEmail={editingOrder.client?.email}
+                                          onInvoiceCreated={() => {
+                                            fetchOrders()
+                                          }}
+                                        />
+                                      </div>
                                     </div>
                                   </div>
                                   {editingOrder.id && (

@@ -3096,7 +3096,7 @@ function POSContent() {
                         </Button>
                       </DrawerTrigger>
                       <DrawerContent side={isMobileDevice ? "bottom" : "right"} resizable={!isMobileDevice}>
-                        <div className="flex flex-col h-full">
+                        <div className={`flex flex-col ${isMobileDevice ? 'h-[92vh]' : 'h-full'}`}>
                           <DrawerHeader className="flex-shrink-0">
                             <div className="flex items-center gap-4">
                               <div className="relative">
@@ -3113,7 +3113,7 @@ function POSContent() {
                               </div>
                             </div>
                           </DrawerHeader>
-                          <div className={`flex-1 overflow-y-auto scrollbar-hide px-4 sm:px-6 py-4 ${isMobileDevice ? 'pb-24' : ''}`}>
+                          <div className={`flex-1 overflow-y-auto overscroll-contain scrollbar-hide px-4 sm:px-6 py-4 ${isMobileDevice ? 'pb-24' : ''}`} style={{ WebkitOverflowScrolling: 'touch' }}>
                             {previewHtml ? (
                               <div 
                                 className="prose prose-invert max-w-none"
