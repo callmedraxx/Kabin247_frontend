@@ -715,6 +715,18 @@ function OrdersContent() {
     name: "items",
   })
 
+  // Watch status to disable urgent priority for paid/delivered orders
+  const watchedStatus = form.watch("status")
+  const isPaidOrDelivered = watchedStatus === "paid" || watchedStatus === "delivered"
+  const watchedPriority = form.watch("orderPriority")
+
+  // Automatically change priority from urgent to normal if status becomes paid/delivered
+  React.useEffect(() => {
+    if (isPaidOrDelivered && watchedPriority === "urgent") {
+      form.setValue("orderPriority", "normal", { shouldValidate: false })
+    }
+  }, [isPaidOrDelivered, watchedPriority, form])
+
   // Detect if user is on Mac for keyboard shortcut display
   const [isMac, setIsMac] = React.useState(false)
   React.useEffect(() => {
@@ -3094,10 +3106,19 @@ function OrdersContent() {
                                         High
                                       </span>
                                     </SelectItem>
-                                    <SelectItem value="urgent">
+                                    <SelectItem 
+                                      value="urgent"
+                                      disabled={isPaidOrDelivered}
+                                      className={isPaidOrDelivered ? "opacity-50 cursor-not-allowed" : ""}
+                                    >
                                       <span className="flex items-center gap-2">
                                         <span className="h-2 w-2 rounded-full bg-red-500" />
                                         Urgent
+                                        {isPaidOrDelivered && (
+                                          <span className="text-xs text-muted-foreground ml-2">
+                                            (Not available for paid/delivered orders)
+                                          </span>
+                                        )}
                                       </span>
                                     </SelectItem>
                                   </SelectContent>
