@@ -2389,7 +2389,7 @@ function OrdersContent() {
                                     Update Status
                                   </DropdownMenuItem>
                                   {/* Payment processing - Admin only, show for non-paid orders */}
-                                  {isAuthenticated && order.status !== 'paid' && (
+                                  {isAuthenticated && !order.is_paid && (
                                     <>
                                       <DropdownMenuItem
                                         onClick={async (e) => {
@@ -3936,7 +3936,7 @@ function OrdersContent() {
                             </section>
 
                             {/* Payment Section - Admin only */}
-                            {isAuthenticated && editingOrder && editingOrder.status !== 'paid' && (
+                            {isAuthenticated && editingOrder && !editingOrder.is_paid && (
                               <section className="space-y-5">
                                 <div className="flex items-center gap-3 pb-3">
                                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-green-500/20 to-green-600/10 ring-1 ring-green-500/20">

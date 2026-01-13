@@ -152,12 +152,6 @@ const statusConfig: Record<OrderStatus, { label: string; color: string; bgColor:
     bgColor: "bg-emerald-500/10 border-emerald-500/20",
     icon: <CheckCircle2 className="h-4 w-4" />
   },
-  paid: { 
-    label: "Paid", 
-    color: "text-green-600", 
-    bgColor: "bg-green-500/10 border-green-500/20",
-    icon: <CheckCircle2 className="h-4 w-4" />
-  },
   cancelled: { 
     label: "Cancelled", 
     color: "text-red-600", 
@@ -289,7 +283,6 @@ function DashboardContent() {
       in_preparation: 0,
       ready_for_delivery: 0,
       delivered: 0,
-      paid: 0,
       cancelled: 0,
       order_changed: 0,
     } as Record<OrderStatus, number>
