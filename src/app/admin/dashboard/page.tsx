@@ -268,13 +268,12 @@ function DashboardContent() {
       // Compare date components directly (no timezone conversion)
       const isToday = orderYear === todayYear && orderMonth === todayMonth && orderDay === todayDay
       
-      return isToday && o.status !== "delivered" && o.status !== "paid" && o.status !== "cancelled"
+      return isToday && o.status !== "delivered" && o.status !== "cancelled"
     })
 
     const urgentOrders = orders.filter(o => 
       (o.order_priority === "urgent" || o.order_priority === "high") && 
       o.status !== "delivered" && 
-      o.status !== "paid" &&
       o.status !== "cancelled"
     )
 

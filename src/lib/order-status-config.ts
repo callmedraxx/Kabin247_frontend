@@ -7,7 +7,6 @@ export type OrderStatus =
   | "in_preparation"
   | "ready_for_delivery"
   | "delivered"
-  | "paid"
   | "cancelled"
   | "order_changed"
 
@@ -99,16 +98,6 @@ export const orderStatusConfig: OrderStatusConfig[] = [
     details: "Manually set by Customer Service Representative when delivery is confirmed. Email notification sent to client.",
   },
   {
-    value: "paid",
-    label: "Paid",
-    color: "bg-green-500/10 text-green-600 border-green-500/20",
-    purpose: "Mark orders as paid and send Final Invoices after delivery is completed and pricing is updated",
-    pdfType: "PDF A (with pricing)",
-    emailRecipient: "Client",
-    emailSubject: "Kabin247 Ord#???? Final Invoice",
-    details: "Order has been paid. Final invoice with pricing is sent to client. PDF includes a PAID stamp/watermark.",
-  },
-  {
     value: "cancelled",
     label: "Cancelled",
     color: "bg-red-500/10 text-red-600 border-red-500/20",
@@ -134,15 +123,12 @@ export function getOrderStatusConfig(status: OrderStatus): OrderStatusConfig | u
 }
 
 // Helper function to get status options for dropdowns/selects
-// Note: "paid" status is excluded from dropdown options as it can only be set automatically via payment processing
 export function getStatusOptions(): Array<{ value: OrderStatus; label: string; color: string }> {
-  return orderStatusConfig
-    .filter((config) => config.value !== 'paid') // Remove "paid" from dropdown options
-    .map((config) => ({
-      value: config.value,
-      label: config.label,
-      color: config.color,
-    }))
+  return orderStatusConfig.map((config) => ({
+    value: config.value,
+    label: config.label,
+    color: config.color,
+  }))
 }
 
 // Helper function to get tooltip content for a status

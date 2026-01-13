@@ -2602,8 +2602,17 @@ function POSContent() {
                                         </span>
                                       </div>
                                       {isCollapsed ? (
-                                        <div className="flex-1 min-w-0">
+                                        <div className="flex-1 min-w-0 flex items-center gap-3 flex-wrap">
                                           <span className="text-sm font-semibold text-foreground">{displayName}</span>
+                                          {form.watch(`items.${index}.price`) && (
+                                            <span className="text-xs text-muted-foreground">${parseFloat(form.watch(`items.${index}.price`) || '0').toFixed(2)}</span>
+                                          )}
+                                          {form.watch(`items.${index}.portionSize`) && (
+                                            <span className="text-xs text-muted-foreground">Qty: {form.watch(`items.${index}.portionSize`)}</span>
+                                          )}
+                                          {form.watch(`items.${index}.portionServing`) && (
+                                            <span className="text-xs text-muted-foreground">{form.watch(`items.${index}.portionServing`)}</span>
+                                          )}
                                         </div>
                                       ) : (
                                       <div>

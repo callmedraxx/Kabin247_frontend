@@ -89,6 +89,8 @@ import {
   MessageSquare,
   AtSign,
   Info,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -289,6 +291,7 @@ interface Order {
   delivery_date: string
   delivery_time: string
   status: OrderStatus
+  is_paid?: boolean
   order_priority: string
   order_type: string | null
   payment_method: string
@@ -518,6 +521,7 @@ function OrdersContent() {
   const [isLoading, setIsLoading] = React.useState(true)
   const [isDeleting, setIsDeleting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const [updatingPaymentStatus, setUpdatingPaymentStatus] = React.useState<number | null>(null)
 
   // Pagination state
   const [page, setPage] = React.useState(1)
@@ -715,17 +719,48 @@ function OrdersContent() {
     name: "items",
   })
 
-  // Watch status to disable urgent priority for paid/delivered orders
+  // Collapse state for items
+  const [collapsedItems, setCollapsedItems] = React.useState<Set<number>>(new Set())
+  
+  // Helper function to get item display name
+  const getItemDisplayName = React.useCallback((itemName: string | undefined): string => {
+    if (!itemName) return "No item selected"
+    const itemId = parseInt(itemName)
+    if (!isNaN(itemId)) {
+      const menuItem = getMenuItemById(itemId)
+      if (menuItem) {
+        return menuItem.item_name
+      }
+    }
+    // Fallback to menuItemOptions
+    const option = menuItemOptions.find(opt => opt.value === itemName)
+    return option?.label || "No item selected"
+  }, [getMenuItemById, menuItemOptions])
+  
+  // Toggle collapse state for an item
+  const toggleItemCollapse = React.useCallback((index: number) => {
+    setCollapsedItems(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(index)) {
+        newSet.delete(index)
+      } else {
+        newSet.add(index)
+      }
+      return newSet
+    })
+  }, [])
+
+  // Watch status to disable urgent priority for delivered orders
   const watchedStatus = form.watch("status")
-  const isPaidOrDelivered = watchedStatus === "paid" || watchedStatus === "delivered"
+  const isDelivered = watchedStatus === "delivered"
   const watchedPriority = form.watch("orderPriority")
 
-  // Automatically change priority from urgent to normal if status becomes paid/delivered
+  // Automatically change priority from urgent to normal if status becomes delivered
   React.useEffect(() => {
-    if (isPaidOrDelivered && watchedPriority === "urgent") {
+    if (isDelivered && watchedPriority === "urgent") {
       form.setValue("orderPriority", "normal", { shouldValidate: false })
     }
-  }, [isPaidOrDelivered, watchedPriority, form])
+  }, [isDelivered, watchedPriority, form])
 
   // Detect if user is on Mac for keyboard shortcut display
   const [isMac, setIsMac] = React.useState(false)
@@ -813,7 +848,8 @@ function OrdersContent() {
     }
   }, [searchQuery, statusFilter, sortBy, sortOrder, page, limit])
 
-  const { isAuthenticated, isLoading: authLoading } = useAuth()
+  const { isAuthenticated, isLoading: authLoading, user } = useAuth()
+  const isAdmin = user?.role === 'ADMIN'
 
   // Fetch orders on mount and when dependencies change
   // Wait for auth to initialize before making API calls
@@ -2068,6 +2104,11 @@ function OrdersContent() {
                         </TableHead>
                         <TableHead className="font-semibold">
                           <div className="flex items-center gap-2">
+                            Payment
+                          </div>
+                        </TableHead>
+                        <TableHead className="font-semibold">
+                          <div className="flex items-center gap-2">
                             Type
                           </div>
                         </TableHead>
@@ -2110,7 +2151,7 @@ function OrdersContent() {
                         ))
                       ) : orders.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={9} className="h-24 text-center">
+                          <TableCell colSpan={10} className="h-24 text-center">
                             <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
                               <ShoppingCart className="h-8 w-8 opacity-50" />
                               <p className="text-sm font-medium">No orders found</p>
@@ -2183,6 +2224,81 @@ function OrdersContent() {
                             </TableCell>
                             <TableCell>
                               {getStatusBadge(order.status)}
+                            </TableCell>
+                            <TableCell>
+                              {isAdmin ? (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Badge
+                                      className={order.is_paid ? "bg-green-500/10 text-green-600 border-green-500/20" : "bg-gray-500/10 text-gray-600 border-gray-500/20"}
+                                      variant="outline"
+                                      style={{ cursor: 'pointer' }}
+                                    >
+                                      {updatingPaymentStatus === order.id ? (
+                                        <span className="flex items-center gap-2">
+                                          <Loader2 className="h-3 w-3 animate-spin" />
+                                          Updating...
+                                        </span>
+                                      ) : (
+                                        order.is_paid ? 'Paid' : 'Unpaid'
+                                      )}
+                                    </Badge>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem
+                                      disabled={updatingPaymentStatus === order.id || order.is_paid === true}
+                                      onClick={async () => {
+                                        if (order.is_paid === true) return
+                                        setUpdatingPaymentStatus(order.id)
+                                        try {
+                                          await apiCallJson(`/orders/${order.id}/payment-status`, {
+                                            method: 'PATCH',
+                                            body: JSON.stringify({ is_paid: true }),
+                                          })
+                                          toast.success('Order marked as paid')
+                                          fetchOrders()
+                                        } catch (error: any) {
+                                          toast.error(error.message || 'Failed to update payment status')
+                                        } finally {
+                                          setUpdatingPaymentStatus(null)
+                                        }
+                                      }}
+                                    >
+                                      <CheckCircle2 className="h-4 w-4 mr-2 text-green-600" />
+                                      Mark as Paid
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      disabled={updatingPaymentStatus === order.id || order.is_paid === false}
+                                      onClick={async () => {
+                                        if (order.is_paid === false) return
+                                        setUpdatingPaymentStatus(order.id)
+                                        try {
+                                          await apiCallJson(`/orders/${order.id}/payment-status`, {
+                                            method: 'PATCH',
+                                            body: JSON.stringify({ is_paid: false }),
+                                          })
+                                          toast.success('Order marked as unpaid')
+                                          fetchOrders()
+                                        } catch (error: any) {
+                                          toast.error(error.message || 'Failed to update payment status')
+                                        } finally {
+                                          setUpdatingPaymentStatus(null)
+                                        }
+                                      }}
+                                    >
+                                      <X className="h-4 w-4 mr-2 text-gray-600" />
+                                      Mark as Unpaid
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              ) : (
+                                <Badge
+                                  className={order.is_paid ? "bg-green-500/10 text-green-600 border-green-500/20" : "bg-gray-500/10 text-gray-600 border-gray-500/20"}
+                                  variant="outline"
+                                >
+                                  {order.is_paid ? 'Paid' : 'Unpaid'}
+                                </Badge>
+                              )}
                             </TableCell>
                             <TableCell>
                               {order.order_type ? (
@@ -3108,13 +3224,13 @@ function OrdersContent() {
                                     </SelectItem>
                                     <SelectItem 
                                       value="urgent"
-                                      disabled={isPaidOrDelivered}
-                                      className={isPaidOrDelivered ? "opacity-50 cursor-not-allowed" : ""}
+                                      disabled={isDelivered}
+                                      className={isDelivered ? "opacity-50 cursor-not-allowed" : ""}
                                     >
                                       <span className="flex items-center gap-2">
                                         <span className="h-2 w-2 rounded-full bg-red-500" />
                                         Urgent
-                                        {isPaidOrDelivered && (
+                                        {isDelivered && (
                                           <span className="text-xs text-muted-foreground ml-2">
                                             (Not available for paid/delivered orders)
                                           </span>
@@ -3333,6 +3449,81 @@ function OrdersContent() {
                               </FormItem>
                             )}
                           />
+                          {isAdmin && editingOrder && (
+                            <FormItem>
+                              <FormLabel className="text-xs font-medium text-muted-foreground">Payment Status</FormLabel>
+                              <div className="flex items-center gap-3">
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Badge
+                                      className={editingOrder.is_paid ? "bg-green-500/10 text-green-600 border-green-500/20" : "bg-gray-500/10 text-gray-600 border-gray-500/20"}
+                                      variant="outline"
+                                      style={{ cursor: 'pointer' }}
+                                    >
+                                      {updatingPaymentStatus === editingOrder.id ? (
+                                        <span className="flex items-center gap-2">
+                                          <Loader2 className="h-3 w-3 animate-spin" />
+                                          Updating...
+                                        </span>
+                                      ) : (
+                                        editingOrder.is_paid ? 'Paid' : 'Unpaid'
+                                      )}
+                                    </Badge>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem
+                                      disabled={updatingPaymentStatus === editingOrder.id || editingOrder.is_paid === true}
+                                      onClick={async () => {
+                                        if (editingOrder.is_paid === true) return
+                                        setUpdatingPaymentStatus(editingOrder.id)
+                                        try {
+                                          await apiCallJson(`/orders/${editingOrder.id}/payment-status`, {
+                                            method: 'PATCH',
+                                            body: JSON.stringify({ is_paid: true }),
+                                          })
+                                          toast.success('Order marked as paid')
+                                          // Refresh the order data
+                                          const updatedOrder = await apiCallJson(`/orders/${editingOrder.id}`)
+                                          setEditingOrder(updatedOrder)
+                                        } catch (error: any) {
+                                          toast.error(error.message || 'Failed to update payment status')
+                                        } finally {
+                                          setUpdatingPaymentStatus(null)
+                                        }
+                                      }}
+                                    >
+                                      <CheckCircle2 className="h-4 w-4 mr-2 text-green-600" />
+                                      Mark as Paid
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      disabled={updatingPaymentStatus === editingOrder.id || editingOrder.is_paid === false}
+                                      onClick={async () => {
+                                        if (editingOrder.is_paid === false) return
+                                        setUpdatingPaymentStatus(editingOrder.id)
+                                        try {
+                                          await apiCallJson(`/orders/${editingOrder.id}/payment-status`, {
+                                            method: 'PATCH',
+                                            body: JSON.stringify({ is_paid: false }),
+                                          })
+                                          toast.success('Order marked as unpaid')
+                                          // Refresh the order data
+                                          const updatedOrder = await apiCallJson(`/orders/${editingOrder.id}`)
+                                          setEditingOrder(updatedOrder)
+                                        } catch (error: any) {
+                                          toast.error(error.message || 'Failed to update payment status')
+                                        } finally {
+                                          setUpdatingPaymentStatus(null)
+                                        }
+                                      }}
+                                    >
+                                      <X className="h-4 w-4 mr-2 text-gray-600" />
+                                      Mark as Unpaid
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </FormItem>
+                          )}
                         </div>
                       </section>
 
@@ -3485,7 +3676,15 @@ function OrdersContent() {
                                 </Button>
                               </div>
 
-                              {fields.map((field, index) => (
+                              {fields.map((field, index) => {
+                                const isCollapsed = collapsedItems.has(index)
+                                const itemName = form.watch(`items.${index}.itemName`)
+                                const displayName = getItemDisplayName(itemName)
+                                const portionSize = form.watch(`items.${index}.portionSize`)
+                                const portionServing = form.watch(`items.${index}.portionServing`)
+                                const price = form.watch(`items.${index}.price`)
+                                
+                                return (
                                 <div 
                                   key={field.id} 
                                   className="group relative p-4 sm:p-5 rounded-xl border border-border/30 bg-gradient-to-b from-muted/30 to-muted/10 space-y-4 hover:border-primary/20 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300"
@@ -3493,18 +3692,48 @@ function OrdersContent() {
                                   <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-border/50 to-transparent" />
                                   {/* Item Header */}
                                   <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-3 flex-1 min-w-0">
                                       <div className="relative">
                                         <div className="absolute inset-0 bg-emerald-500/20 rounded-lg blur-sm group-hover:blur-md transition-all" />
                                         <span className="relative flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 text-xs font-bold text-white shadow-md">
                                           {index + 1}
                                         </span>
                                       </div>
+                                      {isCollapsed ? (
+                                        <div className="flex-1 min-w-0 flex items-center gap-3 flex-wrap">
+                                          <span className="text-sm font-semibold text-foreground">{displayName}</span>
+                                          {price && (
+                                            <span className="text-xs text-muted-foreground">${parseFloat(price.toString()).toFixed(2)}</span>
+                                          )}
+                                          {portionSize && (
+                                            <span className="text-xs text-muted-foreground">Qty: {portionSize}</span>
+                                          )}
+                                          {portionServing && (
+                                            <span className="text-xs text-muted-foreground">{portionServing}</span>
+                                          )}
+                                        </div>
+                                      ) : (
                                       <div>
                                         <span className="text-sm font-semibold">Item {index + 1}</span>
                                         <p className="text-[11px] text-muted-foreground">Add menu item details</p>
                                       </div>
+                                      )}
                                     </div>
+                                    <div className="flex items-center gap-2">
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => toggleItemCollapse(index)}
+                                        className="h-8 w-8 p-0 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                                        title={isCollapsed ? "Expand item" : "Collapse item"}
+                                      >
+                                        {isCollapsed ? (
+                                          <ChevronDown className="h-4 w-4" />
+                                        ) : (
+                                          <ChevronUp className="h-4 w-4" />
+                                        )}
+                                      </Button>
                                     {fields.length > 1 && (
                                       <Button
                                         type="button"
@@ -3516,8 +3745,12 @@ function OrdersContent() {
                                         <X className="h-4 w-4" />
                                       </Button>
                                     )}
+                                    </div>
                                   </div>
 
+                                  {/* Item Fields */}
+                                  {!isCollapsed && (
+                                    <>
                                   {/* Item Fields - Row 1: Menu Item, Qty, Serving Size, Price, Category */}
                                   <div className={`grid gap-4 ${isMobile ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-5'}`}>
                                     <FormField
@@ -3690,8 +3923,11 @@ function OrdersContent() {
                                       )}
                                     />
                                   </div>
+                                    </>
+                                  )}
                                 </div>
-                              ))}
+                                )
+                              })}
                               {form.formState.errors.items && (
                                 <p className="text-sm text-destructive">
                                   {form.formState.errors.items.message}
