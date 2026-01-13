@@ -3972,6 +3972,7 @@ function OrdersContent() {
                                           orderNumber={editingOrder.order_number}
                                           orderTotal={parseFloat(editingOrder.total.toString())}
                                           clientEmail={editingOrder.client?.email}
+                                          clientAdditionalEmails={editingOrder.client?.additional_emails}
                                           onInvoiceCreated={() => {
                                             fetchOrders()
                                           }}
@@ -4795,6 +4796,7 @@ function OrdersContent() {
               orderNumber={invoiceOrder.order_number}
               orderTotal={parseFloat(invoiceOrder.total.toString())}
               clientEmail={invoiceOrder.client?.email}
+              clientAdditionalEmails={invoiceOrder.client?.additional_emails}
               open={invoiceModalOpen}
               onOpenChange={(open) => {
                 setInvoiceModalOpen(open)

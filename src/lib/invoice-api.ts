@@ -21,6 +21,7 @@ export interface Invoice {
 export interface CreateInvoiceRequest {
   delivery_method: 'EMAIL' | 'SHARE_MANUALLY'
   recipient_email?: string
+  additional_emails?: string[]
 }
 
 export interface CreateInvoiceResponse {
@@ -29,6 +30,8 @@ export interface CreateInvoiceResponse {
   public_url?: string
   message?: string
   error?: string
+  additional_emails_sent?: string[]
+  additional_emails_failed?: Array<{ email: string; error: string }>
 }
 
 export interface SendInvoiceEmailRequest {
