@@ -722,6 +722,33 @@ function OrdersContent() {
   // Collapse state for items
   const [collapsedItems, setCollapsedItems] = React.useState<Set<number>>(new Set())
   
+  // Track items with manually edited prices (by index)
+  const [manuallyEditedPrices, setManuallyEditedPrices] = React.useState<Set<number>>(new Set())
+  
+  // Helper function to resolve menu item price based on caterer and portion size
+  const resolveMenuItemPrice = React.useCallback((
+    menuItem: { variants?: Array<{ portion_size: string; price: number; caterer_prices?: Array<{ caterer_id: number; price: number }> }> },
+    portionSize: string | undefined,
+    catererId: number | undefined
+  ): number | undefined => {
+    if (!menuItem || !portionSize) return undefined
+    
+    // Find the variant matching the portion size
+    const variant = menuItem.variants?.find(v => v.portion_size === portionSize)
+    if (!variant) return undefined
+    
+    // If caterer_id is provided and variant has caterer_prices, try to find caterer-specific price
+    if (catererId && variant.caterer_prices && variant.caterer_prices.length > 0) {
+      const catererPrice = variant.caterer_prices.find(cp => cp.caterer_id === catererId)
+      if (catererPrice) {
+        return catererPrice.price
+      }
+    }
+    
+    // Fallback to base price
+    return variant.price
+  }, [])
+  
   // Helper function to get item display name
   const getItemDisplayName = React.useCallback((itemName: string | undefined): string => {
     if (!itemName) return "No item selected"
@@ -754,6 +781,31 @@ function OrdersContent() {
   const watchedStatus = form.watch("status")
   const isDelivered = watchedStatus === "delivered"
   const watchedPriority = form.watch("orderPriority")
+  const selectedCaterer = form.watch("caterer_id")
+
+  // Recalculate prices when caterer changes (skip manually edited prices)
+  React.useEffect(() => {
+    if (!selectedCaterer) return
+    
+    const currentItems = form.getValues("items")
+    currentItems.forEach((item, index) => {
+      // Skip items with manually edited prices
+      if (manuallyEditedPrices.has(index)) return
+      
+      if (item.itemName) {
+        const itemId = parseInt(item.itemName)
+        if (!isNaN(itemId)) {
+          const menuItem = getMenuItemById(itemId)
+          if (menuItem && item.portionSize) {
+            const resolvedPrice = resolveMenuItemPrice(menuItem, item.portionSize, selectedCaterer)
+            if (resolvedPrice !== undefined) {
+              form.setValue(`items.${index}.price`, resolvedPrice.toString(), { shouldValidate: false })
+            }
+          }
+        }
+      }
+    })
+  }, [selectedCaterer, getMenuItemById, form, manuallyEditedPrices, resolveMenuItemPrice])
 
   // Automatically change priority from urgent to normal if status becomes delivered
   React.useEffect(() => {
@@ -3739,7 +3791,25 @@ function OrdersContent() {
                                         type="button"
                                         variant="ghost"
                                         size="sm"
-                                        onClick={() => remove(index)}
+                                        onClick={() => {
+                                          // Clean up manuallyEditedPrices when item is removed
+                                          setManuallyEditedPrices(prev => {
+                                            const next = new Set<number>()
+                                            // Remove the deleted index and shift remaining indices down by 1
+                                            prev.forEach(idx => {
+                                              if (idx < index) {
+                                                // Keep indices before the removed one as-is
+                                                next.add(idx)
+                                              } else if (idx > index) {
+                                                // Shift indices after the removed one down by 1
+                                                next.add(idx - 1)
+                                              }
+                                              // Skip the removed index itself
+                                            })
+                                            return next
+                                          })
+                                          remove(index)
+                                        }}
                                         className="h-8 w-8 p-0 text-muted-foreground hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
                                       >
                                         <X className="h-4 w-4" />
@@ -3766,15 +3836,49 @@ function OrdersContent() {
                                                 value={field.value}
                                                 onValueChange={(value) => {
                                                   field.onChange(value)
+                                                  // Reset manual override flag when item changes
+                                                  setManuallyEditedPrices(prev => {
+                                                    const next = new Set(prev)
+                                                    next.delete(index)
+                                                    return next
+                                                  })
+                                                  
                                                   if (value) {
-                                                    const selectedItem = menuItemsData.find((item) => item.id.toString() === value)
+                                                    const itemId = parseInt(value)
+                                                    const selectedItem = !isNaN(itemId) ? getMenuItemById(itemId) : undefined
                                                     if (selectedItem) {
-                                                      const price = (selectedItem.variants && selectedItem.variants.length > 0)
-                                                        ? selectedItem.variants[0].price
-                                                        : (selectedItem as any).price
-                                                      if (price !== undefined && price !== null) {
-                                                        form.setValue(`items.${index}.price`, price.toString())
+                                                      // Get current portion size and caterer_id from form
+                                                      const currentPortionSize = form.getValues(`items.${index}.portionSize`)
+                                                      const catererId = form.getValues("caterer_id")
+                                                      
+                                                      // Resolve price based on caterer_id and portion size
+                                                      let resolvedPrice = resolveMenuItemPrice(selectedItem, currentPortionSize || undefined, catererId)
+                                                      
+                                                      // If no price resolved, try first variant with caterer-specific price or base price
+                                                      if (resolvedPrice === undefined && selectedItem.variants && selectedItem.variants.length > 0) {
+                                                        const firstVariant = selectedItem.variants[0]
+                                                        // Check for caterer-specific price in first variant
+                                                        if (catererId && firstVariant.caterer_prices && firstVariant.caterer_prices.length > 0) {
+                                                          const catererPrice = firstVariant.caterer_prices.find(cp => cp.caterer_id === catererId)
+                                                          if (catererPrice) {
+                                                            resolvedPrice = catererPrice.price
+                                                          }
+                                                        }
+                                                        // Fallback to first variant's base price
+                                                        if (resolvedPrice === undefined) {
+                                                          resolvedPrice = firstVariant.price
+                                                        }
                                                       }
+                                                      
+                                                      // Ultimate fallback: check for price directly on menu item (legacy support)
+                                                      if (resolvedPrice === undefined && (selectedItem as any).price !== undefined) {
+                                                        resolvedPrice = (selectedItem as any).price
+                                                      }
+                                                      
+                                                      if (resolvedPrice !== undefined && resolvedPrice !== null) {
+                                                        form.setValue(`items.${index}.price`, resolvedPrice.toString())
+                                                      }
+                                                      
                                                       if (selectedItem.item_description) {
                                                         form.setValue(`items.${index}.itemDescription`, selectedItem.item_description)
                                                       }
@@ -3822,7 +3926,35 @@ function OrdersContent() {
                                         <FormItem>
                                           <FormLabel className="text-xs font-medium text-muted-foreground">Qty *</FormLabel>
                                           <FormControl>
-                                            <Input placeholder="1" {...field} />
+                                            <Input 
+                                              placeholder="1" 
+                                              {...field}
+                                              onChange={(e) => {
+                                                field.onChange(e)
+                                                // Reset manual override flag when portion size changes
+                                                setManuallyEditedPrices(prev => {
+                                                  const next = new Set(prev)
+                                                  next.delete(index)
+                                                  return next
+                                                })
+                                                
+                                                // Recalculate price when portion size changes
+                                                const itemName = form.getValues(`items.${index}.itemName`)
+                                                const newPortionSize = e.target.value
+                                                const catererId = form.getValues("caterer_id")
+                                                
+                                                if (itemName && newPortionSize) {
+                                                  const itemId = parseInt(itemName)
+                                                  const menuItem = !isNaN(itemId) ? getMenuItemById(itemId) : undefined
+                                                  if (menuItem) {
+                                                    const resolvedPrice = resolveMenuItemPrice(menuItem, newPortionSize, catererId)
+                                                    if (resolvedPrice !== undefined) {
+                                                      form.setValue(`items.${index}.price`, resolvedPrice.toString(), { shouldValidate: false })
+                                                    }
+                                                  }
+                                                }
+                                              }}
+                                            />
                                           </FormControl>
                                           <FormMessage />
                                         </FormItem>
@@ -3852,7 +3984,18 @@ function OrdersContent() {
                                           <FormControl>
                                             <div className="relative">
                                               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
-                                              <Input type="number" step="0.01" placeholder="0.00" className="pl-7" {...field} />
+                                              <Input 
+                                                type="number" 
+                                                step="0.01" 
+                                                placeholder="0.00" 
+                                                className="pl-7" 
+                                                {...field}
+                                                onChange={(e) => {
+                                                  field.onChange(e)
+                                                  // Mark this item as manually edited when user types in price
+                                                  setManuallyEditedPrices(prev => new Set(prev).add(index))
+                                                }}
+                                              />
                                             </div>
                                           </FormControl>
                                           <FormMessage />

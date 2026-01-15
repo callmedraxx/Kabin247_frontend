@@ -832,12 +832,18 @@ function POSContent() {
   const selectedAirport = form.watch("airport_id")
   const selectedFBO = form.watch("fbo_id")
 
-  // Recalculate prices when caterer changes
+  // Track items with manually edited prices (by index)
+  const [manuallyEditedPrices, setManuallyEditedPrices] = React.useState<Set<number>>(new Set())
+
+  // Recalculate prices when caterer changes (skip manually edited prices)
   React.useEffect(() => {
     if (!selectedCaterer) return
     
     const currentItems = form.getValues("items")
     currentItems.forEach((item, index) => {
+      // Skip items with manually edited prices
+      if (manuallyEditedPrices.has(index)) return
+      
       if (item.itemName) {
         const menuItemId = parseInt(item.itemName)
         if (!isNaN(menuItemId)) {
@@ -851,7 +857,7 @@ function POSContent() {
         }
       }
     })
-  }, [selectedCaterer, getMenuItemById, form])
+  }, [selectedCaterer, getMenuItemById, form, manuallyEditedPrices])
 
   const priorityBadgeClass = React.useMemo(() => {
     switch (watchedPriority) {
@@ -2641,7 +2647,25 @@ function POSContent() {
                                         type="button"
                                         variant="ghost"
                                         size="sm"
-                                        onClick={() => remove(index)}
+                                        onClick={() => {
+                                          // Clean up manuallyEditedPrices when item is removed
+                                          setManuallyEditedPrices(prev => {
+                                            const next = new Set<number>()
+                                            // Remove the deleted index and shift remaining indices down by 1
+                                            prev.forEach(idx => {
+                                              if (idx < index) {
+                                                // Keep indices before the removed one as-is
+                                                next.add(idx)
+                                              } else if (idx > index) {
+                                                // Shift indices after the removed one down by 1
+                                                next.add(idx - 1)
+                                              }
+                                              // Skip the removed index itself
+                                            })
+                                            return next
+                                          })
+                                          remove(index)
+                                        }}
                                         className="h-8 w-8 p-0 text-muted-foreground hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
                                       >
                                         <X className="h-4 w-4" />
@@ -2666,6 +2690,13 @@ function POSContent() {
                                               value={field.value}
                                               onValueChange={(value) => {
                                                 field.onChange(value)
+                                                // Reset manual override flag when item changes
+                                                setManuallyEditedPrices(prev => {
+                                                  const next = new Set(prev)
+                                                  next.delete(index)
+                                                  return next
+                                                })
+                                                
                                                 if (value) {
                                                   const itemId = parseInt(value)
                                                   const selectedItem = !isNaN(itemId) ? getMenuItemById(itemId) : undefined
@@ -2743,6 +2774,13 @@ function POSContent() {
                                                 {...field}
                                                 onChange={(e) => {
                                                   field.onChange(e)
+                                                  // Reset manual override flag when portion size changes
+                                                  setManuallyEditedPrices(prev => {
+                                                    const next = new Set(prev)
+                                                    next.delete(index)
+                                                    return next
+                                                  })
+                                                  
                                                   // Recalculate price when portion size changes
                                                   const itemName = form.getValues(`items.${index}.itemName`)
                                                   const newPortionSize = e.target.value
@@ -2789,7 +2827,18 @@ function POSContent() {
                                             <FormControl>
                                               <div className="relative">
                                                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
-                                                <Input type="number" step="0.01" placeholder="0.00" className="pl-7" {...field} />
+                                                <Input 
+                                                  type="number" 
+                                                  step="0.01" 
+                                                  placeholder="0.00" 
+                                                  className="pl-7" 
+                                                  {...field}
+                                                  onChange={(e) => {
+                                                    field.onChange(e)
+                                                    // Mark this item as manually edited when user types in price
+                                                    setManuallyEditedPrices(prev => new Set(prev).add(index))
+                                                  }}
+                                                />
                                               </div>
                                             </FormControl>
                                             <FormMessage />
