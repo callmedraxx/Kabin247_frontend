@@ -18,9 +18,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 
-// Maximum items to show initially to prevent rendering lag
-const MAX_INITIAL_ITEMS = 50
-
 interface ComboboxProps {
   options: { value: string; label: string; searchText?: string }[]
   value?: string
@@ -33,6 +30,8 @@ interface ComboboxProps {
   onSearchChange?: (search: string) => void
   isLoading?: boolean
   onOpenChange?: (open: boolean) => void
+  maxInitialItems?: number
+  allowDeselect?: boolean
 }
 
 export function Combobox({
@@ -47,6 +46,8 @@ export function Combobox({
   onSearchChange,
   isLoading = false,
   onOpenChange,
+  maxInitialItems = 50,
+  allowDeselect = true,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
   const [search, setSearch] = React.useState("")
@@ -76,11 +77,11 @@ export function Combobox({
       // When searching, show all filtered results (usually much smaller)
       return filteredOptions
     }
-    // When not searching, limit to MAX_INITIAL_ITEMS
-    return filteredOptions.slice(0, MAX_INITIAL_ITEMS)
-  }, [filteredOptions, search])
+    // When not searching, limit to maxInitialItems
+    return filteredOptions.slice(0, maxInitialItems)
+  }, [filteredOptions, search, maxInitialItems])
   
-  const hasMoreItems = !search.trim() && filteredOptions.length > MAX_INITIAL_ITEMS
+  const hasMoreItems = !search.trim() && filteredOptions.length > maxInitialItems
   
   // Defer list rendering to allow popover to open immediately
   React.useEffect(() => {
@@ -257,7 +258,8 @@ export function Combobox({
                     key={option.value}
                     value={option.searchText || option.label}
                     onSelect={() => {
-                      onValueChange(option.value === value ? "" : option.value)
+                      const shouldDeselect = allowDeselect && option.value === value
+                      onValueChange(shouldDeselect ? "" : option.value)
                       setOpen(false)
                       setSearch("")
                     }}
@@ -285,7 +287,7 @@ export function Combobox({
                 ))}
                 {hasMoreItems && (
                   <div className="px-3 py-2 text-xs text-muted-foreground text-center border-t border-border/30 mt-1.5">
-                    Showing {MAX_INITIAL_ITEMS} of {filteredOptions.length} • Type to search for more
+                    Showing {maxInitialItems} of {filteredOptions.length} • Type to search for more
                   </div>
                 )}
                 {onAddNew && (

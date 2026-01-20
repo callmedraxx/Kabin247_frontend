@@ -1547,23 +1547,38 @@ function MenuItemsContent() {
                                       render={({ field }) => (
                                         <FormItem className="flex-1">
                                           <FormLabel className="text-xs">Caterer</FormLabel>
-                                          <Select
-                                            onValueChange={(value) => field.onChange(parseInt(value))}
-                                            value={field.value?.toString() || ""}
-                                          >
-                                            <FormControl>
-                                              <SelectTrigger className="h-9">
-                                                <SelectValue placeholder="Select caterer..." />
-                                              </SelectTrigger>
-                                            </FormControl>
-                                            <SelectContent>
-                                              {caterers.map((caterer) => (
-                                                <SelectItem key={caterer.id} value={caterer.id.toString()}>
-                                                  {caterer.caterer_name}
-                                                </SelectItem>
-                                              ))}
-                                            </SelectContent>
-                                          </Select>
+                                          <FormControl>
+                                            <Combobox
+                                              options={caterers.map((caterer) => {
+                                                const airportCodes = [
+                                                  caterer.airport_code_iata,
+                                                  caterer.airport_code_icao,
+                                                ].filter(Boolean).join("/")
+                                                const label = airportCodes
+                                                  ? `${airportCodes} - ${caterer.caterer_name}`
+                                                  : caterer.caterer_name
+                                                return {
+                                                  value: caterer.id.toString(),
+                                                  label,
+                                                  // Match POS behavior: searchable by name, airport codes, and caterer number
+                                                  searchText: `${caterer.caterer_name} ${airportCodes} ${caterer.caterer_number || ""}`.toLowerCase(),
+                                                }
+                                              })}
+                                              value={field.value ? field.value.toString() : ""}
+                                              onValueChange={(value) => {
+                                                // Keep schema happy: require a valid positive caterer id
+                                                if (!value) return
+                                                field.onChange(parseInt(value, 10))
+                                              }}
+                                              placeholder="Select caterer..."
+                                              searchPlaceholder="Search caterers..."
+                                              emptyMessage={isLoadingCaterers ? "Loading caterers..." : "No caterers found."}
+                                              isLoading={isLoadingCaterers}
+                                              // We fetch up to 1000 caterers; allow full scrolling without requiring search
+                                              maxInitialItems={caterers.length || 1000}
+                                              allowDeselect={false}
+                                            />
+                                          </FormControl>
                                           <FormMessage />
                                         </FormItem>
                                       )}
