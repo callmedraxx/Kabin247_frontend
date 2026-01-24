@@ -203,6 +203,11 @@ function OrderHistoryContent() {
   const [pdfPreviewOpen, setPdfPreviewOpen] = React.useState(false)
   const [orderForPdf, setOrderForPdf] = React.useState<Order | null>(null)
   const [pdfHtml, setPdfHtml] = React.useState<string>("")
+  const [costs, setCosts] = React.useState<Record<string, number>>({})
+  const [costDialogOpen, setCostDialogOpen] = React.useState(false)
+  const [orderForCost, setOrderForCost] = React.useState<Order | null>(null)
+  const [costInput, setCostInput] = React.useState("")
+  const [isSavingCost, setIsSavingCost] = React.useState(false)
 
   // Fetch orders from API
   const fetchOrders = React.useCallback(async (showRefresh = false) => {
@@ -218,6 +223,21 @@ function OrderHistoryContent() {
       )
       
       setOrders(historicalOrders)
+
+      // Fetch order costs for all historical orders
+      const orderNumbers = historicalOrders.map((o) => o.order_number).filter(Boolean)
+      if (orderNumbers.length > 0) {
+        try {
+          const costData = await apiCallJson<{ costs: Record<string, number> }>(
+            `/order-costs?order_numbers=${encodeURIComponent(orderNumbers.join(","))}`
+          )
+          setCosts(costData.costs || {})
+        } catch (e) {
+          setCosts({})
+        }
+      } else {
+        setCosts({})
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to load orders"
       
@@ -247,17 +267,18 @@ function OrderHistoryContent() {
     fetchOrders()
   }, [fetchOrders])
 
-  // Calculate statistics
+  // Calculate statistics (revenue = sum of order totals - sum of costs for delivered orders)
   const stats = React.useMemo(() => {
     const totalOrders = orders.length
     const deliveredOrders = orders.filter((o) => o.status === "delivered").length
     const cancelledOrders = orders.filter((o) => o.status === "cancelled").length
-    const totalRevenue = orders
-      .filter((o) => o.status === "delivered")
-      .reduce((sum, o) => {
-        const total = typeof o.total === "number" ? o.total : parseFloat(String(o.total) || "0")
-        return sum + total
-      }, 0)
+    const delivered = orders.filter((o) => o.status === "delivered")
+    const sumTotals = delivered.reduce((sum, o) => {
+      const total = typeof o.total === "number" ? o.total : parseFloat(String(o.total) || "0")
+      return sum + total
+    }, 0)
+    const totalCost = delivered.reduce((sum, o) => sum + (costs[o.order_number] ?? 0), 0)
+    const totalRevenue = sumTotals - totalCost
     const averageOrderValue = deliveredOrders > 0 ? totalRevenue / deliveredOrders : 0
 
     return {
@@ -265,9 +286,10 @@ function OrderHistoryContent() {
       deliveredOrders,
       cancelledOrders,
       totalRevenue,
+      totalCost,
       averageOrderValue,
     }
-  }, [orders])
+  }, [orders, costs])
 
   // Filter orders based on search query, status, and date range
   const filteredOrders = React.useMemo(() => {
@@ -358,6 +380,49 @@ function OrderHistoryContent() {
     setViewDrawerOpen(true)
   }
 
+  // Handle save cost
+  const handleSaveCost = async () => {
+    if (!orderForCost) return
+    const num = parseFloat(costInput.trim())
+    if (isNaN(num) || num < 0) {
+      toast.error("Invalid cost", { description: "Enter a non-negative number." })
+      return
+    }
+    setIsSavingCost(true)
+    try {
+      await apiCallJson(`/order-costs/${encodeURIComponent(orderForCost.order_number)}`, {
+        method: "PUT",
+        body: JSON.stringify({ cost: num }),
+      })
+      // Update local state immediately
+      setCosts((prev) => ({ ...prev, [orderForCost.order_number]: num }))
+      
+      // Refetch costs from API to ensure consistency
+      const orderNumbers = orders.map((o) => o.order_number).filter(Boolean)
+      if (orderNumbers.length > 0) {
+        try {
+          const costData = await apiCallJson<{ costs: Record<string, number> }>(
+            `/order-costs?order_numbers=${encodeURIComponent(orderNumbers.join(","))}`
+          )
+          setCosts(costData.costs || {})
+        } catch (e) {
+          // If refetch fails, keep the local update
+          console.warn("Failed to refetch costs after save:", e)
+        }
+      }
+      
+      toast.success("Cost saved", { description: `Order ${orderForCost.order_number}` })
+      setCostDialogOpen(false)
+      setOrderForCost(null)
+      setCostInput("")
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to save cost"
+      toast.error("Error saving cost", { description: msg })
+    } finally {
+      setIsSavingCost(false)
+    }
+  }
+
   // Handle export
   const handleExport = () => {
     const dataToExport = filteredOrders.map((order) => ({
@@ -371,6 +436,7 @@ function OrderHistoryContent() {
       "Status": statusOptions.find((s) => s.value === order.status)?.label || order.status,
       "Order Type": order.order_type || "—",
       "Total": typeof order.total === "number" ? order.total : parseFloat(String(order.total) || "0"),
+      "Cost": costs[order.order_number] != null ? costs[order.order_number] : "",
       "Payment Method": order.payment_method,
       "Created At": new Date(order.created_at).toLocaleString(),
       "Completed At": order.completed_at ? new Date(order.completed_at).toLocaleString() : "",
@@ -609,7 +675,7 @@ function OrderHistoryContent() {
           <HeaderNav title="Order History" />
           <div className="flex flex-1 flex-col gap-4 p-4 pt-6 md:p-6 lg:p-8">
             {/* Statistics Cards */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
               <Card className="border-border/50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Total Orders</CardTitle>
@@ -642,6 +708,18 @@ function OrderHistoryContent() {
               </Card>
               <Card className="border-border/50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Cost</CardTitle>
+                  <DollarSign className="h-4 w-4 text-amber-600" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-amber-600">
+                    ${stats.totalCost.toFixed(2)}
+                  </div>
+                  <p className="text-xs text-muted-foreground">From delivered orders</p>
+                </CardContent>
+              </Card>
+              <Card className="border-border/50">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
                   <DollarSign className="h-4 w-4 text-green-600" />
                 </CardHeader>
@@ -649,7 +727,7 @@ function OrderHistoryContent() {
                   <div className="text-2xl font-bold text-green-600">
                     ${stats.totalRevenue.toFixed(2)}
                   </div>
-                  <p className="text-xs text-muted-foreground">From delivered orders</p>
+                  <p className="text-xs text-muted-foreground">Delivered total minus cost</p>
                 </CardContent>
               </Card>
               <Card className="border-border/50">
@@ -788,8 +866,8 @@ function OrderHistoryContent() {
                         <TableHead className="font-semibold">Airport</TableHead>
                         <TableHead className="font-semibold">Delivery</TableHead>
                         <TableHead className="font-semibold">Status</TableHead>
-                        <TableHead className="font-semibold">Type</TableHead>
                         <TableHead className="text-right font-semibold">Total</TableHead>
+                        <TableHead className="text-right font-semibold">Cost</TableHead>
                         <TableHead className="w-12 text-right font-semibold">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -864,26 +942,13 @@ function OrderHistoryContent() {
                               </div>
                             </TableCell>
                             <TableCell>{getStatusBadge(order.status)}</TableCell>
-                            <TableCell>
-                              {order.order_type ? (
-                                <Badge 
-                                  variant="outline" 
-                                  className={`text-xs font-mono ${
-                                    order.order_type === "QE" 
-                                      ? "bg-blue-500/10 text-blue-600 border-blue-500/20" 
-                                      : order.order_type === "Serv"
-                                      ? "bg-purple-500/10 text-purple-600 border-purple-500/20"
-                                      : "bg-amber-500/10 text-amber-600 border-amber-500/20"
-                                  }`}
-                                >
-                                  {order.order_type}
-                                </Badge>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">—</span>
-                              )}
-                            </TableCell>
                             <TableCell className="text-right font-medium">
                               ${formatPrice(order.total)}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {costs[order.order_number] != null && costs[order.order_number] > 0
+                                ? `$${formatPrice(costs[order.order_number])}`
+                                : "—"}
                             </TableCell>
                             <TableCell>
                               <DropdownMenu>
@@ -909,6 +974,17 @@ function OrderHistoryContent() {
                                     Download PDF
                                   </DropdownMenuItem>
                                   <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setOrderForCost(order)
+                                      setCostInput(costs[order.order_number] != null ? String(costs[order.order_number]) : "")
+                                      setCostDialogOpen(true)
+                                    }}
+                                    className="cursor-pointer"
+                                  >
+                                    <DollarSign className="mr-2 h-4 w-4" />
+                                    Edit Cost
+                                  </DropdownMenuItem>
                                   <DropdownMenuItem onClick={() => handleSendEmail(order)} className="cursor-pointer">
                                     <Mail className="mr-2 h-4 w-4" />
                                     Send Email
@@ -1442,6 +1518,56 @@ function OrderHistoryContent() {
                         <Send className="h-4 w-4" />
                         Send Email
                       </>
+                    )}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            {/* Edit Cost Dialog */}
+            <Dialog open={costDialogOpen} onOpenChange={(open) => {
+              if (!open) {
+                setCostDialogOpen(false)
+                setOrderForCost(null)
+                setCostInput("")
+              }
+            }}>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <DollarSign className="h-5 w-5 text-primary" />
+                    Edit Order Cost
+                  </DialogTitle>
+                  <DialogDescription>
+                    Set the cost for order {orderForCost?.order_number}. Used to compute revenue (total − cost).
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="costInput">Cost</Label>
+                    <Input
+                      id="costInput"
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      placeholder="0.00"
+                      value={costInput}
+                      onChange={(e) => setCostInput(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => { setCostDialogOpen(false); setOrderForCost(null); setCostInput("") }} disabled={isSavingCost}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleSaveCost} disabled={isSavingCost} className="gap-2">
+                    {isSavingCost ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      "Save"
                     )}
                   </Button>
                 </DialogFooter>
