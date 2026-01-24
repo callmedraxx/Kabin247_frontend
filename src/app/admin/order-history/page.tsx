@@ -161,6 +161,7 @@ interface Order {
   airport_id: number
   order_type: string | null
   delivery_fee: string | number | null
+  is_paid?: boolean
   client?: OrderClient
   caterer_details?: OrderCaterer
   airport_details?: OrderAirport
@@ -175,9 +176,8 @@ interface OrdersResponse {
 }
 
 // Status options with labels and colors
-// Get status options from centralized config (filtered for history page)
-const allStatusOptions = getStatusOptions()
-const statusOptions = allStatusOptions.filter(s => s.value === "delivered" || s.value === "cancelled")
+// Get status options from centralized config (all statuses possible for paid orders)
+const statusOptions = getStatusOptions()
 
 function OrderHistoryContent() {
   const [orders, setOrders] = React.useState<Order[]>([])
@@ -209,27 +209,37 @@ function OrderHistoryContent() {
   const [costInput, setCostInput] = React.useState("")
   const [isSavingCost, setIsSavingCost] = React.useState(false)
 
+  // Helper to get cost for an order with case-insensitive and trim-safe lookup
+  const getOrderCostValue = React.useCallback((orderNumber: string | null | undefined): number => {
+    if (!orderNumber) return 0;
+    const num = orderNumber.trim();
+    // Try exact match, then lowercase, then uppercase
+    const cost = costs[num] ?? costs[num.toLowerCase()] ?? costs[num.toUpperCase()];
+    return cost ?? 0;
+  }, [costs]);
+
   // Fetch orders from API
   const fetchOrders = React.useCallback(async (showRefresh = false) => {
     if (showRefresh) setIsRefreshing(true)
     else setIsLoading(true)
 
     try {
-      const data: OrdersResponse = await apiCallJson<OrdersResponse>(`/orders?limit=500`)
+      const data: OrdersResponse = await apiCallJson<OrdersResponse>(`/orders?limit=1000`)
       
-      // Filter for only delivered or cancelled orders (historical orders)
+      // Filter for only paid orders (Order History now shows paid orders)
       const historicalOrders = (data.orders || []).filter(
-        (order) => order.status === "delivered" || order.status === "cancelled"
+        (order) => order.is_paid === true
       )
       
       setOrders(historicalOrders)
 
-      // Fetch order costs for all historical orders
+      // Fetch order costs for all paid orders
       const orderNumbers = historicalOrders.map((o) => o.order_number).filter(Boolean)
       if (orderNumbers.length > 0) {
         try {
+          // Add cache-busting parameter to ensure fresh data
           const costData = await apiCallJson<{ costs: Record<string, number> }>(
-            `/order-costs?order_numbers=${encodeURIComponent(orderNumbers.join(","))}`
+            `/order-costs?order_numbers=${encodeURIComponent(orderNumbers.join(","))}&_t=${Date.now()}`
           )
           setCosts(costData.costs || {})
         } catch (e) {
@@ -267,19 +277,24 @@ function OrderHistoryContent() {
     fetchOrders()
   }, [fetchOrders])
 
-  // Calculate statistics (revenue = sum of order totals - sum of costs for delivered orders)
+  // Calculate statistics (revenue = sum of order totals - sum of costs for paid orders)
   const stats = React.useMemo(() => {
     const totalOrders = orders.length
     const deliveredOrders = orders.filter((o) => o.status === "delivered").length
     const cancelledOrders = orders.filter((o) => o.status === "cancelled").length
-    const delivered = orders.filter((o) => o.status === "delivered")
-    const sumTotals = delivered.reduce((sum, o) => {
+    
+    // Sum totals for all paid orders
+    const sumTotals = orders.reduce((sum, o) => {
       const total = typeof o.total === "number" ? o.total : parseFloat(String(o.total) || "0")
-      return sum + total
+      return sum + (isNaN(total) ? 0 : total)
     }, 0)
-    const totalCost = delivered.reduce((sum, o) => sum + (costs[o.order_number] ?? 0), 0)
+    
+    // Sum costs for all paid orders
+    const totalCost = orders.reduce((sum, o) => sum + getOrderCostValue(o.order_number), 0)
+    
+    // Revenue = Sum of paid order totals - Sum of paid order costs
     const totalRevenue = sumTotals - totalCost
-    const averageOrderValue = deliveredOrders > 0 ? totalRevenue / deliveredOrders : 0
+    const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0
 
     return {
       totalOrders,
@@ -289,7 +304,7 @@ function OrderHistoryContent() {
       totalCost,
       averageOrderValue,
     }
-  }, [orders, costs])
+  }, [orders, getOrderCostValue])
 
   // Filter orders based on search query, status, and date range
   const filteredOrders = React.useMemo(() => {
@@ -394,21 +409,32 @@ function OrderHistoryContent() {
         method: "PUT",
         body: JSON.stringify({ cost: num }),
       })
-      // Update local state immediately
-      setCosts((prev) => ({ ...prev, [orderForCost.order_number]: num }))
       
-      // Refetch costs from API to ensure consistency
+      // Store the order number and cost we just saved to preserve it during refetch
+      const savedOrderNumber = orderForCost.order_number
+      const savedCost = num
+      
+      // Update local state immediately - this ensures stats update right away
+      setCosts((prev) => ({ ...prev, [savedOrderNumber]: savedCost }))
+      
+      // Refetch costs from API after a short delay to ensure database commit
       const orderNumbers = orders.map((o) => o.order_number).filter(Boolean)
       if (orderNumbers.length > 0) {
-        try {
-          const costData = await apiCallJson<{ costs: Record<string, number> }>(
-            `/order-costs?order_numbers=${encodeURIComponent(orderNumbers.join(","))}`
-          )
-          setCosts(costData.costs || {})
-        } catch (e) {
-          // If refetch fails, keep the local update
-          console.warn("Failed to refetch costs after save:", e)
-        }
+        setTimeout(async () => {
+          try {
+            const costData = await apiCallJson<{ costs: Record<string, number> }>(
+              `/order-costs?order_numbers=${encodeURIComponent(orderNumbers.join(","))}&_t=${Date.now()}`
+            )
+            // Merge refetched costs with current state
+            setCosts((prev) => {
+              const merged = { ...(costData.costs || {}), ...prev }
+              merged[savedOrderNumber] = savedCost
+              return merged
+            })
+          } catch (e) {
+            console.warn("Failed to refetch costs after save:", e)
+          }
+        }, 100)
       }
       
       toast.success("Cost saved", { description: `Order ${orderForCost.order_number}` })
@@ -434,9 +460,10 @@ function OrderHistoryContent() {
       "Delivery Date": formatDateForDisplay(order.delivery_date),
       "Delivery Time": order.delivery_time,
       "Status": statusOptions.find((s) => s.value === order.status)?.label || order.status,
+      "Payment Status": "Paid",
       "Order Type": order.order_type || "—",
       "Total": typeof order.total === "number" ? order.total : parseFloat(String(order.total) || "0"),
-      "Cost": costs[order.order_number] != null ? costs[order.order_number] : "",
+      "Cost": getOrderCostValue(order.order_number) || "",
       "Payment Method": order.payment_method,
       "Created At": new Date(order.created_at).toLocaleString(),
       "Completed At": order.completed_at ? new Date(order.completed_at).toLocaleString() : "",
@@ -678,12 +705,12 @@ function OrderHistoryContent() {
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
               <Card className="border-border/50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Orders</CardTitle>
+                  <CardTitle className="text-sm font-medium">Total Paid</CardTitle>
                   <ShoppingCart className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{stats.totalOrders}</div>
-                  <p className="text-xs text-muted-foreground">Historical orders</p>
+                  <p className="text-xs text-muted-foreground">Paid orders</p>
                 </CardContent>
               </Card>
               <Card className="border-border/50">
@@ -693,7 +720,7 @@ function OrderHistoryContent() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold text-emerald-600">{stats.deliveredOrders}</div>
-                  <p className="text-xs text-muted-foreground">Completed orders</p>
+                  <p className="text-xs text-muted-foreground">Paid & Delivered</p>
                 </CardContent>
               </Card>
               <Card className="border-border/50">
@@ -703,7 +730,7 @@ function OrderHistoryContent() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold text-red-600">{stats.cancelledOrders}</div>
-                  <p className="text-xs text-muted-foreground">Cancelled orders</p>
+                  <p className="text-xs text-muted-foreground">Paid & Cancelled</p>
                 </CardContent>
               </Card>
               <Card className="border-border/50">
@@ -715,19 +742,19 @@ function OrderHistoryContent() {
                   <div className="text-2xl font-bold text-amber-600">
                     ${stats.totalCost.toFixed(2)}
                   </div>
-                  <p className="text-xs text-muted-foreground">From delivered orders</p>
+                  <p className="text-xs text-muted-foreground">Costs of paid orders</p>
                 </CardContent>
               </Card>
               <Card className="border-border/50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+                  <CardTitle className="text-sm font-medium">Net Revenue</CardTitle>
                   <DollarSign className="h-4 w-4 text-green-600" />
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold text-green-600">
                     ${stats.totalRevenue.toFixed(2)}
                   </div>
-                  <p className="text-xs text-muted-foreground">Delivered total minus cost</p>
+                  <p className="text-xs text-muted-foreground">Total paid minus costs</p>
                 </CardContent>
               </Card>
               <Card className="border-border/50">
@@ -739,7 +766,7 @@ function OrderHistoryContent() {
                   <div className="text-2xl font-bold text-blue-600">
                     ${stats.averageOrderValue.toFixed(2)}
                   </div>
-                  <p className="text-xs text-muted-foreground">Average per order</p>
+                  <p className="text-xs text-muted-foreground">Average per paid order</p>
                 </CardContent>
               </Card>
             </div>
@@ -866,6 +893,7 @@ function OrderHistoryContent() {
                         <TableHead className="font-semibold">Airport</TableHead>
                         <TableHead className="font-semibold">Delivery</TableHead>
                         <TableHead className="font-semibold">Status</TableHead>
+                        <TableHead className="font-semibold">Payment</TableHead>
                         <TableHead className="text-right font-semibold">Total</TableHead>
                         <TableHead className="text-right font-semibold">Cost</TableHead>
                         <TableHead className="w-12 text-right font-semibold">Actions</TableHead>
@@ -882,6 +910,7 @@ function OrderHistoryContent() {
                             <TableCell><Skeleton className="h-4 w-[150px]" /></TableCell>
                             <TableCell><Skeleton className="h-4 w-[80px]" /></TableCell>
                             <TableCell><Skeleton className="h-4 w-[80px]" /></TableCell>
+                            <TableCell><Skeleton className="h-4 w-[60px]" /></TableCell>
                             <TableCell><Skeleton className="h-4 w-[50px]" /></TableCell>
                             <TableCell><Skeleton className="h-4 w-[60px]" /></TableCell>
                             <TableCell><Skeleton className="h-4 w-[40px]" /></TableCell>
@@ -892,11 +921,11 @@ function OrderHistoryContent() {
                           <TableCell colSpan={10} className="h-24 text-center">
                             <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
                               <ShoppingCart className="h-8 w-8 opacity-50" />
-                              <p className="text-sm font-medium">No orders found</p>
+                              <p className="text-sm font-medium">No paid orders found</p>
                               <p className="text-xs">
                                 {searchQuery || statusFilter !== "all" || dateRange.start || dateRange.end
                                   ? "Try adjusting your filters"
-                                  : "Historical orders will appear here"}
+                                  : "Orders marked as paid will appear here"}
                               </p>
                             </div>
                           </TableCell>
@@ -942,13 +971,19 @@ function OrderHistoryContent() {
                               </div>
                             </TableCell>
                             <TableCell>{getStatusBadge(order.status)}</TableCell>
+                            <TableCell>
+                              <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20" variant="outline">
+                                Paid
+                              </Badge>
+                            </TableCell>
                             <TableCell className="text-right font-medium">
                               ${formatPrice(order.total)}
                             </TableCell>
                             <TableCell className="text-right">
-                              {costs[order.order_number] != null && costs[order.order_number] > 0
-                                ? `$${formatPrice(costs[order.order_number])}`
-                                : "—"}
+                              {(() => {
+                                const cost = getOrderCostValue(order.order_number);
+                                return cost > 0 ? `$${formatPrice(cost)}` : "—";
+                              })()}
                             </TableCell>
                             <TableCell>
                               <DropdownMenu>
@@ -977,7 +1012,8 @@ function OrderHistoryContent() {
                                   <DropdownMenuItem
                                     onClick={() => {
                                       setOrderForCost(order)
-                                      setCostInput(costs[order.order_number] != null ? String(costs[order.order_number]) : "")
+                                      const cost = getOrderCostValue(order.order_number);
+                                      setCostInput(cost > 0 ? String(cost) : "")
                                       setCostDialogOpen(true)
                                     }}
                                     className="cursor-pointer"
