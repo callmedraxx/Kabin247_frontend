@@ -536,6 +536,9 @@ function POSContent() {
   const [airportDialogOpen, setAirportDialogOpen] = React.useState(false)
   const [fboDialogOpen, setFboDialogOpen] = React.useState(false)
   const [menuItemDialogOpen, setMenuItemDialogOpen] = React.useState(false)
+
+  // Save loading state
+  const [isSaving, setIsSaving] = React.useState(false)
   const [currentItemIndex, setCurrentItemIndex] = React.useState<number | undefined>(undefined)
   
   // Collapse state for items
@@ -1875,6 +1878,7 @@ function POSContent() {
       return
     }
 
+    setIsSaving(true)
     try {
       const formData = form.getValues()
       
@@ -1988,6 +1992,8 @@ function POSContent() {
         description: errorMessage,
         duration: 5000,
       })
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -3489,12 +3495,22 @@ function POSContent() {
                             <DrawerClose asChild>
                               <Button variant="ghost" className="flex-1 text-muted-foreground hover:text-foreground">Cancel</Button>
                             </DrawerClose>
-                            <Button 
-                              onClick={handleSave} 
-                              className="flex-1 bg-gradient-to-r from-primary to-blue-500 hover:from-primary/90 hover:to-blue-500/90 shadow-lg shadow-primary/25 text-white"
+                            <Button
+                              onClick={handleSave}
+                              disabled={isSaving}
+                              className="flex-1 bg-gradient-to-r from-primary to-blue-500 hover:from-primary/90 hover:to-blue-500/90 shadow-lg shadow-primary/25 text-white disabled:opacity-70"
                             >
-                              <Save className="mr-2 h-4 w-4" />
-                              Save Order
+                              {isSaving ? (
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  Saving...
+                                </>
+                              ) : (
+                                <>
+                                  <Save className="mr-2 h-4 w-4" />
+                                  Save Order
+                                </>
+                              )}
                             </Button>
                           </DrawerFooter>
                         </div>

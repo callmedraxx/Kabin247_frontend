@@ -159,13 +159,13 @@ interface CategoriesResponse {
   total: number
 }
 
-// Variant schema with caterer prices
+// Variant schema with caterer prices - using strings for price fields to allow free editing
 const variantSchema = z.object({
   portion_size: z.string().min(1, "Portion size is required"),
-  price: z.number().positive("Price must be greater than 0"),
+  price: z.union([z.string(), z.number()]).optional(), // Accept string or number, validate in handleSave
   caterer_prices: z.array(z.object({
-    caterer_id: z.number().int().positive(),
-    price: z.number().positive("Price must be greater than 0"),
+    caterer_id: z.number().int().nonnegative(),
+    price: z.union([z.string(), z.number()]).optional(),
   })).optional(),
 })
 
@@ -176,8 +176,8 @@ const menuItemSchema = z.object({
   food_type: z.enum(["veg", "non_veg"]),
   category: z.string().optional(),
   image_url: z.string().optional(),
-  price: z.number().positive("Price must be greater than 0").optional(), // Legacy support
-  variants: z.array(variantSchema).optional(), // New: variants with caterer prices
+  price: z.union([z.string(), z.number()]).optional(), // Legacy support - accept string or number
+  variants: z.array(variantSchema).optional(),
   tax_rate: z.number().min(0).max(100).optional(),
   service_charge: z.number().min(0).optional(),
   is_active: z.boolean(),
@@ -221,6 +221,7 @@ function MenuItemsContent() {
   const [importPreview, setImportPreview] = React.useState<(Partial<MenuItem> & { price?: number })[]>([])
   const [importErrors, setImportErrors] = React.useState<string[]>([])
   const [isImporting, setIsImporting] = React.useState(false)
+  const [isSaving, setIsSaving] = React.useState(false)
   const [imagePreview, setImagePreview] = React.useState<string | null>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const imageInputRef = React.useRef<HTMLInputElement>(null)
@@ -462,6 +463,23 @@ function MenuItemsContent() {
 
   // Handle save
   const handleSave = async (values: MenuItemFormValues) => {
+    // Convert and validate variant prices
+    if (values.variants && values.variants.length > 0) {
+      const processedVariants = values.variants.map((v, idx) => {
+        const priceNum = typeof v.price === 'string' ? parseFloat(v.price) : v.price
+        return { ...v, price: priceNum, index: idx }
+      })
+
+      const invalidVariants = processedVariants.filter(v => !v.price || isNaN(v.price) || v.price <= 0)
+      if (invalidVariants.length > 0) {
+        toast.error("Invalid variant prices", {
+          description: "All variants must have a valid price greater than 0",
+        })
+        return
+      }
+    }
+
+    setIsSaving(true)
     try {
       const url = editingItem
         ? `${API_BASE_URL}/menu-items/${editingItem.id}`
@@ -480,14 +498,25 @@ function MenuItemsContent() {
       }
       // Send variants if provided, otherwise fall back to legacy price field
       if (values.variants && values.variants.length > 0) {
-        body.variants = values.variants.map(v => ({
-          portion_size: v.portion_size,
-          price: v.price,
-          caterer_prices: v.caterer_prices || [],
-        }))
+        body.variants = values.variants.map(v => {
+          const priceNum = typeof v.price === 'string' ? parseFloat(v.price as string) : v.price
+          return {
+            portion_size: v.portion_size,
+            price: priceNum,
+            // Filter out incomplete caterer prices (must have valid caterer_id > 0 and price > 0)
+            caterer_prices: (v.caterer_prices || []).filter(cp => {
+              const cpPriceNum = typeof cp.price === 'string' ? parseFloat(cp.price as string) : cp.price
+              return cp.caterer_id > 0 && cpPriceNum !== undefined && !isNaN(cpPriceNum) && cpPriceNum > 0
+            }).map(cp => ({
+              caterer_id: cp.caterer_id,
+              price: typeof cp.price === 'string' ? parseFloat(cp.price as string) : cp.price,
+            })),
+          }
+        })
       } else if (values.price !== undefined) {
         // Legacy support: if no variants, use single price
-        body.price = values.price
+        const legacyPrice = typeof values.price === 'string' ? parseFloat(values.price as string) : values.price
+        body.price = legacyPrice
       }
       if (values.item_description) {
         body.item_description = values.item_description
@@ -534,6 +563,8 @@ function MenuItemsContent() {
     } catch (err) {
       // Error already handled in toast above
       console.error("Error saving menu item:", err)
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -1450,7 +1481,7 @@ function MenuItemsContent() {
                               type="button"
                               variant="outline"
                               size="sm"
-                              onClick={() => appendVariant({ portion_size: "", price: 0, caterer_prices: [] })}
+                              onClick={() => appendVariant({ portion_size: "1", price: undefined as any, caterer_prices: [] })}
                               className="gap-2"
                             >
                               <Plus className="h-4 w-4" />
@@ -1489,12 +1520,12 @@ function MenuItemsContent() {
                                         <FormLabel>Base Price ($) *</FormLabel>
                                         <FormControl>
                                           <Input
-                                            type="number"
-                                            step="0.01"
+                                            type="text"
+                                            inputMode="decimal"
                                             placeholder="0.00"
                                             {...field}
-                                            value={field.value || ""}
-                                            onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : 0)}
+                                            value={field.value ?? ""}
+                                            onChange={(e) => field.onChange(e.target.value)}
                                           />
                                         </FormControl>
                                         <FormMessage />
@@ -1591,13 +1622,13 @@ function MenuItemsContent() {
                                           <FormLabel className="text-xs">Price ($)</FormLabel>
                                           <FormControl>
                                             <Input
-                                              type="number"
-                                              step="0.01"
+                                              type="text"
+                                              inputMode="decimal"
                                               placeholder="0.00"
                                               className="h-9"
                                               {...field}
-                                              value={field.value || ""}
-                                              onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : 0)}
+                                              value={field.value ?? ""}
+                                              onChange={(e) => field.onChange(e.target.value)}
                                             />
                                           </FormControl>
                                           <FormMessage />
@@ -1711,11 +1742,26 @@ function MenuItemsContent() {
                         </Button>
                       </DrawerClose>
                       <Button
-                        onClick={form.handleSubmit(handleSave)}
-                        className="flex-1 gap-2"
+                        onClick={form.handleSubmit(handleSave, (errors) => {
+                          console.error("Form validation errors:", errors)
+                          toast.error("Please fix form errors", {
+                            description: Object.keys(errors).map(key => `${key}: ${(errors as any)[key]?.message}`).join(", "),
+                          })
+                        })}
+                        disabled={isSaving}
+                        className="flex-1 gap-2 disabled:opacity-70"
                       >
-                        <CheckCircle2 className="h-4 w-4" />
-                        {editingItem ? "Update Item" : "Create Item"}
+                        {isSaving ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            {editingItem ? "Updating..." : "Creating..."}
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="h-4 w-4" />
+                            {editingItem ? "Update Item" : "Create Item"}
+                          </>
+                        )}
                       </Button>
                     </div>
                   </DrawerFooter>

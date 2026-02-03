@@ -84,6 +84,8 @@ import {
   CreditCard,
   Building2,
   UtensilsCrossed,
+  Archive,
+  ArchiveRestore,
 } from "lucide-react"
 import { useForm, useFieldArray } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -230,6 +232,7 @@ interface Order {
   client?: OrderClient
   caterer_details?: OrderCaterer
   airport_details?: OrderAirport
+  is_archived?: boolean
   created_at: string
   updated_at: string
   completed_at?: string | null
@@ -308,6 +311,8 @@ function OrdersContent() {
   const [selectedOrders, setSelectedOrders] = React.useState<Set<number>>(new Set())
   const [searchQuery, setSearchQuery] = React.useState("")
   const [statusFilter, setStatusFilter] = React.useState<OrderStatus | "all">("all")
+  const [showArchived, setShowArchived] = React.useState(false)
+  const [isArchiving, setIsArchiving] = React.useState(false)
   const [isLoading, setIsLoading] = React.useState(true)
   const [isDeleting, setIsDeleting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -498,7 +503,7 @@ function OrdersContent() {
   const fetchOrders = React.useCallback(async () => {
     setIsLoading(true)
     setError(null)
-    
+
     try {
       const params = new URLSearchParams()
       if (searchQuery.trim()) {
@@ -511,6 +516,7 @@ function OrdersContent() {
       params.append("sortOrder", sortOrder)
       params.append("page", page.toString())
       params.append("limit", limit.toString())
+      params.append("is_archived", showArchived.toString())
 
       const data: OrdersResponse = await apiCallJson<OrdersResponse>(`/orders?${params.toString()}`)
       setOrders(data.orders)
@@ -524,7 +530,7 @@ function OrdersContent() {
     } finally {
       setIsLoading(false)
     }
-  }, [searchQuery, statusFilter, sortBy, sortOrder, page, limit])
+  }, [searchQuery, statusFilter, sortBy, sortOrder, page, limit, showArchived])
 
   // Fetch orders on mount and when dependencies change
   React.useEffect(() => {
@@ -802,6 +808,30 @@ function OrdersContent() {
       })
     } finally {
       setIsDeleting(false)
+    }
+  }
+
+  // Handle archive/unarchive
+  const handleArchive = async (order: Order, archive: boolean) => {
+    setIsArchiving(true)
+    try {
+      await apiCallJson(`/orders/${order.id}/archive`, {
+        method: "PATCH",
+        body: JSON.stringify({ is_archived: archive }),
+      })
+
+      toast.success(archive ? "Order archived" : "Order unarchived", {
+        description: `Order ${order.order_number} has been ${archive ? "archived" : "unarchived"} successfully.`,
+      })
+
+      fetchOrders()
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : `Failed to ${archive ? "archive" : "unarchive"} order`
+      toast.error(`Error ${archive ? "archiving" : "unarchiving"} order`, {
+        description: errorMessage,
+      })
+    } finally {
+      setIsArchiving(false)
     }
   }
 
@@ -1120,6 +1150,16 @@ function OrdersContent() {
                       ))}
                     </SelectContent>
                   </Select>
+                  {/* Archive Toggle */}
+                  <Button
+                    variant={showArchived ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setShowArchived(!showArchived)}
+                    className="gap-2"
+                  >
+                    <Archive className="h-4 w-4" />
+                    {showArchived ? "Showing Archived" : "Show Archived"}
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -1429,6 +1469,23 @@ function OrdersContent() {
                                     Send Email
                                   </DropdownMenuItem>
                                   <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={() => handleArchive(order, !order.is_archived)}
+                                    className="cursor-pointer"
+                                    disabled={isArchiving}
+                                  >
+                                    {order.is_archived ? (
+                                      <>
+                                        <ArchiveRestore className="mr-2 h-4 w-4" />
+                                        Unarchive
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Archive className="mr-2 h-4 w-4" />
+                                        Archive
+                                      </>
+                                    )}
+                                  </DropdownMenuItem>
                                   <DropdownMenuItem
                                     onClick={() => handleDelete(order)}
                                     className="cursor-pointer text-destructive focus:text-destructive"

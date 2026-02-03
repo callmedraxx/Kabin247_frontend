@@ -91,6 +91,8 @@ import {
   Info,
   ChevronDown,
   ChevronUp,
+  Archive,
+  ArchiveRestore,
 } from "lucide-react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -315,6 +317,7 @@ interface Order {
   caterer_details?: OrderCaterer
   airport_details?: OrderAirport
   fbo?: OrderFBO
+  is_archived?: boolean
   created_at: string
   updated_at: string
   completed_at?: string | null
@@ -518,6 +521,8 @@ function OrdersContent() {
   const [selectedOrders, setSelectedOrders] = React.useState<Set<number>>(new Set())
   const [searchQuery, setSearchQuery] = React.useState("")
   const [statusFilter, setStatusFilter] = React.useState<OrderStatus | "all">("all")
+  const [showArchived, setShowArchived] = React.useState(false)
+  const [isArchiving, setIsArchiving] = React.useState(false)
   const [isLoading, setIsLoading] = React.useState(true)
   const [isDeleting, setIsDeleting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -855,7 +860,7 @@ function OrdersContent() {
   const fetchOrders = React.useCallback(async () => {
     setIsLoading(true)
     setError(null)
-    
+
     try {
       const params = new URLSearchParams()
       if (searchQuery.trim()) {
@@ -868,15 +873,16 @@ function OrdersContent() {
       params.append("sortOrder", sortOrder)
       params.append("page", page.toString())
       params.append("limit", limit.toString())
+      params.append("is_archived", showArchived.toString())
 
       const data: OrdersResponse = await apiCallJson(`/orders?${params.toString()}`)
       setOrders(data.orders)
       setTotal(data.total)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to fetch orders"
-      
+
       // Check if it's a permission error
-      if (errorMessage.toLowerCase().includes("permission") || 
+      if (errorMessage.toLowerCase().includes("permission") ||
           errorMessage.toLowerCase().includes("insufficient") ||
           errorMessage.toLowerCase().includes("forbidden") ||
           errorMessage.toLowerCase().includes("403")) {
@@ -898,7 +904,7 @@ function OrdersContent() {
     } finally {
       setIsLoading(false)
     }
-  }, [searchQuery, statusFilter, sortBy, sortOrder, page, limit])
+  }, [searchQuery, statusFilter, sortBy, sortOrder, page, limit, showArchived])
 
   const { isAuthenticated, isLoading: authLoading, user } = useAuth()
   const isAdmin = user?.role === 'ADMIN'
@@ -1636,6 +1642,30 @@ function OrdersContent() {
     }
   }
 
+  // Handle archive/unarchive
+  const handleArchive = async (order: Order, archive: boolean) => {
+    setIsArchiving(true)
+    try {
+      await apiCallJson(`/orders/${order.id}/archive`, {
+        method: "PATCH",
+        body: JSON.stringify({ is_archived: archive }),
+      })
+
+      toast.success(archive ? "Order archived" : "Order unarchived", {
+        description: `Order ${order.order_number} has been ${archive ? "archived" : "unarchived"} successfully.`,
+      })
+
+      fetchOrders()
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : `Failed to ${archive ? "archive" : "unarchive"} order`
+      toast.error(`Error ${archive ? "archiving" : "unarchiving"} order`, {
+        description: errorMessage,
+      })
+    } finally {
+      setIsArchiving(false)
+    }
+  }
+
   // Handle bulk delete
   const handleBulkDelete = async () => {
     if (selectedOrders.size === 0) return
@@ -1648,7 +1678,7 @@ function OrdersContent() {
           ids: Array.from(selectedOrders),
         }),
       })
-      
+
       toast.success("Orders deleted", {
         description: `${data.deleted || selectedOrders.size} order(s) have been deleted successfully.`,
       })
@@ -2047,6 +2077,16 @@ function OrdersContent() {
                       ))}
                     </SelectContent>
                   </Select>
+                  {/* Archive Toggle */}
+                  <Button
+                    variant={showArchived ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setShowArchived(!showArchived)}
+                    className="gap-2 h-10"
+                  >
+                    <Archive className="h-4 w-4" />
+                    {showArchived ? "Showing Archived" : "Show Archived"}
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -2493,6 +2533,23 @@ function OrdersContent() {
                                     Duplicate Order
                                   </DropdownMenuItem>
                                   <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={() => handleArchive(order, !order.is_archived)}
+                                    className="cursor-pointer"
+                                    disabled={isArchiving}
+                                  >
+                                    {order.is_archived ? (
+                                      <>
+                                        <ArchiveRestore className="mr-2 h-4 w-4" />
+                                        Unarchive
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Archive className="mr-2 h-4 w-4" />
+                                        Archive
+                                      </>
+                                    )}
+                                  </DropdownMenuItem>
                                   <DropdownMenuItem
                                     onClick={() => handleDelete(order)}
                                     className="cursor-pointer text-destructive focus:text-destructive"
