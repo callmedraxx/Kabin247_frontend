@@ -13,6 +13,9 @@ import { useAirports } from "@/contexts/airports-context"
 import { useClients } from "@/contexts/clients-context"
 import { useMenuItems } from "@/contexts/menu-items-context"
 import { useFBOs } from "@/contexts/fbos-context"
+import { useOrders, type OrderWithSync } from "@/contexts/orders-context"
+import { useOffline } from "@/contexts/offline-context"
+import { SyncStatusBadge } from "@/components/pwa/sync-status-badge"
 import { HeaderNav } from "@/components/dashboard/header-nav"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -682,15 +685,36 @@ function OrdersContent() {
     getMenuItemByName
   } = useMenuItems()
   
-  const { 
-    fbos: fbosData, 
-    fboOptions, 
-    isLoading: isLoadingFBOs, 
+  const {
+    fbos: fbosData,
+    fboOptions,
+    isLoading: isLoadingFBOs,
     fetchFBOs: fetchFBOsFromContext,
     getFBOById,
     getFBOOptionById
   } = useFBOs()
-  
+
+  // Orders context for offline support
+  const {
+    orders: ordersFromContext,
+    isLoading: isLoadingOrdersFromContext,
+    fetchOrders: fetchOrdersFromContext,
+    getOrder: getOrderFromContext,
+    updateOrder: updateOrderFromContext,
+    deleteOrder: deleteOrderFromContext,
+  } = useOrders()
+
+  // Offline status
+  const { isOnline } = useOffline()
+
+  // Sync orders from context to local state when context updates
+  React.useEffect(() => {
+    if (ordersFromContext.length > 0) {
+      setOrders(ordersFromContext as Order[])
+      setTotal(ordersFromContext.length)
+    }
+  }, [ordersFromContext])
+
   const [categories, setCategories] = React.useState<Category[]>([])
   const [isLoadingCategories, setIsLoadingCategories] = React.useState(false)
   
@@ -856,28 +880,23 @@ function OrdersContent() {
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [dialogOpen, append])
 
-  // Fetch orders from API
+  // Fetch orders from API with offline support
   const fetchOrders = React.useCallback(async () => {
     setIsLoading(true)
     setError(null)
 
     try {
-      const params = new URLSearchParams()
-      if (searchQuery.trim()) {
-        params.append("search", searchQuery.trim())
-      }
-      if (statusFilter !== "all") {
-        params.append("status", statusFilter)
-      }
-      params.append("sortBy", sortBy)
-      params.append("sortOrder", sortOrder)
-      params.append("page", page.toString())
-      params.append("limit", limit.toString())
-      params.append("is_archived", showArchived.toString())
+      // Use the orders context which handles online/offline
+      await fetchOrdersFromContext({
+        search: searchQuery.trim() || undefined,
+        status: statusFilter !== "all" ? statusFilter : undefined,
+        page,
+        limit,
+        isArchived: showArchived,
+      })
 
-      const data: OrdersResponse = await apiCallJson(`/orders?${params.toString()}`)
-      setOrders(data.orders)
-      setTotal(data.total)
+      // The context updates its own state, but we also need to sync local state
+      // Use ordersFromContext for the actual data
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to fetch orders"
 
@@ -896,15 +915,18 @@ function OrdersContent() {
           duration: 8000,
         })
       } else {
-        setError(errorMessage)
-        toast.error("Error loading orders", {
-          description: errorMessage,
-        })
+        // Only show error if online - offline mode will use cache
+        if (isOnline) {
+          setError(errorMessage)
+          toast.error("Error loading orders", {
+            description: errorMessage,
+          })
+        }
       }
     } finally {
       setIsLoading(false)
     }
-  }, [searchQuery, statusFilter, sortBy, sortOrder, page, limit, showArchived])
+  }, [searchQuery, statusFilter, page, limit, showArchived, fetchOrdersFromContext, isOnline])
 
   const { isAuthenticated, isLoading: authLoading, user } = useAuth()
   const isAdmin = user?.role === 'ADMIN'
@@ -1582,14 +1604,27 @@ function OrdersContent() {
         }),
       }
 
-      await apiCallJson(`/orders/${editingOrder.id}`, {
-        method: "PUT",
-        body: JSON.stringify(body),
-      })
+      // Use orders context for offline support
+      const localId = (editingOrder as OrderWithSync)._localId
+      const result = await updateOrderFromContext(
+        localId || editingOrder.id,
+        body
+      )
 
-      toast.success("Order updated", {
-        description: `Order ${editingOrder.order_number} has been updated successfully.`,
-      })
+      if (!result) {
+        throw new Error("Failed to update order")
+      }
+
+      // Show appropriate toast based on sync status
+      if (result._syncStatus === "pending_update") {
+        toast.success("Order saved offline", {
+          description: `Order ${editingOrder.order_number} will sync when online`,
+        })
+      } else {
+        toast.success("Order updated", {
+          description: `Order ${editingOrder.order_number} has been updated successfully.`,
+        })
+      }
 
       setDialogOpen(false)
       setEditingOrder(null)
@@ -1616,12 +1651,16 @@ function OrdersContent() {
 
     setIsDeleting(true)
     try {
-      await apiCallJson(`/orders/${orderToDelete.id}`, {
-        method: "DELETE",
-      })
+      // Use orders context for offline support
+      const localId = (orderToDelete as OrderWithSync)._localId
+      const success = await deleteOrderFromContext(localId || orderToDelete.id)
+
+      if (!success) {
+        throw new Error("Failed to delete order")
+      }
 
       toast.success("Order deleted", {
-        description: `Order ${orderToDelete.order_number} has been deleted successfully.`,
+        description: `Order ${orderToDelete.order_number} has been deleted${!isOnline ? " (will sync when online)" : ""}.`,
       })
 
       setDeleteDialogOpen(false)
@@ -2014,11 +2053,21 @@ function OrdersContent() {
               <CardHeader className="pb-4">
                 <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <CardTitle className="text-2xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-                      Order Management
-                    </CardTitle>
+                    <div className="flex items-center gap-3">
+                      <CardTitle className="text-2xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+                        Order Management
+                      </CardTitle>
+                      {!isOnline && (
+                        <Badge variant="outline" className="rounded-full px-3 py-1 text-xs font-medium border-amber-500/30 bg-amber-500/5 text-amber-600 dark:text-amber-400">
+                          <span className="mr-1.5 h-2 w-2 rounded-full bg-amber-500 inline-block" />
+                          Offline
+                        </Badge>
+                      )}
+                    </div>
                     <CardDescription className="mt-1.5">
-                      View and manage all orders, track status, and communicate with clients and caterers
+                      {isOnline
+                        ? "View and manage all orders, track status, and communicate with clients and caterers"
+                        : "Viewing cached orders. Changes will sync when online."}
                     </CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
@@ -2272,8 +2321,13 @@ function OrdersContent() {
                               />
                             </TableCell>
                             <TableCell className="font-medium">
-                              <div className="truncate max-w-[120px]" title={order.order_number}>
-                                <span className="font-mono text-sm">{order.order_number}</span>
+                              <div className="flex items-center gap-2">
+                                <div className="truncate max-w-[120px]" title={order.order_number}>
+                                  <span className="font-mono text-sm">{order.order_number}</span>
+                                </div>
+                                {(order as OrderWithSync)._syncStatus && (order as OrderWithSync)._syncStatus !== "synced" && (
+                                  <SyncStatusBadge status={(order as OrderWithSync)._syncStatus!} size="sm" />
+                                )}
                               </div>
                             </TableCell>
                             <TableCell className="max-w-[150px]">

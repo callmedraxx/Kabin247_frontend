@@ -89,9 +89,12 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { toast } from "sonner"
+import { Badge } from "@/components/ui/badge"
 
 import { API_BASE_URL } from "@/lib/api-config"
 import { apiCall, apiCallJson } from "@/lib/api-client"
+import { useClients } from "@/contexts/clients-context"
+import { useOffline } from "@/contexts/offline-context"
 
 // Client data structure matching API response
 interface Client {
@@ -163,6 +166,11 @@ function ClientsContent() {
   const [additionalEmails, setAdditionalEmails] = React.useState<string[]>([])
   const [newEmailInput, setNewEmailInput] = React.useState("")
 
+  // Clients context for offline support
+  const { createClient, updateClient } = useClients()
+
+  // Offline status
+  const { isOnline } = useOffline()
 
   const form = useForm<ClientFormValues>({
     resolver: zodResolver(clientSchema),
@@ -298,31 +306,44 @@ function ClientsContent() {
     form.setValue("additional_emails", newEmails)
   }
 
-  // Handle save (create or update)
+  // Handle save (create or update) with offline support
   const handleSave = async (values: ClientFormValues) => {
     try {
-      const url = editingClient
-        ? `/clients/${editingClient.id}`
-        : `/clients`
-
-      const method = editingClient ? "PUT" : "POST"
-
-      const body: any = {
+      const body = {
         full_name: values.full_name,
         full_address: values.full_address,
-        email: values.email,
-        contact_number: values.contact_number,
+        email: values.email || null,
+        contact_number: values.contact_number || null,
+        airport_code: null,
+        fbo_name: null,
         additional_emails: additionalEmails.length > 0 ? additionalEmails : undefined,
       }
 
-      const data: Client = await apiCallJson<Client>(url, {
-        method,
-        body: JSON.stringify(body),
-      })
-    
-      toast.success(editingClient ? "Client updated" : "Client created", {
-        description: `${data.full_name} has been ${editingClient ? "updated" : "created"} successfully.`,
-      })
+      let result: Client | null = null
+
+      if (editingClient) {
+        // Update existing client using context
+        result = await updateClient(editingClient.id, body)
+      } else {
+        // Create new client using context
+        result = await createClient(body)
+      }
+
+      if (!result) {
+        throw new Error("Failed to save client")
+      }
+
+      // Show appropriate toast based on offline status
+      const isOfflineCreated = result.id < 0
+      if (isOfflineCreated) {
+        toast.success(editingClient ? "Client saved offline" : "Client created offline", {
+          description: `${result.full_name} will sync when online`,
+        })
+      } else {
+        toast.success(editingClient ? "Client updated" : "Client created", {
+          description: `${result.full_name} has been ${editingClient ? "updated" : "created"} successfully.`,
+        })
+      }
 
       setDialogOpen(false)
       setEditingClient(null)
@@ -330,7 +351,7 @@ function ClientsContent() {
       fetchClients()
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to save client"
-      
+
       // Provide more specific error messages based on error message content
       if (errorMessage.includes("Duplicate client found") || errorMessage.includes("duplicate")) {
         toast.error("Duplicate client", {
@@ -582,11 +603,21 @@ function ClientsContent() {
               <CardHeader className="pb-4">
                 <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <CardTitle className="text-2xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-                      Client Management
-                    </CardTitle>
+                    <div className="flex items-center gap-3">
+                      <CardTitle className="text-2xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+                        Client Management
+                      </CardTitle>
+                      {!isOnline && (
+                        <Badge variant="outline" className="rounded-full px-3 py-1 text-xs font-medium border-amber-500/30 bg-amber-500/5 text-amber-600 dark:text-amber-400">
+                          <span className="mr-1.5 h-2 w-2 rounded-full bg-amber-500 inline-block" />
+                          Offline
+                        </Badge>
+                      )}
+                    </div>
                     <CardDescription className="mt-1.5">
-                      Manage clients, their contact information, and airport associations
+                      {isOnline
+                        ? "Manage clients, their contact information, and airport associations"
+                        : "Viewing cached clients. Changes will sync when online."}
                     </CardDescription>
                   </div>
                   <div className="flex items-center gap-2">

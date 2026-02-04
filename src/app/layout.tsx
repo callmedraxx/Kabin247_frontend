@@ -4,6 +4,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "sonner";
 import { AuthProvider } from "@/contexts/auth-context";
 import { DataProviders } from "@/contexts/data-providers";
+import { FloatingOfflineIndicator } from "@/components/pwa";
 import "./globals.css";
 
 const inter = Inter({
@@ -20,6 +21,18 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Kabin247 - 24/7 Global Inflight Provisioning Support.",
   description: "Kabin247 - 24/7 Global Inflight Provisioning Support.",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Kabin247",
+  },
+  formatDetection: {
+    telephone: false,
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
+  },
 };
 
 export default function RootLayout({
@@ -29,6 +42,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <meta name="theme-color" content="#0a0a0a" />
+        <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+      </head>
       <body
         className={`${inter.variable} ${geistMono.variable} font-sans antialiased`}
       >
@@ -42,6 +59,7 @@ export default function RootLayout({
             <DataProviders>
               {children}
               <Toaster position="top-right" richColors />
+              <FloatingOfflineIndicator />
             </DataProviders>
           </AuthProvider>
         </ThemeProvider>

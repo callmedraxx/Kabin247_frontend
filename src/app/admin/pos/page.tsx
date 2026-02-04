@@ -14,6 +14,8 @@ import { useAirports } from "@/contexts/airports-context"
 import { useClients } from "@/contexts/clients-context"
 import { useMenuItems } from "@/contexts/menu-items-context"
 import { useFBOs } from "@/contexts/fbos-context"
+import { useOrders } from "@/contexts/orders-context"
+import { useOffline } from "@/contexts/offline-context"
 import { HeaderNav } from "@/components/dashboard/header-nav"
 import { useForm, useFieldArray } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -514,15 +516,21 @@ function POSContent() {
     getMenuItemByName
   } = useMenuItems()
   
-  const { 
-    fbos: fbosData, 
-    fboOptions, 
-    isLoading: isLoadingFBOs, 
+  const {
+    fbos: fbosData,
+    fboOptions,
+    isLoading: isLoadingFBOs,
     fetchFBOs: fetchFBOsFromContext,
     getFBOById,
     getFBOOptionById
   } = useFBOs()
-  
+
+  // Orders context for offline support
+  const { createOrder } = useOrders()
+
+  // Offline status
+  const { isOnline } = useOffline()
+
   // Search states for comboboxes
   const [clientSearch, setClientSearch] = React.useState("")
   const [catererSearch, setCatererSearch] = React.useState("")
@@ -1928,14 +1936,26 @@ function POSContent() {
       }
 
       console.log("Order payload being sent:", JSON.stringify(orderPayload, null, 2))
-      
-      const result = await apiCallJson("/orders", {
-        method: "POST",
-        body: JSON.stringify(orderPayload),
-      })
+
+      // Use orders context for offline support
+      const result = await createOrder(orderPayload)
+
+      if (!result) {
+        throw new Error("Failed to create order")
+      }
 
       console.log("Order created successfully:", result)
-      toast.success("Order created successfully!")
+
+      // Show appropriate toast based on online/offline status
+      if (result._syncStatus === "pending_create") {
+        toast.success("Order saved offline", {
+          description: `Order ${result.order_number} will sync when online`,
+        })
+      } else {
+        toast.success("Order created successfully!", {
+          description: `Order ${result.order_number} has been created`,
+        })
+      }
       setPreviewOpen(false)
       
       // Clear draft first, before resetting form
@@ -2021,6 +2041,12 @@ function POSContent() {
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
+                          {!isOnline && (
+                            <Badge variant="outline" className="rounded-full px-4 py-1.5 text-xs font-medium border-amber-500/30 bg-amber-500/5 text-amber-600 dark:text-amber-400">
+                              <span className="mr-1.5 h-2 w-2 rounded-full bg-amber-500 inline-block" />
+                              Offline
+                            </Badge>
+                          )}
                           <Badge variant="outline" className="rounded-full px-4 py-1.5 text-xs font-medium border-primary/30 bg-primary/5 text-primary">
                             <span className="mr-1.5 h-2 w-2 rounded-full bg-primary animate-pulse inline-block" />
                             Draft

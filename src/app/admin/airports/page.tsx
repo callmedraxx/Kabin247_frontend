@@ -89,9 +89,13 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { toast } from "sonner"
+import { Badge } from "@/components/ui/badge"
 
 import { API_BASE_URL } from "@/lib/api-config"
 import { apiCall, apiCallJson } from "@/lib/api-client"
+import { useAirports } from "@/contexts/airports-context"
+import { useOffline } from "@/contexts/offline-context"
+import { FloatingOfflineIndicator, OfflineIndicator } from "@/components/pwa/offline-indicator"
 
 // Airport data structure matching API response
 interface Airport {
@@ -158,6 +162,12 @@ function AirportsContent() {
   const [importPreview, setImportPreview] = React.useState<Airport[]>([])
   const [importErrors, setImportErrors] = React.useState<string[]>([])
   const fileInputRef = React.useRef<HTMLInputElement>(null)
+
+  // Airports context for offline support
+  const { createAirport, updateAirport } = useAirports()
+
+  // Offline status
+  const { isOnline } = useOffline()
 
   const form = useForm<AirportFormValues>({
     resolver: zodResolver(airportSchema),
@@ -254,35 +264,49 @@ function AirportsContent() {
     setDialogOpen(true)
   }
 
-  // Handle save (create or update)
+  // Handle save (create or update) - uses offline-capable context methods
   const handleSave = async (values: AirportFormValues) => {
     try {
-      const url = editingAirport
-        ? `/airports/${editingAirport.id}`
-        : `/airports`
-
-      const method = editingAirport ? "PUT" : "POST"
-
       // Prepare payload - exclude FBO fields
       const payload = {
         airport_name: values.airport_name,
+        fbo_name: "",
         airport_code_iata: values.airport_code_iata || null,
         airport_code_icao: values.airport_code_icao || null,
       }
 
-      const data: Airport = await apiCallJson<Airport>(url, {
-        method,
-        body: JSON.stringify(payload),
-      })
-      
-      toast.success(editingAirport ? "Airport updated" : "Airport created", {
-        description: `${data.airport_name} has been ${editingAirport ? "updated" : "created"} successfully.`,
-      })
+      let result: Airport | null = null
 
-      setDialogOpen(false)
-      setEditingAirport(null)
-      form.reset()
-      fetchAirports()
+      if (editingAirport) {
+        // Update existing airport using context (handles offline)
+        result = await updateAirport(editingAirport.id, payload) as Airport | null
+      } else {
+        // Create new airport using context (handles offline)
+        result = await createAirport(payload) as Airport | null
+      }
+
+      if (result) {
+        const isOfflineCreated = !isOnline || (result.id && result.id < 0)
+
+        if (isOfflineCreated) {
+          toast.success(editingAirport ? "Airport updated offline" : "Airport saved offline", {
+            description: `${values.airport_name} will sync when you're back online.`,
+          })
+        } else {
+          toast.success(editingAirport ? "Airport updated" : "Airport created", {
+            description: `${values.airport_name} has been ${editingAirport ? "updated" : "created"} successfully.`,
+          })
+        }
+
+        setDialogOpen(false)
+        setEditingAirport(null)
+        form.reset()
+
+        // Only refetch if online (offline updates are already in local state)
+        if (isOnline) {
+          fetchAirports()
+        }
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to save airport"
       toast.error("Error", {
@@ -314,6 +338,14 @@ function AirportsContent() {
   // Confirm delete
   const confirmDelete = async () => {
     if (!airportToDelete) return
+
+    // Delete requires online connection
+    if (!isOnline) {
+      toast.error("Cannot delete while offline", {
+        description: "Please wait until you're back online to delete airports.",
+      })
+      return
+    }
 
     setIsDeleting(true)
     try {
@@ -347,6 +379,14 @@ function AirportsContent() {
   const handleBulkDelete = async () => {
     if (selectedAirports.size === 0) return
 
+    // Delete requires online connection
+    if (!isOnline) {
+      toast.error("Cannot delete while offline", {
+        description: "Please wait until you're back online to delete airports.",
+      })
+      return
+    }
+
     setIsDeleting(true)
     try {
       const data = await apiCallJson<{ deleted: number }>(`/airports`, {
@@ -355,7 +395,7 @@ function AirportsContent() {
           ids: Array.from(selectedAirports),
         }),
       })
-      
+
       toast.success("Airports deleted", {
         description: `${data.deleted || selectedAirports.size} airport(s) have been deleted successfully.`,
       })
@@ -506,7 +546,6 @@ function AirportsContent() {
   }
 
   const allSelected = airports.length > 0 && selectedAirports.size === airports.length
-  const someSelected = selectedAirports.size > 0 && selectedAirports.size < airports.length
   const totalPages = Math.ceil(total / limit)
 
   return (
@@ -529,6 +568,8 @@ function AirportsContent() {
                     </CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
+                    {/* Offline indicator */}
+                    <OfflineIndicator showDetails={false} />
                     {selectedAirports.size > 0 && (
                       <Button
                         variant="destructive"
@@ -1160,6 +1201,9 @@ function AirportsContent() {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+
+            {/* Floating offline indicator */}
+            <FloatingOfflineIndicator />
           </div>
         </SidebarInset>
       </SidebarProvider>

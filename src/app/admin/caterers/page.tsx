@@ -83,9 +83,12 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { toast } from "sonner"
+import { Badge } from "@/components/ui/badge"
 
 import { API_BASE_URL } from "@/lib/api-config"
 import { apiCall, apiCallJson } from "@/lib/api-client"
+import { useCaterers } from "@/contexts/caterers-context"
+import { useOffline } from "@/contexts/offline-context"
 
 // Caterer data structure matching API response
 interface Caterer {
@@ -193,6 +196,12 @@ function CaterersContent() {
   // State for managing additional emails (friends)
   const [additionalEmails, setAdditionalEmails] = React.useState<string[]>([])
   const [newEmailInput, setNewEmailInput] = React.useState("")
+
+  // Caterers context for offline support
+  const { createCaterer, updateCaterer } = useCaterers()
+
+  // Offline status
+  const { isOnline } = useOffline()
 
   const form = useForm<CatererFormValues>({
     resolver: zodResolver(catererSchema),
@@ -425,21 +434,18 @@ function CaterersContent() {
     form.setValue("additional_emails", newEmails)
   }
 
-  // Handle save (create or update)
+  // Handle save (create or update) with offline support
   const handleSave = async (values: CatererFormValues) => {
     try {
-      const url = editingCaterer
-        ? `/caterers/${editingCaterer.id}`
-        : `/caterers`
-
-      const method = editingCaterer ? "PUT" : "POST"
-
       // Prepare body - only include non-empty optional fields
       const body: any = {
         caterer_name: values.caterer_name,
         caterer_number: values.caterer_number,
+        caterer_email: null,
+        airport_code_iata: null,
+        airport_code_icao: null,
       }
-      
+
       if (values.caterer_email && values.caterer_email.trim()) {
         body.caterer_email = values.caterer_email.trim()
       }
@@ -449,21 +455,35 @@ function CaterersContent() {
       if (values.airport_code_icao && values.airport_code_icao.trim()) {
         body.airport_code_icao = values.airport_code_icao.trim().toUpperCase()
       }
-      if (values.time_zone && values.time_zone.trim()) {
-        body.time_zone = values.time_zone.trim()
-      }
       if (additionalEmails.length > 0) {
         body.additional_emails = additionalEmails
       }
 
-      const data: Caterer = await apiCallJson<Caterer>(url, {
-        method,
-        body: JSON.stringify(body),
-      })
-      
-      toast.success(editingCaterer ? "Caterer updated" : "Caterer created", {
-        description: `${data.caterer_name} has been ${editingCaterer ? "updated" : "created"} successfully.`,
-      })
+      let result: Caterer | null = null
+
+      if (editingCaterer) {
+        // Update existing caterer using context
+        result = await updateCaterer(editingCaterer.id, body)
+      } else {
+        // Create new caterer using context
+        result = await createCaterer(body)
+      }
+
+      if (!result) {
+        throw new Error("Failed to save caterer")
+      }
+
+      // Show appropriate toast based on offline status
+      const isOfflineCreated = result.id < 0
+      if (isOfflineCreated) {
+        toast.success(editingCaterer ? "Caterer saved offline" : "Caterer created offline", {
+          description: `${result.caterer_name} will sync when online`,
+        })
+      } else {
+        toast.success(editingCaterer ? "Caterer updated" : "Caterer created", {
+          description: `${result.caterer_name} has been ${editingCaterer ? "updated" : "created"} successfully.`,
+        })
+      }
 
       setDialogOpen(false)
       setEditingCaterer(null)
@@ -718,11 +738,21 @@ function CaterersContent() {
               <CardHeader className="pb-4">
                 <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <CardTitle className="text-2xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-                      Caterer Management
-                    </CardTitle>
+                    <div className="flex items-center gap-3">
+                      <CardTitle className="text-2xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+                        Caterer Management
+                      </CardTitle>
+                      {!isOnline && (
+                        <Badge variant="outline" className="rounded-full px-3 py-1 text-xs font-medium border-amber-500/30 bg-amber-500/5 text-amber-600 dark:text-amber-400">
+                          <span className="mr-1.5 h-2 w-2 rounded-full bg-amber-500 inline-block" />
+                          Offline
+                        </Badge>
+                      )}
+                    </div>
                     <CardDescription className="mt-1.5">
-                      Manage caterers, contact information, and airport codes
+                      {isOnline
+                        ? "Manage caterers, contact information, and airport codes"
+                        : "Viewing cached caterers. Changes will sync when online."}
                     </CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
