@@ -24,6 +24,8 @@ interface Client {
   airport_code: string | null
   fbo_name: string | null
   additional_emails?: string[]
+  created_at: string
+  updated_at: string
 }
 
 interface ClientsResponse {
@@ -44,7 +46,7 @@ type ClientsContextType = {
   fetchClients: (search?: string) => Promise<void>
   getClientById: (id: number) => Client | undefined
   getClientOptionById: (id: number) => ClientOption | undefined
-  createClient: (clientData: Omit<Client, "id">) => Promise<Client | null>
+  createClient: (clientData: Omit<Client, "id" | "created_at" | "updated_at">) => Promise<Client | null>
   updateClient: (id: number, updates: Partial<Client>) => Promise<Client | null>
 }
 
@@ -182,7 +184,7 @@ export function ClientsProvider({ children }: { children: React.ReactNode }) {
     return clientOptions.find(opt => opt.value === id.toString())
   }, [clientOptions])
 
-  const createClient = React.useCallback(async (clientData: Omit<Client, "id">): Promise<Client | null> => {
+  const createClient = React.useCallback(async (clientData: Omit<Client, "id" | "created_at" | "updated_at">): Promise<Client | null> => {
     try {
       if (isOnline) {
         // Create on server

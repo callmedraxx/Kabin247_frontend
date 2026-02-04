@@ -253,7 +253,10 @@ interface Client {
   contact_number: string | null
   full_address: string | null
   airport_code: string | null
+  fbo_name: string | null
   additional_emails?: string[]
+  created_at: string
+  updated_at: string
 }
 
 interface Caterer {

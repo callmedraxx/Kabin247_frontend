@@ -103,6 +103,8 @@ interface Client {
   full_address: string
   email: string | null
   contact_number: string | null
+  airport_code: string | null
+  fbo_name: string | null
   additional_emails?: string[]
   created_at: string
   updated_at: string

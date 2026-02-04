@@ -148,6 +148,8 @@ export interface Client {
   airport_code: string | null
   fbo_name: string | null
   additional_emails?: string[]
+  created_at: string
+  updated_at: string
 }
 
 // Caterer for caching
@@ -158,7 +160,10 @@ export interface Caterer {
   caterer_email: string | null
   airport_code_iata: string | null
   airport_code_icao: string | null
+  time_zone: string | null
   additional_emails?: string[]
+  created_at: string
+  updated_at: string
 }
 
 // Airport for caching

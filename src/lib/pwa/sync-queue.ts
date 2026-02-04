@@ -122,13 +122,16 @@ export interface CachedClient extends Client {
 }
 
 export async function createOfflineClient(
-  clientData: Omit<Client, "id">
+  clientData: Omit<Client, "id" | "created_at" | "updated_at">
 ): Promise<CachedClient> {
   const localId = generateTempId()
 
+  const now = new Date().toISOString()
   const cachedClient: CachedClient = {
     ...clientData,
     id: 0, // Will be assigned by server
+    created_at: now,
+    updated_at: now,
     _localId: localId,
     _syncStatus: "pending_create",
     _version: 1,
@@ -192,13 +195,16 @@ export interface CachedCaterer extends Caterer {
 }
 
 export async function createOfflineCaterer(
-  catererData: Omit<Caterer, "id">
+  catererData: Omit<Caterer, "id" | "created_at" | "updated_at">
 ): Promise<CachedCaterer> {
   const localId = generateTempId()
+  const now = new Date().toISOString()
 
   const cachedCaterer: CachedCaterer = {
     ...catererData,
     id: 0,
+    created_at: now,
+    updated_at: now,
     _localId: localId,
     _syncStatus: "pending_create",
     _version: 1,

@@ -21,7 +21,10 @@ interface Caterer {
   caterer_email: string | null
   airport_code_iata: string | null
   airport_code_icao: string | null
+  time_zone: string | null
   additional_emails?: string[]
+  created_at: string
+  updated_at: string
 }
 
 interface CaterersResponse {
@@ -43,7 +46,7 @@ type CaterersContextType = {
   fetchCaterers: (search?: string) => Promise<void>
   getCatererById: (id: number) => Caterer | undefined
   getCatererOptionById: (id: number) => CatererOption | undefined
-  createCaterer: (catererData: Omit<Caterer, "id">) => Promise<Caterer | null>
+  createCaterer: (catererData: Omit<Caterer, "id" | "created_at" | "updated_at">) => Promise<Caterer | null>
   updateCaterer: (id: number, updates: Partial<Caterer>) => Promise<Caterer | null>
 }
 
@@ -181,7 +184,7 @@ export function CaterersProvider({ children }: { children: React.ReactNode }) {
     return catererOptions.find(opt => opt.value === id.toString())
   }, [catererOptions])
 
-  const createCaterer = React.useCallback(async (catererData: Omit<Caterer, "id">): Promise<Caterer | null> => {
+  const createCaterer = React.useCallback(async (catererData: Omit<Caterer, "id" | "created_at" | "updated_at">): Promise<Caterer | null> => {
     try {
       if (isOnline) {
         const response = await apiCallJson<{ caterer: Caterer }>("/caterers", {
