@@ -69,6 +69,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
   Clock,
 } from "lucide-react"
 import { useForm } from "react-hook-form"
@@ -907,7 +909,11 @@ function CaterersContent() {
                               Caterer Number
                             </div>
                             {sortBy === "caterer_number" && (
-                              <ArrowUpDown className="ml-2 h-3 w-3" />
+                              sortOrder === "asc" ? (
+                                <ArrowUp className="ml-2 h-3 w-3" />
+                              ) : (
+                                <ArrowDown className="ml-2 h-3 w-3" />
+                              )
                             )}
                           </Button>
                         </TableHead>

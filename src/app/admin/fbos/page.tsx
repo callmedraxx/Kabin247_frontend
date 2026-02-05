@@ -68,6 +68,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
   Plane,
 } from "lucide-react"
 import { useForm } from "react-hook-form"
@@ -704,7 +706,11 @@ function FBOsContent() {
                               FBO Name
                             </div>
                             {sortBy === "fbo_name" && (
-                              <ArrowUpDown className="ml-2 h-3 w-3" />
+                              sortOrder === "asc" ? (
+                                <ArrowUp className="ml-2 h-3 w-3" />
+                              ) : (
+                                <ArrowDown className="ml-2 h-3 w-3" />
+                              )
                             )}
                           </Button>
                         </TableHead>

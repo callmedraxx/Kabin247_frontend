@@ -64,6 +64,8 @@ interface FetchOrdersParams {
   fromDate?: string
   toDate?: string
   isArchived?: boolean
+  sortBy?: string
+  sortOrder?: "asc" | "desc"
 }
 
 interface CreateOrderData {
@@ -139,6 +141,8 @@ export function OrdersProvider({ children }: { children: React.ReactNode }) {
           if (params.toDate) queryParams.append("to_date", params.toDate)
           if (params.isArchived !== undefined)
             queryParams.append("is_archived", params.isArchived.toString())
+          if (params.sortBy) queryParams.append("sortBy", params.sortBy)
+          if (params.sortOrder) queryParams.append("sortOrder", params.sortOrder)
 
           const response = await apiCallJson<OrdersResponse>(
             `/orders?${queryParams.toString()}`
@@ -206,12 +210,45 @@ export function OrdersProvider({ children }: { children: React.ReactNode }) {
             )
           }
 
-          // Sort by delivery date descending
-          filtered.sort(
-            (a, b) =>
-              new Date(b.delivery_date).getTime() -
-              new Date(a.delivery_date).getTime()
-          )
+          // Sort by specified field or default to delivery_date descending
+          const sortBy = params.sortBy || "delivery_date"
+          const sortOrder = params.sortOrder || "desc"
+          
+          filtered.sort((a, b) => {
+            let aValue: any
+            let bValue: any
+            
+            // Get the values to compare based on sortBy field
+            switch (sortBy) {
+              case "order_number":
+                aValue = a.order_number || ""
+                bValue = b.order_number || ""
+                break
+              case "client_name":
+                aValue = a.client?.full_name || ""
+                bValue = b.client?.full_name || ""
+                break
+              case "delivery_date":
+                aValue = new Date(a.delivery_date || "").getTime()
+                bValue = new Date(b.delivery_date || "").getTime()
+                break
+              case "created_at":
+                aValue = new Date(a.created_at || "").getTime()
+                bValue = new Date(b.created_at || "").getTime()
+                break
+              default:
+                // Default to delivery_date
+                aValue = new Date(a.delivery_date || "").getTime()
+                bValue = new Date(b.delivery_date || "").getTime()
+            }
+            
+            // Compare values based on sort order
+            if (sortOrder === "asc") {
+              return aValue > bValue ? 1 : aValue < bValue ? -1 : 0
+            } else {
+              return aValue < bValue ? 1 : aValue > bValue ? -1 : 0
+            }
+          })
 
           // Apply pagination
           const page = params.page || 1

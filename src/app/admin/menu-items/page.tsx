@@ -75,6 +75,8 @@ import {
   CheckCircle2,
   Loader2,
   ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react"
@@ -1050,10 +1052,24 @@ function MenuItemsContent() {
                           />
                         </TableHead>
                         <TableHead className="font-semibold">
-                          <div className="flex items-center gap-2">
-                            <UtensilsCrossed className="h-4 w-4 text-muted-foreground" />
-                            Item Name
-                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 -ml-3 hover:bg-transparent"
+                            onClick={() => handleSort("item_name")}
+                          >
+                            <div className="flex items-center gap-2">
+                              <UtensilsCrossed className="h-4 w-4 text-muted-foreground" />
+                              Item Name
+                            </div>
+                            {sortBy === "item_name" && (
+                              sortOrder === "asc" ? (
+                                <ArrowUp className="ml-2 h-3 w-3" />
+                              ) : (
+                                <ArrowDown className="ml-2 h-3 w-3" />
+                              )
+                            )}
+                          </Button>
                         </TableHead>
                         <TableHead className="font-semibold">Description</TableHead>
                         <TableHead className="font-semibold">

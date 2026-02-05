@@ -115,7 +115,7 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Combobox } from "@/components/ui/combobox"
 import { toast } from "sonner"
-import { ChevronLeft, ChevronRight, ArrowUpDown } from "lucide-react"
+import { ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import { useFieldArray } from "react-hook-form"
 
 import { API_BASE_URL } from "@/lib/api-config"
@@ -902,6 +902,8 @@ function OrdersContent() {
         page,
         limit,
         isArchived: showArchived,
+        sortBy,
+        sortOrder,
       })
 
       // The context updates its own state, but we also need to sync local state
@@ -935,7 +937,7 @@ function OrdersContent() {
     } finally {
       setIsLoading(false)
     }
-  }, [searchQuery, statusFilter, page, limit, showArchived, fetchOrdersFromContext, isOnline])
+  }, [searchQuery, statusFilter, page, limit, showArchived, sortBy, sortOrder, fetchOrdersFromContext, isOnline])
 
   const { isAuthenticated, isLoading: authLoading, user } = useAuth()
   const isAdmin = user?.role === 'ADMIN'
@@ -2226,7 +2228,11 @@ function OrdersContent() {
                               Order #
                             </div>
                             {sortBy === "order_number" && (
-                              <ArrowUpDown className="ml-2 h-3 w-3" />
+                              sortOrder === "asc" ? (
+                                <ArrowUp className="ml-2 h-3 w-3" />
+                              ) : (
+                                <ArrowDown className="ml-2 h-3 w-3" />
+                              )
                             )}
                           </Button>
                         </TableHead>
@@ -2270,7 +2276,11 @@ function OrdersContent() {
                               Delivery
                             </div>
                             {sortBy === "delivery_date" && (
-                              <ArrowUpDown className="ml-2 h-3 w-3" />
+                              sortOrder === "asc" ? (
+                                <ArrowUp className="ml-2 h-3 w-3" />
+                              ) : (
+                                <ArrowDown className="ml-2 h-3 w-3" />
+                              )
                             )}
                           </Button>
                         </TableHead>

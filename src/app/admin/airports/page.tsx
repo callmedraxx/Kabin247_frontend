@@ -76,6 +76,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -705,7 +707,11 @@ function AirportsContent() {
                               Airport Name
                             </div>
                             {sortBy === "airport_name" && (
-                              <ArrowUpDown className="ml-2 h-3 w-3" />
+                              sortOrder === "asc" ? (
+                                <ArrowUp className="ml-2 h-3 w-3" />
+                              ) : (
+                                <ArrowDown className="ml-2 h-3 w-3" />
+                              )
                             )}
                           </Button>
                         </TableHead>

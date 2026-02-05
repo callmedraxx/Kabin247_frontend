@@ -79,7 +79,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "sonner"
-import { ChevronLeft, ChevronRight, ArrowUpDown } from "lucide-react"
+import { ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import { API_BASE_URL } from "@/lib/api-config"
 
 // Category data structure matching API response
@@ -875,7 +875,11 @@ function CategoriesContent() {
                           >
                             Display Order
                             {sortBy === "display_order" && (
-                              <ArrowUpDown className="ml-2 h-3 w-3" />
+                              sortOrder === "asc" ? (
+                                <ArrowUp className="ml-2 h-3 w-3" />
+                              ) : (
+                                <ArrowDown className="ml-2 h-3 w-3" />
+                              )
                             )}
                           </Button>
                         </TableHead>
