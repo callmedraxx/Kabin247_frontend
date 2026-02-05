@@ -187,18 +187,24 @@ export function CaterersProvider({ children }: { children: React.ReactNode }) {
   const createCaterer = React.useCallback(async (catererData: Omit<Caterer, "id" | "created_at" | "updated_at">): Promise<Caterer | null> => {
     try {
       if (isOnline) {
-        const response = await apiCallJson<{ caterer: Caterer }>("/caterers", {
+        // Backend returns the caterer directly, not wrapped in { caterer: Caterer }
+        const response = await apiCallJson<Caterer>("/caterers", {
           method: "POST",
           body: JSON.stringify(catererData),
         })
-        if (response.caterer) {
-          setCaterers(prev => [...prev, response.caterer])
-          setCatererOptions(prev => [...prev, ...formatCatererOptions([response.caterer])])
+        // Check if response is the caterer directly (has id and caterer_name)
+        const caterer = response && 'id' in response && 'caterer_name' in response 
+          ? response 
+          : (response as any)?.caterer
+
+        if (caterer) {
+          setCaterers(prev => [...prev, caterer])
+          setCatererOptions(prev => [...prev, ...formatCatererOptions([caterer])])
           if (isIndexedDBAvailable()) {
             const allCaterers = await getAllCaterers()
-            await saveCaterers([...allCaterers, response.caterer])
+            await saveCaterers([...allCaterers, caterer])
           }
-          return response.caterer
+          return caterer
         }
       } else if (isIndexedDBAvailable()) {
         const cached = await createOfflineCaterer(catererData)
@@ -217,18 +223,24 @@ export function CaterersProvider({ children }: { children: React.ReactNode }) {
   const updateCaterer = React.useCallback(async (id: number, updates: Partial<Caterer>): Promise<Caterer | null> => {
     try {
       if (isOnline && id > 0) {
-        const response = await apiCallJson<{ caterer: Caterer }>(`/caterers/${id}`, {
+        // Backend returns the caterer directly, not wrapped in { caterer: Caterer }
+        const response = await apiCallJson<Caterer>(`/caterers/${id}`, {
           method: "PUT",
           body: JSON.stringify(updates),
         })
-        if (response.caterer) {
-          setCaterers(prev => prev.map(c => c.id === id ? response.caterer : c))
-          setCatererOptions(formatCatererOptions(caterers.map(c => c.id === id ? response.caterer : c)))
+        // Check if response is the caterer directly (has id and caterer_name)
+        const caterer = response && 'id' in response && 'caterer_name' in response 
+          ? response 
+          : (response as any)?.caterer
+
+        if (caterer) {
+          setCaterers(prev => prev.map(c => c.id === id ? caterer : c))
+          setCatererOptions(formatCatererOptions(caterers.map(c => c.id === id ? caterer : c)))
           if (isIndexedDBAvailable()) {
             const allCaterers = await getAllCaterers()
-            await saveCaterers(allCaterers.map(c => c.id === id ? response.caterer : c))
+            await saveCaterers(allCaterers.map(c => c.id === id ? caterer : c))
           }
-          return response.caterer
+          return caterer
         }
       } else if (isIndexedDBAvailable()) {
         const updated = await updateOfflineCaterer(id, updates)

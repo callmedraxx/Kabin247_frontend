@@ -193,18 +193,24 @@ export function AirportsProvider({ children }: { children: React.ReactNode }) {
   const createAirport = React.useCallback(async (airportData: Omit<Airport, "id">): Promise<Airport | null> => {
     try {
       if (isOnline) {
-        const response = await apiCallJson<{ airport: Airport }>("/airports", {
+        // Backend returns the airport directly, not wrapped in { airport: Airport }
+        const response = await apiCallJson<Airport>("/airports", {
           method: "POST",
           body: JSON.stringify(airportData),
         })
-        if (response.airport) {
-          setAirports(prev => [...prev, response.airport])
-          setAirportOptions(prev => [...prev, ...formatAirportOptions([response.airport])])
+        // Check if response is the airport directly (has id and airport_name)
+        const airport = response && 'id' in response && 'airport_name' in response 
+          ? response 
+          : (response as any)?.airport
+
+        if (airport) {
+          setAirports(prev => [...prev, airport])
+          setAirportOptions(prev => [...prev, ...formatAirportOptions([airport])])
           if (isIndexedDBAvailable()) {
             const allAirports = await getAllAirports()
-            await saveAirports([...allAirports, response.airport])
+            await saveAirports([...allAirports, airport])
           }
-          return response.airport
+          return airport
         }
       } else if (isIndexedDBAvailable()) {
         const cached = await createOfflineAirport(airportData)
@@ -223,18 +229,24 @@ export function AirportsProvider({ children }: { children: React.ReactNode }) {
   const updateAirport = React.useCallback(async (id: number, updates: Partial<Airport>): Promise<Airport | null> => {
     try {
       if (isOnline && id > 0) {
-        const response = await apiCallJson<{ airport: Airport }>(`/airports/${id}`, {
+        // Backend returns the airport directly, not wrapped in { airport: Airport }
+        const response = await apiCallJson<Airport>(`/airports/${id}`, {
           method: "PUT",
           body: JSON.stringify(updates),
         })
-        if (response.airport) {
-          setAirports(prev => prev.map(a => a.id === id ? response.airport : a))
-          setAirportOptions(formatAirportOptions(airports.map(a => a.id === id ? response.airport : a)))
+        // Check if response is the airport directly (has id and airport_name)
+        const airport = response && 'id' in response && 'airport_name' in response 
+          ? response 
+          : (response as any)?.airport
+
+        if (airport) {
+          setAirports(prev => prev.map(a => a.id === id ? airport : a))
+          setAirportOptions(formatAirportOptions(airports.map(a => a.id === id ? airport : a)))
           if (isIndexedDBAvailable()) {
             const allAirports = await getAllAirports()
-            await saveAirports(allAirports.map(a => a.id === id ? response.airport : a))
+            await saveAirports(allAirports.map(a => a.id === id ? airport : a))
           }
-          return response.airport
+          return airport
         }
       } else if (isIndexedDBAvailable()) {
         const updated = await updateOfflineAirport(id, updates)

@@ -302,16 +302,22 @@ export function OrdersProvider({ children }: { children: React.ReactNode }) {
 
         // Fetch from server if online
         if (isOnline && typeof idOrLocalId === "number") {
-          const response = await apiCallJson<{ order: Order }>(
+          // Backend returns the order directly, not wrapped in { order: Order }
+          const response = await apiCallJson<Order>(
             `/orders/${idOrLocalId}`
           )
-          if (response.order) {
+          // Check if response is the order directly (has id and order_number)
+          const order = response && 'id' in response && 'order_number' in response 
+            ? response 
+            : (response as any)?.order
+
+          if (order) {
             // Update cache
             if (isOfflineCapable) {
-              await cacheOrdersFromServer([response.order])
+              await cacheOrdersFromServer([order])
             }
             return {
-              ...response.order,
+              ...order,
               _syncStatus: "synced",
             }
           }
@@ -332,18 +338,24 @@ export function OrdersProvider({ children }: { children: React.ReactNode }) {
       try {
         if (isOnline) {
           // Create on server
-          const response = await apiCallJson<{ order: Order }>("/orders", {
+          // Backend returns the order directly, not wrapped in { order: Order }
+          const response = await apiCallJson<Order>("/orders", {
             method: "POST",
             body: JSON.stringify(orderData),
           })
 
-          if (response.order) {
+          // Check if response is the order directly (has id and order_number)
+          const order = response && 'id' in response && 'order_number' in response 
+            ? response 
+            : (response as any)?.order
+
+          if (order) {
             // Cache the new order
             if (isOfflineCapable) {
-              await cacheOrdersFromServer([response.order])
+              await cacheOrdersFromServer([order])
             }
             return {
-              ...response.order,
+              ...order,
               _syncStatus: "synced",
             }
           }
@@ -391,7 +403,8 @@ export function OrdersProvider({ children }: { children: React.ReactNode }) {
 
         if (isOnline && cached && cached._syncStatus === "synced") {
           // Update on server
-          const response = await apiCallJson<{ order: Order }>(
+          // Backend returns the order directly, not wrapped in { order: Order }
+          const response = await apiCallJson<Order>(
             `/orders/${cached.id}`,
             {
               method: "PUT",
@@ -399,13 +412,18 @@ export function OrdersProvider({ children }: { children: React.ReactNode }) {
             }
           )
 
-          if (response.order) {
+          // Check if response is the order directly (has id and order_number)
+          const order = response && 'id' in response && 'order_number' in response 
+            ? response 
+            : (response as any)?.order
+
+          if (order) {
             // Update cache
             if (isOfflineCapable) {
-              await cacheOrdersFromServer([response.order])
+              await cacheOrdersFromServer([order])
             }
             return {
-              ...response.order,
+              ...order,
               _syncStatus: "synced",
             }
           }

@@ -204,21 +204,27 @@ export function MenuItemsProvider({ children }: { children: React.ReactNode }) {
   const createMenuItem = React.useCallback(async (menuItemData: Omit<MenuItem, "id">): Promise<MenuItem | null> => {
     try {
       if (isOnline) {
-        const response = await apiCallJson<{ menu_item: MenuItem }>("/menu-items", {
+        // Backend returns the menu item directly, not wrapped in { menu_item: MenuItem }
+        const response = await apiCallJson<MenuItem>("/menu-items", {
           method: "POST",
           body: JSON.stringify(menuItemData),
         })
-        if (response.menu_item) {
-          setMenuItems(prev => [...prev, response.menu_item])
+        // Check if response is the menu item directly (has id and item_name)
+        const menuItem = response && 'id' in response && 'item_name' in response 
+          ? response 
+          : (response as any)?.menu_item
+
+        if (menuItem) {
+          setMenuItems(prev => [...prev, menuItem])
           setMenuItemOptions(prev => [...prev, {
-            value: response.menu_item.id.toString(),
-            label: response.menu_item.item_name,
+            value: menuItem.id.toString(),
+            label: menuItem.item_name,
           }])
           if (isIndexedDBAvailable()) {
             const allMenuItems = await getAllMenuItems()
-            await saveMenuItems([...allMenuItems, response.menu_item])
+            await saveMenuItems([...allMenuItems, menuItem])
           }
-          return response.menu_item
+          return menuItem
         }
       } else if (isIndexedDBAvailable()) {
         const cached = await createOfflineMenuItem(menuItemData)
@@ -240,22 +246,28 @@ export function MenuItemsProvider({ children }: { children: React.ReactNode }) {
   const updateMenuItem = React.useCallback(async (id: number, updates: Partial<MenuItem>): Promise<MenuItem | null> => {
     try {
       if (isOnline && id > 0) {
-        const response = await apiCallJson<{ menu_item: MenuItem }>(`/menu-items/${id}`, {
+        // Backend returns the menu item directly, not wrapped in { menu_item: MenuItem }
+        const response = await apiCallJson<MenuItem>(`/menu-items/${id}`, {
           method: "PUT",
           body: JSON.stringify(updates),
         })
-        if (response.menu_item) {
-          setMenuItems(prev => prev.map(m => m.id === id ? response.menu_item : m))
+        // Check if response is the menu item directly (has id and item_name)
+        const menuItem = response && 'id' in response && 'item_name' in response 
+          ? response 
+          : (response as any)?.menu_item
+
+        if (menuItem) {
+          setMenuItems(prev => prev.map(m => m.id === id ? menuItem : m))
           setMenuItemOptions(prev => prev.map(opt =>
             opt.value === id.toString()
-              ? { ...opt, label: response.menu_item.item_name }
+              ? { ...opt, label: menuItem.item_name }
               : opt
           ))
           if (isIndexedDBAvailable()) {
             const allMenuItems = await getAllMenuItems()
-            await saveMenuItems(allMenuItems.map(m => m.id === id ? response.menu_item : m))
+            await saveMenuItems(allMenuItems.map(m => m.id === id ? menuItem : m))
           }
-          return response.menu_item
+          return menuItem
         }
       } else if (isIndexedDBAvailable()) {
         const updated = await updateOfflineMenuItem(id, updates)

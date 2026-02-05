@@ -183,18 +183,24 @@ export function FBOsProvider({ children }: { children: React.ReactNode }) {
   const createFBO = React.useCallback(async (fboData: Omit<FBO, "id">): Promise<FBO | null> => {
     try {
       if (isOnline) {
-        const response = await apiCallJson<{ fbo: FBO }>("/fbos", {
+        // Backend returns the FBO directly, not wrapped in { fbo: FBO }
+        const response = await apiCallJson<FBO>("/fbos", {
           method: "POST",
           body: JSON.stringify(fboData),
         })
-        if (response.fbo) {
-          setFBOs(prev => [...prev, response.fbo])
-          setFBOOptions(prev => [...prev, ...formatFBOOptions([response.fbo])])
+        // Check if response is the FBO directly (has id and fbo_name)
+        const fbo = response && 'id' in response && 'fbo_name' in response 
+          ? response 
+          : (response as any)?.fbo
+
+        if (fbo) {
+          setFBOs(prev => [...prev, fbo])
+          setFBOOptions(prev => [...prev, ...formatFBOOptions([fbo])])
           if (isIndexedDBAvailable()) {
             const allFBOs = await getAllFBOs()
-            await saveFBOs([...allFBOs, response.fbo])
+            await saveFBOs([...allFBOs, fbo])
           }
-          return response.fbo
+          return fbo
         }
       } else if (isIndexedDBAvailable()) {
         const cached = await createOfflineFBO(fboData)
@@ -213,18 +219,24 @@ export function FBOsProvider({ children }: { children: React.ReactNode }) {
   const updateFBO = React.useCallback(async (id: number, updates: Partial<FBO>): Promise<FBO | null> => {
     try {
       if (isOnline && id > 0) {
-        const response = await apiCallJson<{ fbo: FBO }>(`/fbos/${id}`, {
+        // Backend returns the FBO directly, not wrapped in { fbo: FBO }
+        const response = await apiCallJson<FBO>(`/fbos/${id}`, {
           method: "PUT",
           body: JSON.stringify(updates),
         })
-        if (response.fbo) {
-          setFBOs(prev => prev.map(f => f.id === id ? response.fbo : f))
-          setFBOOptions(formatFBOOptions(fbos.map(f => f.id === id ? response.fbo : f)))
+        // Check if response is the FBO directly (has id and fbo_name)
+        const fbo = response && 'id' in response && 'fbo_name' in response 
+          ? response 
+          : (response as any)?.fbo
+
+        if (fbo) {
+          setFBOs(prev => prev.map(f => f.id === id ? fbo : f))
+          setFBOOptions(formatFBOOptions(fbos.map(f => f.id === id ? fbo : f)))
           if (isIndexedDBAvailable()) {
             const allFBOs = await getAllFBOs()
-            await saveFBOs(allFBOs.map(f => f.id === id ? response.fbo : f))
+            await saveFBOs(allFBOs.map(f => f.id === id ? fbo : f))
           }
-          return response.fbo
+          return fbo
         }
       } else if (isIndexedDBAvailable()) {
         const updated = await updateOfflineFBO(id, updates)

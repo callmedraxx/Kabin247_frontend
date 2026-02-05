@@ -188,23 +188,29 @@ export function ClientsProvider({ children }: { children: React.ReactNode }) {
     try {
       if (isOnline) {
         // Create on server
-        const response = await apiCallJson<{ client: Client }>("/clients", {
+        // Backend returns the client directly, not wrapped in { client: Client }
+        const response = await apiCallJson<Client>("/clients", {
           method: "POST",
           body: JSON.stringify(clientData),
         })
-        if (response.client) {
+        // Check if response is the client directly (has id and full_name)
+        const client = response && 'id' in response && 'full_name' in response 
+          ? response 
+          : (response as any)?.client
+
+        if (client) {
           // Update local state
-          setClients(prev => [...prev, response.client])
+          setClients(prev => [...prev, client])
           setClientOptions(prev => [...prev, {
-            value: response.client.id.toString(),
-            label: response.client.full_name,
+            value: client.id.toString(),
+            label: client.full_name,
           }])
           // Cache to IndexedDB
           if (isIndexedDBAvailable()) {
             const allClients = await getAllClients()
-            await saveClients([...allClients, response.client])
+            await saveClients([...allClients, client])
           }
-          return response.client
+          return client
         }
       } else if (isIndexedDBAvailable()) {
         // Create offline
@@ -228,22 +234,28 @@ export function ClientsProvider({ children }: { children: React.ReactNode }) {
     try {
       if (isOnline && id > 0) {
         // Update on server
-        const response = await apiCallJson<{ client: Client }>(`/clients/${id}`, {
+        // Backend returns the client directly, not wrapped in { client: Client }
+        const response = await apiCallJson<Client>(`/clients/${id}`, {
           method: "PUT",
           body: JSON.stringify(updates),
         })
-        if (response.client) {
-          setClients(prev => prev.map(c => c.id === id ? response.client : c))
+        // Check if response is the client directly (has id and full_name)
+        const client = response && 'id' in response && 'full_name' in response 
+          ? response 
+          : (response as any)?.client
+
+        if (client) {
+          setClients(prev => prev.map(c => c.id === id ? client : c))
           setClientOptions(prev => prev.map(opt =>
             opt.value === id.toString()
-              ? { ...opt, label: response.client.full_name }
+              ? { ...opt, label: client.full_name }
               : opt
           ))
           if (isIndexedDBAvailable()) {
             const allClients = await getAllClients()
-            await saveClients(allClients.map(c => c.id === id ? response.client : c))
+            await saveClients(allClients.map(c => c.id === id ? client : c))
           }
-          return response.client
+          return client
         }
       } else if (isIndexedDBAvailable()) {
         // Update offline
