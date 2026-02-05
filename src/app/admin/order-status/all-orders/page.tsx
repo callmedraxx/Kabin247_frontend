@@ -96,6 +96,8 @@ import {
   ChevronUp,
   Archive,
   ArchiveRestore,
+  Lock,
+  LockOpen,
 } from "lucide-react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -326,6 +328,7 @@ interface Order {
   airport_details?: OrderAirport
   fbo?: OrderFBO
   is_archived?: boolean
+  is_price_locked?: boolean
   created_at: string
   updated_at: string
   completed_at?: string | null
@@ -531,6 +534,7 @@ function OrdersContent() {
   const [statusFilter, setStatusFilter] = React.useState<OrderStatus | "all">("all")
   const [showArchived, setShowArchived] = React.useState(false)
   const [isArchiving, setIsArchiving] = React.useState(false)
+  const [togglingPriceLock, setTogglingPriceLock] = React.useState<number | null>(null)
   const [isLoading, setIsLoading] = React.useState(true)
   const [isDeleting, setIsDeleting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -1710,6 +1714,34 @@ function OrdersContent() {
     }
   }
 
+  // Handle price lock toggle
+  const handlePriceLockToggle = async (order: Order) => {
+    const newLockState = !order.is_price_locked
+    setTogglingPriceLock(order.id)
+    try {
+      await apiCallJson(`/orders/${order.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ is_price_locked: newLockState }),
+      })
+
+      // Update local state immediately for responsive UI
+      setOrders(prev => prev.map(o =>
+        o.id === order.id ? { ...o, is_price_locked: newLockState } : o
+      ))
+
+      toast.success(newLockState ? "Price locked" : "Price unlocked", {
+        description: `Order ${order.order_number} price is now ${newLockState ? "locked - changes to prices will show a warning" : "unlocked"}.`,
+      })
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to update price lock"
+      toast.error("Error updating price lock", {
+        description: errorMessage,
+      })
+    } finally {
+      setTogglingPriceLock(null)
+    }
+  }
+
   // Handle bulk delete
   const handleBulkDelete = async () => {
     if (selectedOrders.size === 0) return
@@ -2258,6 +2290,11 @@ function OrdersContent() {
                             Type
                           </div>
                         </TableHead>
+                        <TableHead className="font-semibold w-20 text-center">
+                          <div className="flex items-center justify-center gap-1" title="Price locked - agreed with client">
+                            <Lock className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                        </TableHead>
                         <TableHead className="w-12 text-right font-semibold">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -2453,11 +2490,11 @@ function OrdersContent() {
                             </TableCell>
                             <TableCell>
                               {order.order_type ? (
-                                <Badge 
-                                  variant="outline" 
+                                <Badge
+                                  variant="outline"
                                   className={`text-xs font-mono ${
-                                    order.order_type === "QE" 
-                                      ? "bg-blue-500/10 text-blue-600 border-blue-500/20" 
+                                    order.order_type === "QE"
+                                      ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
                                       : order.order_type === "Serv"
                                       ? "bg-purple-500/10 text-purple-600 border-purple-500/20"
                                       : "bg-amber-500/10 text-amber-600 border-amber-500/20"
@@ -2468,6 +2505,26 @@ function OrdersContent() {
                               ) : (
                                 <span className="text-xs text-muted-foreground">—</span>
                               )}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <button
+                                onClick={() => handlePriceLockToggle(order)}
+                                disabled={togglingPriceLock === order.id}
+                                className={`p-1.5 rounded-md transition-colors ${
+                                  order.is_price_locked
+                                    ? "bg-amber-500/20 text-amber-600 hover:bg-amber-500/30"
+                                    : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                                }`}
+                                title={order.is_price_locked ? "Price locked - click to unlock" : "Click to lock price (mark as quoted)"}
+                              >
+                                {togglingPriceLock === order.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : order.is_price_locked ? (
+                                  <Lock className="h-4 w-4" />
+                                ) : (
+                                  <LockOpen className="h-4 w-4" />
+                                )}
+                              </button>
                             </TableCell>
                             <TableCell>
                               <DropdownMenu>

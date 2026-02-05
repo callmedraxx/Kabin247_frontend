@@ -28,6 +28,7 @@ const navStructure = [
       { title: "Add-on items", url: "/admin/addon-items" },
       { title: "Categories", url: "/admin/categories" },
       { title: "Tax and charges", url: "/admin/tax-and-charges" },
+      { title: "Delivery fees", url: "/admin/delivery-fees" },
       { title: "Stock and Inventory", url: "/admin/stock-inventory" },
     ],
   },

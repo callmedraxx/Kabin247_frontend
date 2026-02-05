@@ -851,15 +851,18 @@ function POSContent() {
   // Track items with manually edited prices (by index)
   const [manuallyEditedPrices, setManuallyEditedPrices] = React.useState<Set<number>>(new Set())
 
+  // Track if delivery fee was manually edited
+  const [deliveryFeeManuallyEdited, setDeliveryFeeManuallyEdited] = React.useState(false)
+
   // Recalculate prices when caterer changes (skip manually edited prices)
   React.useEffect(() => {
     if (!selectedCaterer) return
-    
+
     const currentItems = form.getValues("items")
     currentItems.forEach((item, index) => {
       // Skip items with manually edited prices
       if (manuallyEditedPrices.has(index)) return
-      
+
       if (item.itemName) {
         const menuItemId = parseInt(item.itemName)
         if (!isNaN(menuItemId)) {
@@ -874,6 +877,29 @@ function POSContent() {
       }
     })
   }, [selectedCaterer, getMenuItemById, form, manuallyEditedPrices])
+
+  // Auto-fill delivery fee based on caterer and airport combination
+  React.useEffect(() => {
+    // Only auto-fill if not manually edited
+    if (deliveryFeeManuallyEdited) return
+    if (!selectedCaterer || !selectedAirport) return
+
+    const fetchDeliveryFee = async () => {
+      try {
+        const response = await apiCallJson<{ delivery_fee: number | null }>(
+          `/caterer-airport-fees/lookup?caterer_id=${selectedCaterer}&airport_id=${selectedAirport}`
+        )
+        if (response.delivery_fee !== null && response.delivery_fee !== undefined) {
+          form.setValue("deliveryFee", response.delivery_fee.toString(), { shouldValidate: false })
+        }
+      } catch (err) {
+        // Silently fail - fee lookup is optional
+        console.log("No delivery fee found for caterer-airport combination")
+      }
+    }
+
+    fetchDeliveryFee()
+  }, [selectedCaterer, selectedAirport, deliveryFeeManuallyEdited, form])
 
   const priorityBadgeClass = React.useMemo(() => {
     switch (watchedPriority) {
@@ -1825,7 +1851,11 @@ function POSContent() {
     // Clear draft first, before resetting form
     clearDraft()
     skipNextDraftSave.current = true
-    
+
+    // Reset manual edit tracking
+    setManuallyEditedPrices(new Set())
+    setDeliveryFeeManuallyEdited(false)
+
     // Reset form to default values (matching form defaultValues)
     form.reset({
       order_number: "",
@@ -1864,7 +1894,7 @@ function POSContent() {
       orderType: undefined,
       paymentMethod: undefined,
     })
-    
+
     toast.success("Form cleared", {
       description: "All form data has been cleared.",
     })
@@ -1962,11 +1992,15 @@ function POSContent() {
         })
       }
       setPreviewOpen(false)
-      
+
       // Clear draft first, before resetting form
       clearDraft()
       skipNextDraftSave.current = true
-      
+
+      // Reset manual edit tracking
+      setManuallyEditedPrices(new Set())
+      setDeliveryFeeManuallyEdited(false)
+
       // Reset form to default values (matching form defaultValues)
       form.reset({
         order_number: "",
@@ -2005,7 +2039,7 @@ function POSContent() {
         orderType: undefined,
         paymentMethod: undefined,
       })
-      
+
       // Reset flag after a short delay to allow form reset to complete
       setTimeout(() => {
         skipNextDraftSave.current = false
@@ -2317,7 +2351,17 @@ function POSContent() {
                                     <FormControl>
                                       <div className="relative">
                                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
-                                        <Input type="number" step="0.01" placeholder="0.00" className="pl-7" {...field} />
+                                        <Input
+                                          type="number"
+                                          step="0.01"
+                                          placeholder="0.00"
+                                          className="pl-7"
+                                          {...field}
+                                          onChange={(e) => {
+                                            field.onChange(e)
+                                            setDeliveryFeeManuallyEdited(true)
+                                          }}
+                                        />
                                       </div>
                                     </FormControl>
                                     <FormMessage />

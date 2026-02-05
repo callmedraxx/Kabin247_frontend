@@ -86,6 +86,8 @@ import {
   UtensilsCrossed,
   Archive,
   ArchiveRestore,
+  Lock,
+  LockOpen,
 } from "lucide-react"
 import { useForm, useFieldArray } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -233,6 +235,7 @@ interface Order {
   caterer_details?: OrderCaterer
   airport_details?: OrderAirport
   is_archived?: boolean
+  is_price_locked?: boolean
   created_at: string
   updated_at: string
   completed_at?: string | null
@@ -316,6 +319,7 @@ function OrdersContent() {
   const [statusFilter, setStatusFilter] = React.useState<OrderStatus | "all">("all")
   const [showArchived, setShowArchived] = React.useState(false)
   const [isArchiving, setIsArchiving] = React.useState(false)
+  const [togglingPriceLock, setTogglingPriceLock] = React.useState<number | null>(null)
   const [isLoading, setIsLoading] = React.useState(true)
   const [isDeleting, setIsDeleting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -838,6 +842,34 @@ function OrdersContent() {
     }
   }
 
+  // Handle price lock toggle
+  const handlePriceLockToggle = async (order: Order) => {
+    const newLockState = !order.is_price_locked
+    setTogglingPriceLock(order.id)
+    try {
+      await apiCallJson(`/orders/${order.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ is_price_locked: newLockState }),
+      })
+
+      // Update local state immediately for responsive UI
+      setOrders(prev => prev.map(o =>
+        o.id === order.id ? { ...o, is_price_locked: newLockState } : o
+      ))
+
+      toast.success(newLockState ? "Price locked" : "Price unlocked", {
+        description: `Order ${order.order_number} price is now ${newLockState ? "locked" : "unlocked"}.`,
+      })
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to update price lock"
+      toast.error("Error updating price lock", {
+        description: errorMessage,
+      })
+    } finally {
+      setTogglingPriceLock(null)
+    }
+  }
+
   // Handle status update
   const handleStatusUpdate = (order: Order) => {
     setOrderForStatusUpdate(order)
@@ -1279,6 +1311,12 @@ function OrdersContent() {
                         <TableHead className="font-semibold">
                           <div className="flex items-center gap-2">
                             Type
+                          </div>
+                        </TableHead>
+                        <TableHead className="font-semibold w-20 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <Lock className="h-4 w-4 text-muted-foreground" />
+                            Locked
                           </div>
                         </TableHead>
                         <TableHead className="font-semibold">

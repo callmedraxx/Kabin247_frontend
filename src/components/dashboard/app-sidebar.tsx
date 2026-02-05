@@ -102,6 +102,10 @@ const navMain = [
         url: "/admin/tax-and-charges",
       },
       {
+        title: "Delivery fees",
+        url: "/admin/delivery-fees",
+      },
+      {
         title: "Stock and Inventory",
         url: "/admin/stock-inventory",
       },
