@@ -24,15 +24,9 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
+import { Combobox } from "@/components/ui/combobox"
 import {
   Plus,
   Edit,
@@ -51,13 +45,16 @@ import { apiCallJson } from "@/lib/api-client"
 interface Caterer {
   id: number
   caterer_name: string
+  caterer_number?: string
+  airport_code_iata?: string | null
+  airport_code_icao?: string | null
 }
 
 interface Airport {
   id: number
   airport_name: string
-  airport_code_iata?: string
-  airport_code_icao?: string
+  airport_code_iata?: string | null
+  airport_code_icao?: string | null
 }
 
 interface CatererAirportFee {
@@ -69,11 +66,63 @@ interface CatererAirportFee {
   airport_name?: string
 }
 
+type ComboboxOption = {
+  value: string
+  label: string
+  searchText?: string
+}
+
+// Format caterer options with airport codes (like POS page)
+function formatCatererOptions(caterers: Caterer[]): ComboboxOption[] {
+  return caterers.map((caterer) => {
+    const airportCodes = [
+      caterer.airport_code_iata,
+      caterer.airport_code_icao,
+    ].filter(Boolean).join("/")
+
+    let label = ""
+    if (airportCodes) {
+      label = `${airportCodes} - ${caterer.caterer_name}`
+    } else {
+      label = caterer.caterer_name
+    }
+
+    return {
+      value: caterer.id.toString(),
+      label,
+      searchText: `${caterer.caterer_name} ${airportCodes} ${caterer.caterer_number || ""}`.toLowerCase(),
+    }
+  })
+}
+
+// Format airport options with codes
+function formatAirportOptions(airports: Airport[]): ComboboxOption[] {
+  return airports.map((airport) => {
+    const codes = [
+      airport.airport_code_icao,
+      airport.airport_code_iata,
+    ].filter(Boolean).join("/")
+
+    let label = airport.airport_name
+    if (codes) {
+      label = `${airport.airport_name} (${codes})`
+    }
+
+    return {
+      value: airport.id.toString(),
+      label,
+      searchText: `${airport.airport_name} ${codes}`.toLowerCase(),
+    }
+  })
+}
+
 function DeliveryFeesContent() {
   const [fees, setFees] = React.useState<CatererAirportFee[]>([])
   const [caterers, setCaterers] = React.useState<Caterer[]>([])
   const [airports, setAirports] = React.useState<Airport[]>([])
   const [isLoading, setIsLoading] = React.useState(true)
+  const [isLoadingCaterers, setIsLoadingCaterers] = React.useState(false)
+  const [isLoadingAirports, setIsLoadingAirports] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState("")
   const [error, setError] = React.useState<string | null>(null)
 
@@ -90,6 +139,31 @@ function DeliveryFeesContent() {
   const [selectedAirport, setSelectedAirport] = React.useState<string>("")
   const [deliveryFeeAmount, setDeliveryFeeAmount] = React.useState("")
 
+  // Search states for comboboxes
+  const [catererSearch, setCatererSearch] = React.useState("")
+  const [airportSearch, setAirportSearch] = React.useState("")
+
+  // Format options for comboboxes
+  const catererOptions = React.useMemo(() => formatCatererOptions(caterers), [caterers])
+  const airportOptions = React.useMemo(() => formatAirportOptions(airports), [airports])
+
+  // Filter options based on search
+  const filteredCatererOptions = React.useMemo(() => {
+    if (!catererSearch.trim()) return catererOptions
+    const query = catererSearch.toLowerCase()
+    return catererOptions.filter((option) =>
+      option.searchText?.includes(query) || option.label.toLowerCase().includes(query)
+    )
+  }, [catererOptions, catererSearch])
+
+  const filteredAirportOptions = React.useMemo(() => {
+    if (!airportSearch.trim()) return airportOptions
+    const query = airportSearch.toLowerCase()
+    return airportOptions.filter((option) =>
+      option.searchText?.includes(query) || option.label.toLowerCase().includes(query)
+    )
+  }, [airportOptions, airportSearch])
+
   const fetchFees = async () => {
     setIsLoading(true)
     setError(null)
@@ -104,21 +178,37 @@ function DeliveryFeesContent() {
     }
   }
 
-  const fetchCaterers = async () => {
+  const fetchCaterers = async (search?: string) => {
+    setIsLoadingCaterers(true)
     try {
-      const data = await apiCallJson<{ caterers: Caterer[] }>("/caterers?limit=1000")
+      const params = new URLSearchParams()
+      if (search?.trim()) {
+        params.append("search", search.trim())
+      }
+      params.append("limit", "10000")
+      const data = await apiCallJson<{ caterers: Caterer[] }>(`/caterers?${params.toString()}`)
       setCaterers(data.caterers || [])
     } catch (err) {
       console.error("Failed to fetch caterers:", err)
+    } finally {
+      setIsLoadingCaterers(false)
     }
   }
 
-  const fetchAirports = async () => {
+  const fetchAirports = async (search?: string) => {
+    setIsLoadingAirports(true)
     try {
-      const data = await apiCallJson<{ airports: Airport[] }>("/airports?limit=1000")
+      const params = new URLSearchParams()
+      if (search?.trim()) {
+        params.append("search", search.trim())
+      }
+      params.append("limit", "10000")
+      const data = await apiCallJson<{ airports: Airport[] }>(`/airports?${params.toString()}`)
       setAirports(data.airports || [])
     } catch (err) {
       console.error("Failed to fetch airports:", err)
+    } finally {
+      setIsLoadingAirports(false)
     }
   }
 
@@ -143,6 +233,8 @@ function DeliveryFeesContent() {
     setSelectedCaterer("")
     setSelectedAirport("")
     setDeliveryFeeAmount("")
+    setCatererSearch("")
+    setAirportSearch("")
     setDialogOpen(true)
   }
 
@@ -151,6 +243,8 @@ function DeliveryFeesContent() {
     setSelectedCaterer(fee.caterer_id.toString())
     setSelectedAirport(fee.airport_id.toString())
     setDeliveryFeeAmount(fee.delivery_fee.toString())
+    setCatererSearch("")
+    setAirportSearch("")
     setDialogOpen(true)
   }
 
@@ -222,6 +316,15 @@ function DeliveryFeesContent() {
       setIsSaving(false)
     }
   }
+
+  // Get display labels for selected values
+  const selectedCatererLabel = React.useMemo(() => {
+    return catererOptions.find((o) => o.value === selectedCaterer)?.label || ""
+  }, [catererOptions, selectedCaterer])
+
+  const selectedAirportLabel = React.useMemo(() => {
+    return airportOptions.find((o) => o.value === selectedAirport)?.label || ""
+  }, [airportOptions, selectedAirport])
 
   return (
     <SidebarCategoryProvider>
@@ -387,43 +490,44 @@ function DeliveryFeesContent() {
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="caterer">Caterer</Label>
-                    <Select
-                      value={selectedCaterer}
-                      onValueChange={setSelectedCaterer}
-                      disabled={!!editingFee}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a caterer" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {caterers.map((caterer) => (
-                          <SelectItem key={caterer.id} value={caterer.id.toString()}>
-                            {caterer.caterer_name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label>Caterer</Label>
+                    {editingFee ? (
+                      <div className="h-11 px-3 flex items-center rounded-md border border-border/40 bg-muted/30 text-muted-foreground">
+                        {selectedCatererLabel || `Caterer #${editingFee.caterer_id}`}
+                      </div>
+                    ) : (
+                      <Combobox
+                        options={filteredCatererOptions}
+                        value={selectedCaterer}
+                        onValueChange={setSelectedCaterer}
+                        placeholder="Select caterer..."
+                        searchPlaceholder="Search caterers..."
+                        emptyMessage="No caterers found."
+                        onSearchChange={setCatererSearch}
+                        isLoading={isLoadingCaterers}
+                        allowDeselect={false}
+                      />
+                    )}
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="airport">Airport</Label>
-                    <Select
-                      value={selectedAirport}
-                      onValueChange={setSelectedAirport}
-                      disabled={!!editingFee}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select an airport" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {airports.map((airport) => (
-                          <SelectItem key={airport.id} value={airport.id.toString()}>
-                            {airport.airport_name}
-                            {airport.airport_code_icao && ` (${airport.airport_code_icao})`}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label>Airport</Label>
+                    {editingFee ? (
+                      <div className="h-11 px-3 flex items-center rounded-md border border-border/40 bg-muted/30 text-muted-foreground">
+                        {selectedAirportLabel || `Airport #${editingFee.airport_id}`}
+                      </div>
+                    ) : (
+                      <Combobox
+                        options={filteredAirportOptions}
+                        value={selectedAirport}
+                        onValueChange={setSelectedAirport}
+                        placeholder="Select airport..."
+                        searchPlaceholder="Search airports..."
+                        emptyMessage="No airports found."
+                        onSearchChange={setAirportSearch}
+                        isLoading={isLoadingAirports}
+                        allowDeselect={false}
+                      />
+                    )}
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="fee">Delivery Fee ($)</Label>
