@@ -61,7 +61,7 @@ interface CatererAirportFee {
   id: number
   caterer_id: number
   airport_id: number
-  delivery_fee: number
+  delivery_fee: number | string  // API may return as string from PostgreSQL numeric type
   caterer_name?: string
   airport_name?: string
 }
@@ -242,7 +242,7 @@ function DeliveryFeesContent() {
     setEditingFee(fee)
     setSelectedCaterer(fee.caterer_id.toString())
     setSelectedAirport(fee.airport_id.toString())
-    setDeliveryFeeAmount(fee.delivery_fee.toString())
+    setDeliveryFeeAmount((typeof fee.delivery_fee === 'number' ? fee.delivery_fee : parseFloat(fee.delivery_fee || '0')).toString())
     setCatererSearch("")
     setAirportSearch("")
     setDialogOpen(true)
@@ -449,7 +449,7 @@ function DeliveryFeesContent() {
                           <TableRow key={fee.id} className="hover:bg-muted/30 transition-colors">
                             <TableCell className="font-medium">{fee.caterer_name || `Caterer #${fee.caterer_id}`}</TableCell>
                             <TableCell>{fee.airport_name || `Airport #${fee.airport_id}`}</TableCell>
-                            <TableCell className="font-mono">${fee.delivery_fee.toFixed(2)}</TableCell>
+                            <TableCell className="font-mono">${(typeof fee.delivery_fee === 'number' ? fee.delivery_fee : parseFloat(fee.delivery_fee || '0')).toFixed(2)}</TableCell>
                             <TableCell>
                               <div className="flex items-center justify-end gap-1">
                                 <Button
