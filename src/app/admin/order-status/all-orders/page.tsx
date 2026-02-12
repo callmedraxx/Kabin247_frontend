@@ -540,10 +540,9 @@ function OrdersContent() {
   const [error, setError] = React.useState<string | null>(null)
   const [updatingPaymentStatus, setUpdatingPaymentStatus] = React.useState<number | null>(null)
 
-  // Pagination state
+  // Pagination state (total comes from totalOrders in orders context)
   const [page, setPage] = React.useState(1)
   const [limit, setLimit] = React.useState(50)
-  const [total, setTotal] = React.useState(0)
   const [sortBy, setSortBy] = React.useState<string>("created_at")
   const [sortOrder, setSortOrder] = React.useState<"asc" | "desc">("desc")
   
@@ -707,6 +706,7 @@ function OrdersContent() {
   const {
     orders: ordersFromContext,
     isLoading: isLoadingOrdersFromContext,
+    totalOrders,
     fetchOrders: fetchOrdersFromContext,
     getOrder: getOrderFromContext,
     updateOrder: updateOrderFromContext,
@@ -718,10 +718,7 @@ function OrdersContent() {
 
   // Sync orders from context to local state when context updates
   React.useEffect(() => {
-    if (ordersFromContext.length > 0) {
-      setOrders(ordersFromContext as Order[])
-      setTotal(ordersFromContext.length)
-    }
+    setOrders(ordersFromContext as Order[])
   }, [ordersFromContext])
 
   const [categories, setCategories] = React.useState<Category[]>([])
@@ -2078,7 +2075,7 @@ function OrdersContent() {
 
   const allSelected = orders.length > 0 && selectedOrders.size === orders.length
   const someSelected = selectedOrders.size > 0 && selectedOrders.size < orders.length
-  const totalPages = Math.ceil(total / limit)
+  const totalPages = Math.ceil(totalOrders / limit)
 
   return (
     <SidebarCategoryProvider>
@@ -2204,6 +2201,37 @@ function OrdersContent() {
             {/* Table Card */}
             <Card className="border-border/50 bg-card/50 backdrop-blur-sm shadow-lg">
               <CardContent className="p-0">
+                {/* Pagination - at top of table */}
+                {!isLoading && totalPages > 1 && (
+                  <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
+                    <div className="text-sm text-muted-foreground">
+                      Showing {((page - 1) * limit) + 1} to {Math.min(page * limit, totalOrders)} of {totalOrders} orders
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        disabled={page === 1}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        Previous
+                      </Button>
+                      <div className="text-sm text-muted-foreground">
+                        Page {page} of {totalPages}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                        disabled={page === totalPages}
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 <div className="overflow-x-auto scrollbar-hide">
                   <Table>
                     <TableHeader>
@@ -2692,38 +2720,6 @@ function OrdersContent() {
                     </TableBody>
                   </Table>
                 </div>
-                
-                {/* Pagination */}
-                {!isLoading && totalPages > 1 && (
-                  <div className="flex items-center justify-between border-t border-border/50 px-4 py-4">
-                    <div className="text-sm text-muted-foreground">
-                      Showing {((page - 1) * limit) + 1} to {Math.min(page * limit, total)} of {total} orders
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setPage((p) => Math.max(1, p - 1))}
-                        disabled={page === 1}
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                        Previous
-                      </Button>
-                      <div className="text-sm text-muted-foreground">
-                        Page {page} of {totalPages}
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                        disabled={page === totalPages}
-                      >
-                        Next
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                )}
               </CardContent>
             </Card>
 
