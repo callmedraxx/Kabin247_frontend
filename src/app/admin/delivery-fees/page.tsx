@@ -64,6 +64,8 @@ interface CatererAirportFee {
   delivery_fee: number | string  // API may return as string from PostgreSQL numeric type
   caterer_name?: string
   airport_name?: string
+  airport_code_iata?: string | null
+  airport_code_icao?: string | null
 }
 
 type ComboboxOption = {
@@ -95,6 +97,14 @@ function formatCatererOptions(caterers: Caterer[]): ComboboxOption[] {
   })
 }
 
+// Decode HTML entities (e.g. &#220; -> Ü) for display
+function decodeHtmlEntities(text: string): string {
+  if (typeof document === "undefined") return text
+  const textarea = document.createElement("textarea")
+  textarea.innerHTML = text
+  return textarea.value
+}
+
 // Format airport options with codes
 function formatAirportOptions(airports: Airport[]): ComboboxOption[] {
   return airports.map((airport) => {
@@ -103,15 +113,14 @@ function formatAirportOptions(airports: Airport[]): ComboboxOption[] {
       airport.airport_code_iata,
     ].filter(Boolean).join("/")
 
-    let label = airport.airport_name
-    if (codes) {
-      label = `${airport.airport_name} (${codes})`
-    }
+    const name = decodeHtmlEntities(airport.airport_name)
+
+    const label = codes ? `${name} (${codes})` : name
 
     return {
       value: airport.id.toString(),
       label,
-      searchText: `${airport.airport_name} ${codes}`.toLowerCase(),
+      searchText: `${name} ${codes}`.toLowerCase(),
     }
   })
 }
@@ -224,7 +233,9 @@ function DeliveryFeesContent() {
     return fees.filter(
       (fee) =>
         fee.caterer_name?.toLowerCase().includes(query) ||
-        fee.airport_name?.toLowerCase().includes(query)
+        fee.airport_name?.toLowerCase().includes(query) ||
+        fee.airport_code_iata?.toLowerCase().includes(query) ||
+        fee.airport_code_icao?.toLowerCase().includes(query)
     )
   }, [fees, searchQuery])
 
@@ -448,7 +459,14 @@ function DeliveryFeesContent() {
                         filteredFees.map((fee) => (
                           <TableRow key={fee.id} className="hover:bg-muted/30 transition-colors">
                             <TableCell className="font-medium">{fee.caterer_name || `Caterer #${fee.caterer_id}`}</TableCell>
-                            <TableCell>{fee.airport_name || `Airport #${fee.airport_id}`}</TableCell>
+                            <TableCell>
+                              {fee.airport_name || `Airport #${fee.airport_id}`}
+                              {(fee.airport_code_iata || fee.airport_code_icao) && (
+                                <span className="ml-1 text-xs text-muted-foreground font-mono">
+                                  ({fee.airport_code_iata || fee.airport_code_icao})
+                                </span>
+                              )}
+                            </TableCell>
                             <TableCell className="font-mono">${(typeof fee.delivery_fee === 'number' ? fee.delivery_fee : parseFloat(fee.delivery_fee || '0')).toFixed(2)}</TableCell>
                             <TableCell>
                               <div className="flex items-center justify-end gap-1">

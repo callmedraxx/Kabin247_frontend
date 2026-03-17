@@ -256,7 +256,7 @@ export function Combobox({
                 {displayedOptions.map((option) => (
                   <CommandItem
                     key={option.value}
-                    value={option.searchText || option.label}
+                    value={`${option.value}::${option.searchText || option.label}`}
                     onSelect={() => {
                       const shouldDeselect = allowDeselect && option.value === value
                       onValueChange(shouldDeselect ? "" : option.value)
