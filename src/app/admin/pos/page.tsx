@@ -225,6 +225,13 @@ const itemSchema = z.object({
   packaging: z.string().optional(),
 })
 
+const discountSchema = z.object({
+  discountName: z.string().min(1, "Please enter a discount name"),
+  discountAmount: z.string().min(1, "Please enter an amount").refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) > 0, {
+    message: "Please enter a valid amount greater than 0",
+  }),
+})
+
 const formSchema = z.object({
   order_number: z.string().optional(),
   client_id: z.number({ message: "Please select a client" }).int().positive("Please select a client"),
@@ -261,6 +268,7 @@ const formSchema = z.object({
   airportPickupFee: z.string().optional().refine((val) => !val || (!isNaN(parseFloat(val)) && parseFloat(val) >= 0), {
     message: "Please enter a valid airport pickup fee amount",
   }),
+  discounts: z.array(discountSchema).optional(),
   aircraftTailNumber: z.string().optional(),
   deliveryDate: z.string().min(1, "Please select a delivery date"),
   deliveryTime: z.string().min(1, "Please select a delivery time"),
@@ -819,6 +827,7 @@ function POSContent() {
       shoppingFee: "",
       restaurantPickupFee: "",
       airportPickupFee: "",
+      discounts: [],
       aircraftTailNumber: "",
       deliveryDate: "",
       deliveryTime: "",
@@ -838,6 +847,7 @@ function POSContent() {
   const watchedShoppingFee = form.watch("shoppingFee") || ""
   const watchedRestaurantPickupFee = form.watch("restaurantPickupFee") || ""
   const watchedAirportPickupFee = form.watch("airportPickupFee") || ""
+  const watchedDiscounts = form.watch("discounts") || []
   const watchedPriority = form.watch("orderPriority")
   const watchedOrderType = form.watch("orderType")
   const watchedPayment = form.watch("paymentMethod")
@@ -1085,6 +1095,7 @@ function POSContent() {
             shoppingFee: duplicateData.shopping_fee?.toString() || "0",
             restaurantPickupFee: duplicateData.restaurant_pickup_fee?.toString() || "0",
             airportPickupFee: duplicateData.airport_pickup_fee?.toString() || "0",
+            discounts: ((duplicateData as any).discounts || []).map((d: any) => ({ discountName: d.name || "", discountAmount: String(d.amount || 0) })),
             aircraftTailNumber: duplicateData.aircraft_tail_number || "",
             deliveryDate: formattedDeliveryDate, // Use formatted delivery date
             deliveryTime: duplicateData.delivery_time || "", // Use delivery time from duplicate
@@ -1434,7 +1445,11 @@ function POSContent() {
     const restaurantPickupFee = Number.isFinite(restaurantPickupFeeValue) ? restaurantPickupFeeValue : 0
     const airportPickupFeeValue = parseFloat(watchedAirportPickupFee || "0")
     const airportPickupFee = Number.isFinite(airportPickupFeeValue) ? airportPickupFeeValue : 0
-    const total = subtotal + serviceCharge + deliveryFee + coordinationFee + airportFee + fboFee + shoppingFee + restaurantPickupFee + airportPickupFee
+    const totalDiscounts = (Array.isArray(watchedDiscounts) ? watchedDiscounts : []).reduce((sum, d) => {
+      const amt = parseFloat(d?.discountAmount || "0")
+      return sum + (Number.isFinite(amt) ? amt : 0)
+    }, 0)
+    const total = subtotal + serviceCharge + deliveryFee + coordinationFee + airportFee + fboFee + shoppingFee + restaurantPickupFee + airportPickupFee - totalDiscounts
 
     return {
       subtotal,
@@ -1446,11 +1461,12 @@ function POSContent() {
       shoppingFee,
       restaurantPickupFee,
       airportPickupFee,
+      totalDiscounts,
       total,
       totalQuantity,
       itemCount: itemsArray.length,
     }
-  }, [watchedItems, watchedServiceCharge, watchedDeliveryFee, watchedCoordinationFee, watchedAirportFee, watchedFboFee, watchedShoppingFee, watchedRestaurantPickupFee, watchedAirportPickupFee])
+  }, [watchedItems, watchedServiceCharge, watchedDeliveryFee, watchedCoordinationFee, watchedAirportFee, watchedFboFee, watchedShoppingFee, watchedRestaurantPickupFee, watchedAirportPickupFee, watchedDiscounts])
 
   const selectedClientLabel = React.useMemo(
     () => clientOptions.find((o) => o.value === selectedClient?.toString())?.label || clientsData.find((c) => c.id === selectedClient)?.full_name || "Not selected",
@@ -1474,6 +1490,11 @@ function POSContent() {
     () => filteredFboOptions.find((o) => o.value === selectedFBO?.toString())?.label || fbosData.find((f) => f.id === selectedFBO)?.fbo_name || "Not selected",
     [filteredFboOptions, selectedFBO, fbosData]
   )
+
+  const { fields: discountFields, append: appendDiscount, remove: removeDiscount } = useFieldArray({
+    control: form.control,
+    name: "discounts",
+  })
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
@@ -1887,6 +1908,7 @@ function POSContent() {
       shoppingFee: "",
       restaurantPickupFee: "",
       airportPickupFee: "",
+      discounts: [],
       aircraftTailNumber: "",
       deliveryDate: "",
       deliveryTime: "",
@@ -1946,6 +1968,12 @@ function POSContent() {
         shopping_fee: formData.shoppingFee && formData.shoppingFee.trim() ? parseFloat(formData.shoppingFee) : 0,
         restaurant_pickup_fee: formData.restaurantPickupFee && formData.restaurantPickupFee.trim() ? parseFloat(formData.restaurantPickupFee) : 0,
         airport_pickup_fee: formData.airportPickupFee && formData.airportPickupFee.trim() ? parseFloat(formData.airportPickupFee) : 0,
+        discounts: (formData.discounts || [])
+          .filter(d => d.discountName && parseFloat(d.discountAmount) > 0)
+          .map(d => ({
+            name: d.discountName,
+            amount: parseFloat(d.discountAmount),
+          })),
         description: formData.description || null,
         notes: formData.notes || null,
         reheating_instructions: formData.reheatingInstructions || null,
@@ -2470,6 +2498,63 @@ function POSContent() {
                                   </FormItem>
                                 )}
                               />
+
+                              {/* Discounts Section */}
+                              <div className="col-span-full">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-xs font-medium text-muted-foreground">Discounts / Credits</span>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 text-xs text-red-400 hover:text-red-300"
+                                    onClick={() => appendDiscount({ discountName: "", discountAmount: "" })}
+                                  >
+                                    <Plus className="h-3 w-3 mr-1" />
+                                    Add Discount
+                                  </Button>
+                                </div>
+                                {discountFields.map((discField, idx) => (
+                                  <div key={discField.id} className="flex items-start gap-2 mb-2">
+                                    <FormField
+                                      control={form.control}
+                                      name={`discounts.${idx}.discountName`}
+                                      render={({ field }) => (
+                                        <FormItem className="flex-1">
+                                          <FormControl>
+                                            <Input placeholder="e.g. Service Interruption Credit" className="h-9 text-sm" {...field} />
+                                          </FormControl>
+                                          <FormMessage />
+                                        </FormItem>
+                                      )}
+                                    />
+                                    <FormField
+                                      control={form.control}
+                                      name={`discounts.${idx}.discountAmount`}
+                                      render={({ field }) => (
+                                        <FormItem className="w-28">
+                                          <FormControl>
+                                            <div className="relative">
+                                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                                              <Input type="number" step="0.01" placeholder="0.00" className="h-9 pl-6 text-sm" {...field} />
+                                            </div>
+                                          </FormControl>
+                                          <FormMessage />
+                                        </FormItem>
+                                      )}
+                                    />
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-9 w-9 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/10 shrink-0"
+                                      onClick={() => removeDiscount(idx)}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
+                                ))}
+                              </div>
 
                               <FormField
                                 control={form.control}
@@ -3158,6 +3243,16 @@ function POSContent() {
                                   <span className="font-medium">{formatCurrency(summary.airportPickupFee)}</span>
                                 </div>
                               )}
+                              {summary.totalDiscounts > 0 && (Array.isArray(watchedDiscounts) ? watchedDiscounts : []).map((d, idx) => {
+                                const amt = parseFloat(d?.discountAmount || "0")
+                                if (!amt || amt <= 0) return null
+                                return (
+                                  <div key={idx} className="flex items-center justify-between text-sm">
+                                    <span className="text-red-400">{d?.discountName || "Discount"}</span>
+                                    <span className="font-medium text-red-400">-{formatCurrency(amt)}</span>
+                                  </div>
+                                )
+                              })}
                               <div className="flex items-center justify-between pt-3 border-t border-primary/20">
                                 <span className="text-sm font-semibold">Total</span>
                                 <span className="text-xl font-bold bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-transparent">{formatCurrency(summary.total)}</span>
@@ -3541,6 +3636,16 @@ function POSContent() {
                                         <span className="font-medium">${parseFloat(formValues.airportPickupFee).toFixed(2)}</span>
                                       </div>
                                     )}
+                                    {formValues.discounts && formValues.discounts.length > 0 && formValues.discounts.map((d, idx) => {
+                                      const amt = parseFloat(d?.discountAmount || "0")
+                                      if (!amt || amt <= 0) return null
+                                      return (
+                                        <div key={idx} className="flex justify-between items-center text-sm">
+                                          <span className="text-red-400">{d?.discountName || "Discount"}</span>
+                                          <span className="font-medium text-red-400">-${amt.toFixed(2)}</span>
+                                        </div>
+                                      )
+                                    })}
                                     <div className="flex justify-between items-center pt-3 border-t border-primary/20">
                                       <span className="font-semibold">Total</span>
                                       <span className="text-2xl font-bold bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-transparent">
@@ -3557,7 +3662,8 @@ function POSContent() {
                                           (parseFloat(formValues.fboFee || "0")) +
                                           (parseFloat(formValues.shoppingFee || "0")) +
                                           (parseFloat(formValues.restaurantPickupFee || "0")) +
-                                          (parseFloat(formValues.airportPickupFee || "0"))
+                                          (parseFloat(formValues.airportPickupFee || "0")) -
+                                          (formValues.discounts || []).reduce((sum, d) => sum + (parseFloat(d?.discountAmount || "0")), 0)
                                         ).toFixed(2)}
                                       </span>
                                     </div>

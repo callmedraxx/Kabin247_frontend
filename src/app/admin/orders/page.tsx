@@ -231,6 +231,7 @@ interface Order {
   subtotal: string | number
   total: string | number
   items?: OrderItem[]
+  discounts?: Array<{ id?: number; name: string; amount: string | number }>
   client?: OrderClient
   caterer_details?: OrderCaterer
   airport_details?: OrderAirport
@@ -308,6 +309,11 @@ const orderSchema = z.object({
   dietary_restrictions: z.string().optional(),
   service_charge: z.number().min(0, "Service charge cannot be negative").optional(),
   items: z.array(orderItemSchema).min(1, "At least one item is required"),
+  discounts: z.array(z.object({
+    id: z.number().optional(),
+    name: z.string().min(1, "Discount name is required"),
+    amount: z.number().min(0.01, "Amount must be greater than 0"),
+  })).optional(),
 })
 
 type OrderFormValues = z.infer<typeof orderSchema>
@@ -406,6 +412,11 @@ function OrdersContent() {
       service_charge: 0,
       items: [{ item_name: "", item_description: "", portion_size: "", price: 0 }],
     },
+  })
+
+  const { fields: discountFields, append: appendDiscount, remove: removeDiscount } = useFieldArray({
+    control: form.control,
+    name: "discounts",
   })
 
   const { fields, append, remove } = useFieldArray({
@@ -658,6 +669,13 @@ function OrdersContent() {
               price: typeof item.price === "number" ? item.price : parseFloat(String(item.price)) || 0,
             }))
           : [{ item_name: "", item_description: "", portion_size: "", price: 0 }],
+        discounts: fullOrder.discounts && fullOrder.discounts.length > 0
+          ? fullOrder.discounts.map((d) => ({
+              id: d.id,
+              name: d.name || "",
+              amount: typeof d.amount === "number" ? d.amount : parseFloat(String(d.amount)) || 0,
+            }))
+          : [],
       })
       setDialogOpen(true)
     } catch (err) {
@@ -713,6 +731,9 @@ function OrdersContent() {
       }
       if (values.service_charge !== undefined && values.service_charge > 0) {
         body.service_charge = values.service_charge
+      }
+      if (values.discounts !== undefined) {
+        body.discounts = values.discounts.filter((d: any) => d.name && d.amount > 0)
       }
 
       const data: Order = await apiCallJson<Order>(url, {
@@ -1768,6 +1789,67 @@ function OrdersContent() {
                         />
                       </div>
 
+                      {/* Discounts Section */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium">Discounts / Credits</Label>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs text-red-400 hover:text-red-300"
+                            onClick={() => appendDiscount({ name: "", amount: 0 })}
+                          >
+                            <Plus className="h-3 w-3 mr-1" />
+                            Add Discount
+                          </Button>
+                        </div>
+                        {discountFields.map((discField, idx) => (
+                          <div key={discField.id} className="flex items-start gap-2">
+                            <FormField
+                              control={form.control}
+                              name={`discounts.${idx}.name`}
+                              render={({ field }) => (
+                                <FormItem className="flex-1">
+                                  <FormControl>
+                                    <Input placeholder="e.g. Service Interruption Credit" className="h-9 text-sm bg-background/50" {...field} />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name={`discounts.${idx}.amount`}
+                              render={({ field }) => (
+                                <FormItem className="w-28">
+                                  <FormControl>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      placeholder="0.00"
+                                      className="h-9 text-sm bg-background/50"
+                                      {...field}
+                                      onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : 0)}
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-9 w-9 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/10 shrink-0"
+                              onClick={() => removeDiscount(idx)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+
                       <div className="grid gap-4 md:grid-cols-2">
                         <FormField
                           control={form.control}
@@ -2454,6 +2536,12 @@ function OrdersContent() {
                                     <span className="font-medium">${parseFloat(String(viewingOrder.service_charge)).toFixed(2)}</span>
                                   </div>
                                 )}
+                                {viewingOrder.discounts && viewingOrder.discounts.length > 0 && viewingOrder.discounts.map((d, idx) => (
+                                  <div key={idx} className="flex justify-between text-sm">
+                                    <span className="text-red-400">{d.name || "Discount"}:</span>
+                                    <span className="font-medium text-red-400">-${parseFloat(String(d.amount)).toFixed(2)}</span>
+                                  </div>
+                                ))}
                                 <div className="flex justify-between text-lg font-bold pt-2 border-t border-border/50">
                                   <span>Total:</span>
                                   <span className="text-primary">${parseFloat(String(viewingOrder.total)).toFixed(2)}</span>

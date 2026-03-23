@@ -323,6 +323,7 @@ interface Order {
   subtotal: string | number
   total: string | number
   items?: OrderItem[]
+  discounts?: Array<{ id?: number; name: string; amount: string | number }>
   client?: OrderClient
   caterer_details?: OrderCaterer
   airport_details?: OrderAirport
@@ -1363,8 +1364,12 @@ function OrdersContent() {
           category: item.category || "",
           packaging: item.packaging || "",
         })) || [],
+        discounts: fullOrder.discounts?.map(d => ({
+          name: d.name || "",
+          amount: d.amount || 0,
+        })) || [],
       }
-      
+
       sessionStorage.setItem("duplicateOrder", JSON.stringify(duplicateData))
       
       toast.success("Order data loaded", {

@@ -21,6 +21,15 @@ export interface OrderItem {
   created_at?: string
 }
 
+// Order discount structure
+export interface OrderDiscount {
+  id?: number
+  order_id?: number
+  name: string
+  amount: string | number
+  sort_order?: number
+}
+
 // Client embedded in order
 export interface OrderClient {
   id: number
@@ -106,6 +115,7 @@ export interface Order {
   subtotal: string | number
   total: string | number
   items?: OrderItem[]
+  discounts?: OrderDiscount[]
   client?: OrderClient
   caterer_details?: OrderCaterer
   airport_details?: OrderAirport

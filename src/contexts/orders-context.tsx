@@ -94,6 +94,7 @@ interface CreateOrderData {
   restaurant_pickup_fee?: string | number | null
   airport_pickup_fee?: string | number | null
   items?: OrderItem[]
+  discounts?: Array<{ name: string; amount: string | number }>
 }
 
 const OrdersContext = React.createContext<OrdersContextType | undefined>(
