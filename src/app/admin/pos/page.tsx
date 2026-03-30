@@ -17,7 +17,7 @@ import { useFBOs } from "@/contexts/fbos-context"
 import { useOrders } from "@/contexts/orders-context"
 import { useOffline } from "@/contexts/offline-context"
 import { HeaderNav } from "@/components/dashboard/header-nav"
-import { useForm, useFieldArray } from "react-hook-form"
+import { useForm, useFieldArray, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { Button } from "@/components/ui/button"
@@ -847,7 +847,7 @@ function POSContent() {
   const watchedShoppingFee = form.watch("shoppingFee") || ""
   const watchedRestaurantPickupFee = form.watch("restaurantPickupFee") || ""
   const watchedAirportPickupFee = form.watch("airportPickupFee") || ""
-  const watchedDiscounts = form.watch("discounts") || []
+  const watchedDiscounts = useWatch({ control: form.control, name: "discounts", defaultValue: [] }) || []
   const watchedPriority = form.watch("orderPriority")
   const watchedOrderType = form.watch("orderType")
   const watchedPayment = form.watch("paymentMethod")

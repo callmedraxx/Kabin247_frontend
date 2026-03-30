@@ -99,7 +99,7 @@ import {
   Lock,
   LockOpen,
 } from "lucide-react"
-import { useForm } from "react-hook-form"
+import { useForm, useFieldArray } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import {
@@ -116,7 +116,6 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Combobox } from "@/components/ui/combobox"
 import { toast } from "sonner"
 import { ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
-import { useFieldArray } from "react-hook-form"
 
 import { API_BASE_URL } from "@/lib/api-config"
 import { apiCall, apiCallJson } from "@/lib/api-client"
@@ -360,6 +359,13 @@ const itemSchema = z.object({
   packaging: z.string().optional(),
 })
 
+const discountSchema = z.object({
+  name: z.string().min(1, "Please enter a discount name"),
+  amount: z.string().min(1, "Please enter an amount").refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) > 0, {
+    message: "Amount must be greater than 0",
+  }),
+})
+
 // Form schema for editing orders - matching POS page schema
 const orderSchema = z.object({
   order_number: z.string().optional(),
@@ -403,6 +409,7 @@ const orderSchema = z.object({
   orderPriority: z.enum(["low", "normal", "high", "urgent"], { message: "Please select a priority level" }),
   orderType: z.enum(["inflight", "qe_serv_hub", "restaurant_pickup"], { message: "Please select an order type" }),
   paymentMethod: z.enum(["card", "ACH"], { message: "Please select a payment method" }),
+  discounts: z.array(discountSchema).optional(),
   status: z.enum([
     "awaiting_quote",
     "awaiting_client_approval",
@@ -652,6 +659,7 @@ function OrdersContent() {
       orderPriority: "normal",
       orderType: undefined,
       paymentMethod: undefined,
+      discounts: [],
       status: "awaiting_quote",
     },
   })
@@ -753,6 +761,11 @@ function OrdersContent() {
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "items",
+  })
+
+  const { fields: discountFields, append: appendDiscount, remove: removeDiscount } = useFieldArray({
+    control: form.control,
+    name: "discounts",
   })
 
   // Collapse state for items
@@ -1183,6 +1196,10 @@ function OrdersContent() {
           airportPickupFee: editingOrder.airport_pickup_fee?.toString() || "0",
           paymentMethod: (editingOrder.payment_method as "card" | "ACH") || undefined,
           items: formItems,
+          discounts: (editingOrder.discounts || []).map((d) => ({
+            name: d.name || "",
+            amount: String(d.amount || ""),
+          })),
         })
 
         // Explicitly set delivery date and order type to ensure they're recognized
@@ -1603,7 +1620,7 @@ function OrdersContent() {
           const itemId = parseInt(item.itemName)
           const menuItem = menuItemsData.find((mi) => mi.id === itemId)
           const itemName = menuItem?.item_name || menuItemOptions.find((opt) => opt.value === item.itemName)?.label || ""
-          
+
           return {
             item_id: itemId,
             item_name: itemName,
@@ -1615,6 +1632,9 @@ function OrdersContent() {
             packaging: item.packaging || null,
           }
         }),
+        discounts: (values.discounts || [])
+          .filter((d) => d.name && parseFloat(d.amount) > 0)
+          .map((d) => ({ name: d.name, amount: parseFloat(d.amount) })),
       }
 
       // Use orders context for offline support
@@ -3615,6 +3635,63 @@ function OrdersContent() {
                               </FormItem>
                             )}
                           />
+
+                          {/* Discounts / Credits Section */}
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-medium text-muted-foreground">Discounts / Credits</span>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 gap-1 text-xs"
+                                onClick={() => appendDiscount({ name: "", amount: "" })}
+                              >
+                                <Plus className="h-3 w-3" />
+                                Add Discount
+                              </Button>
+                            </div>
+                            {discountFields.map((discField, idx) => (
+                              <div key={discField.id} className="flex gap-2 items-start">
+                                <FormField
+                                  control={form.control}
+                                  name={`discounts.${idx}.name`}
+                                  render={({ field }) => (
+                                    <FormItem className="flex-1">
+                                      <FormControl>
+                                        <Input placeholder="Discount name (e.g. Service Credit)" {...field} />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name={`discounts.${idx}.amount`}
+                                  render={({ field }) => (
+                                    <FormItem className="w-28">
+                                      <FormControl>
+                                        <div className="relative">
+                                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                                          <Input type="number" step="0.01" placeholder="0.00" className="pl-7" {...field} />
+                                        </div>
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-9 w-9 shrink-0 text-destructive hover:text-destructive"
+                                  onClick={() => removeDiscount(idx)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
 
                           <FormField
                             control={form.control}
