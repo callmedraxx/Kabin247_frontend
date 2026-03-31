@@ -3126,21 +3126,29 @@ function POSContent() {
                                     name={`items.${index}.packaging`}
                                     render={({ field }) => (
                                       <FormItem>
-                                        <FormLabel className="text-xs font-medium text-muted-foreground">Packaging</FormLabel>
+                                        <div className="flex items-center justify-between">
+                                          <FormLabel className="text-xs font-medium text-muted-foreground">Packaging</FormLabel>
+                                          <a
+                                            href="/admin/packaging"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-[10px] text-primary/70 hover:text-primary transition-colors"
+                                          >
+                                            + Add new option
+                                          </a>
+                                        </div>
                                         <FormControl>
-                                          <>
-                                            <Input
-                                              list={`packaging-list-${index}`}
-                                              placeholder="Select or type packaging preference..."
-                                              {...field}
-                                            />
-                                            <datalist id={`packaging-list-${index}`}>
-                                              {packagingOptions.map((opt) => (
-                                                <option key={opt} value={opt} />
-                                              ))}
-                                            </datalist>
-                                          </>
+                                          <Input
+                                            list={`packaging-list-${index}`}
+                                            placeholder="Select or type packaging preference..."
+                                            {...field}
+                                          />
                                         </FormControl>
+                                        <datalist id={`packaging-list-${index}`}>
+                                          {packagingOptions.map((opt) => (
+                                            <option key={opt} value={opt} />
+                                          ))}
+                                        </datalist>
                                         <FormMessage />
                                       </FormItem>
                                     )}
