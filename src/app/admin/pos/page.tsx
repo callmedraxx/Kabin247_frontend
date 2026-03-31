@@ -90,7 +90,9 @@ import {
   Circle,
   CheckCircle2,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  ArrowUp,
+  ArrowDown
 } from "lucide-react"
 import { toast } from "sonner"
 import { API_BASE_URL } from "@/lib/api-config"
@@ -1496,7 +1498,7 @@ function POSContent() {
     name: "discounts",
   })
 
-  const { fields, append, remove } = useFieldArray({
+  const { fields, append, remove, move } = useFieldArray({
     control: form.control,
     name: "items",
   })
@@ -1783,6 +1785,14 @@ function POSContent() {
   React.useEffect(() => {
     fetchCategories()
   }, [fetchCategories])
+
+  // Packaging options
+  const [packagingOptions, setPackagingOptions] = React.useState<string[]>([])
+  React.useEffect(() => {
+    apiCallJson<{ packaging_options: { name: string }[] }>(`/packaging-options`)
+      .then((data) => setPackagingOptions((data.packaging_options || []).map((o) => o.name)))
+      .catch(() => {})
+  }, [])
 
   // Handle menu item creation
   const handleAddMenuItem = async (values: MenuItemFormValues) => {
@@ -2793,7 +2803,60 @@ function POSContent() {
                                       </div>
                                       )}
                                     </div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-1">
+                                      {fields.length > 1 && (
+                                        <>
+                                          <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            disabled={index === 0}
+                                            onClick={() => move(index, index - 1)}
+                                            className="h-7 w-7 p-0 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors disabled:opacity-30"
+                                            title="Move up"
+                                          >
+                                            <ArrowUp className="h-3.5 w-3.5" />
+                                          </Button>
+                                          <input
+                                            key={`pos-${index}`}
+                                            type="number"
+                                            min={1}
+                                            max={fields.length}
+                                            defaultValue={index + 1}
+                                            title="Jump to position (press Enter)"
+                                            className="w-9 h-7 text-center text-xs border border-border/50 rounded-md bg-muted/30 text-muted-foreground [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none focus:outline-none focus:ring-1 focus:ring-primary/40"
+                                            onKeyDown={(e) => {
+                                              if (e.key === 'Enter') {
+                                                e.preventDefault()
+                                                const val = parseInt((e.target as HTMLInputElement).value)
+                                                if (!isNaN(val)) {
+                                                  const to = Math.max(0, Math.min(fields.length - 1, val - 1))
+                                                  if (to !== index) move(index, to)
+                                                }
+                                              }
+                                            }}
+                                            onBlur={(e) => {
+                                              const val = parseInt(e.target.value)
+                                              if (!isNaN(val)) {
+                                                const to = Math.max(0, Math.min(fields.length - 1, val - 1))
+                                                if (to !== index) move(index, to)
+                                              }
+                                              e.target.value = String(index + 1)
+                                            }}
+                                          />
+                                          <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            disabled={index === fields.length - 1}
+                                            onClick={() => move(index, index + 1)}
+                                            className="h-7 w-7 p-0 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors disabled:opacity-30"
+                                            title="Move down"
+                                          >
+                                            <ArrowDown className="h-3.5 w-3.5" />
+                                          </Button>
+                                        </>
+                                      )}
                                       <Button
                                         type="button"
                                         variant="ghost"
@@ -3065,11 +3128,18 @@ function POSContent() {
                                       <FormItem>
                                         <FormLabel className="text-xs font-medium text-muted-foreground">Packaging</FormLabel>
                                         <FormControl>
-                                          <Textarea
-                                            placeholder="Enter packaging information for this item..."
-                                            className="min-h-[60px] resize-none text-sm"
-                                            {...field}
-                                          />
+                                          <>
+                                            <Input
+                                              list={`packaging-list-${index}`}
+                                              placeholder="Select or type packaging preference..."
+                                              {...field}
+                                            />
+                                            <datalist id={`packaging-list-${index}`}>
+                                              {packagingOptions.map((opt) => (
+                                                <option key={opt} value={opt} />
+                                              ))}
+                                            </datalist>
+                                          </>
                                         </FormControl>
                                         <FormMessage />
                                       </FormItem>

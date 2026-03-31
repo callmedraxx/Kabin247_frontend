@@ -98,6 +98,10 @@ const navMain = [
         url: "/admin/categories",
       },
       {
+        title: "Packaging options",
+        url: "/admin/packaging",
+      },
+      {
         title: "Tax and charges",
         url: "/admin/tax-and-charges",
       },
