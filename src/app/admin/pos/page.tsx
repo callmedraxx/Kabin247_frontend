@@ -1787,13 +1787,13 @@ function POSContent() {
   }, [fetchCategories])
 
   // Packaging options
-  const [packagingOptions, setPackagingOptions] = React.useState<string[]>([])
+  const [packagingOptions, setPackagingOptions] = React.useState<{ value: string; label: string }[]>([])
   const fetchPackagingOptions = React.useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE_URL}/packaging-options`)
       if (!res.ok) return
       const data = await res.json()
-      setPackagingOptions((data.packaging_options || []).map((o: any) => o.name))
+      setPackagingOptions((data.packaging_options || []).map((o: any) => ({ value: o.name, label: o.name })))
     } catch {
       // Non-critical — fail silently
     }
@@ -3144,17 +3144,18 @@ function POSContent() {
                                           </a>
                                         </div>
                                         <FormControl>
-                                          <Input
-                                            list={`packaging-list-${index}`}
-                                            placeholder="Select or type packaging preference..."
-                                            {...field}
+                                          <Combobox
+                                            options={packagingOptions}
+                                            value={packagingOptions.find(opt => opt.label === field.value)?.value || ""}
+                                            onValueChange={(value) => {
+                                              const selected = packagingOptions.find(opt => opt.value === value)
+                                              field.onChange(selected ? selected.label : "")
+                                            }}
+                                            placeholder="Select packaging..."
+                                            searchPlaceholder="Search packaging options..."
+                                            emptyMessage="No packaging options found."
                                           />
                                         </FormControl>
-                                        <datalist id={`packaging-list-${index}`}>
-                                          {packagingOptions.map((opt) => (
-                                            <option key={opt} value={opt} />
-                                          ))}
-                                        </datalist>
                                         <FormMessage />
                                       </FormItem>
                                     )}

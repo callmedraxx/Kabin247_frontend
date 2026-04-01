@@ -366,7 +366,7 @@ function OrdersContent() {
   const [caterers, setCaterers] = React.useState<Caterer[]>([])
   const [airports, setAirports] = React.useState<Airport[]>([])
   const [isLoadingSupportingData, setIsLoadingSupportingData] = React.useState(false)
-  const [packagingOptions, setPackagingOptions] = React.useState<string[]>([])
+  const [packagingOptions, setPackagingOptions] = React.useState<{ value: string; label: string }[]>([])
 
   // Menu items from context
   const {
@@ -455,7 +455,7 @@ function OrdersContent() {
 
       if (packagingRes.ok) {
         const packagingData = await packagingRes.json()
-        setPackagingOptions((packagingData.packaging_options || []).map((o: any) => o.name))
+        setPackagingOptions((packagingData.packaging_options || []).map((o: any) => ({ value: o.name, label: o.name })))
       }
     } catch (err) {
       console.error("Error fetching supporting data:", err)
@@ -2169,18 +2169,18 @@ function OrdersContent() {
                                   <FormItem>
                                     <FormLabel>Packaging</FormLabel>
                                     <FormControl>
-                                      <Input
-                                        list={`packaging-list-${index}`}
-                                        placeholder="Select or type packaging preference..."
-                                        {...field}
-                                        className="bg-background/50"
+                                      <Combobox
+                                        options={packagingOptions}
+                                        value={packagingOptions.find(opt => opt.label === field.value)?.value || ""}
+                                        onValueChange={(value) => {
+                                          const selected = packagingOptions.find(opt => opt.value === value)
+                                          field.onChange(selected ? selected.label : "")
+                                        }}
+                                        placeholder="Select packaging..."
+                                        searchPlaceholder="Search packaging options..."
+                                        emptyMessage="No packaging options found."
                                       />
                                     </FormControl>
-                                    <datalist id={`packaging-list-${index}`}>
-                                      {packagingOptions.map((opt) => (
-                                        <option key={opt} value={opt} />
-                                      ))}
-                                    </datalist>
                                     <FormMessage />
                                   </FormItem>
                                 )}
