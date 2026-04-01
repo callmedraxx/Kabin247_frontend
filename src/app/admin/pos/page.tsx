@@ -1788,11 +1788,17 @@ function POSContent() {
 
   // Packaging options
   const [packagingOptions, setPackagingOptions] = React.useState<string[]>([])
-  React.useEffect(() => {
-    apiCallJson<{ packaging_options: { name: string }[] }>(`/packaging-options`)
-      .then((data) => setPackagingOptions((data.packaging_options || []).map((o) => o.name)))
-      .catch(() => {})
+  const fetchPackagingOptions = React.useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/packaging-options`)
+      if (!res.ok) return
+      const data = await res.json()
+      setPackagingOptions((data.packaging_options || []).map((o: any) => o.name))
+    } catch {
+      // Non-critical — fail silently
+    }
   }, [])
+  React.useEffect(() => { fetchPackagingOptions() }, [fetchPackagingOptions])
 
   // Handle menu item creation
   const handleAddMenuItem = async (values: MenuItemFormValues) => {

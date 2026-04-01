@@ -175,6 +175,7 @@ interface OrderItem {
   item_description?: string | null
   portion_size: string
   price: string | number
+  packaging?: string | null
   sort_order?: number
   created_at?: string
 }
@@ -291,6 +292,7 @@ const orderItemSchema = z.object({
   item_description: z.string().optional(),
   portion_size: z.string().min(1, "Portion size is required"),
   price: z.number().positive("Price must be greater than 0"),
+  packaging: z.string().optional(),
 })
 
 const orderSchema = z.object({
@@ -364,6 +366,7 @@ function OrdersContent() {
   const [caterers, setCaterers] = React.useState<Caterer[]>([])
   const [airports, setAirports] = React.useState<Airport[]>([])
   const [isLoadingSupportingData, setIsLoadingSupportingData] = React.useState(false)
+  const [packagingOptions, setPackagingOptions] = React.useState<string[]>([])
 
   // Menu items from context
   const {
@@ -410,7 +413,7 @@ function OrdersContent() {
       packaging_instructions: "",
       dietary_restrictions: "",
       service_charge: 0,
-      items: [{ item_name: "", item_description: "", portion_size: "", price: 0 }],
+      items: [{ item_name: "", item_description: "", portion_size: "", price: 0, packaging: "" }],
     },
   })
 
@@ -428,10 +431,11 @@ function OrdersContent() {
   const fetchSupportingData = React.useCallback(async () => {
     setIsLoadingSupportingData(true)
     try {
-      const [clientsRes, caterersRes, airportsRes] = await Promise.all([
+      const [clientsRes, caterersRes, airportsRes, packagingRes] = await Promise.all([
         apiCall(`/clients?limit=1000`),
         apiCall(`/caterers?limit=1000`),
         apiCall(`/airports?limit=1000`),
+        apiCall(`/packaging-options`),
       ])
 
       if (clientsRes.ok) {
@@ -447,6 +451,11 @@ function OrdersContent() {
       if (airportsRes.ok) {
         const airportsData = await airportsRes.json()
         setAirports(airportsData.airports || [])
+      }
+
+      if (packagingRes.ok) {
+        const packagingData = await packagingRes.json()
+        setPackagingOptions((packagingData.packaging_options || []).map((o: any) => o.name))
       }
     } catch (err) {
       console.error("Error fetching supporting data:", err)
@@ -635,7 +644,7 @@ function OrdersContent() {
       packaging_instructions: "",
       dietary_restrictions: "",
       service_charge: 0,
-      items: [{ item_name: "", item_description: "", portion_size: "", price: 0 }],
+      items: [{ item_name: "", item_description: "", portion_size: "", price: 0, packaging: "" }],
     })
     setDialogOpen(true)
   }
@@ -667,8 +676,9 @@ function OrdersContent() {
               item_description: item.item_description || "",
               portion_size: item.portion_size,
               price: typeof item.price === "number" ? item.price : parseFloat(String(item.price)) || 0,
+              packaging: item.packaging || "",
             }))
-          : [{ item_name: "", item_description: "", portion_size: "", price: 0 }],
+          : [{ item_name: "", item_description: "", portion_size: "", price: 0, packaging: "" }],
         discounts: fullOrder.discounts && fullOrder.discounts.length > 0
           ? fullOrder.discounts.map((d) => ({
               id: d.id,
@@ -708,6 +718,7 @@ function OrdersContent() {
           item_description: item.item_description || undefined,
           portion_size: item.portion_size,
           price: item.price,
+          packaging: item.packaging || undefined,
         })),
       }
 
@@ -2145,6 +2156,31 @@ function OrdersContent() {
                                         className="bg-background/50"
                                       />
                                     </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
+                            <div className="mt-4">
+                              <FormField
+                                control={form.control}
+                                name={`items.${index}.packaging`}
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Packaging</FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        list={`packaging-list-${index}`}
+                                        placeholder="Select or type packaging preference..."
+                                        {...field}
+                                        className="bg-background/50"
+                                      />
+                                    </FormControl>
+                                    <datalist id={`packaging-list-${index}`}>
+                                      {packagingOptions.map((opt) => (
+                                        <option key={opt} value={opt} />
+                                      ))}
+                                    </datalist>
                                     <FormMessage />
                                   </FormItem>
                                 )}
