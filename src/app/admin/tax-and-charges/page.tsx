@@ -82,6 +82,7 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Combobox } from "@/components/ui/combobox"
 import { toast } from "sonner"
 import { ChevronLeft, ChevronRight, ArrowUpDown, Loader2 } from "lucide-react"
 import { API_BASE_URL } from "@/lib/api-config"
@@ -96,6 +97,8 @@ interface TaxCharge {
   applies_to: "all" | "category" | "location" | "item"
   category: string | null
   location: string | null
+  menu_item_id: number | null
+  menu_item_name: string | null
   min_amount: number | null
   max_amount: number | null
   description: string | null
@@ -121,6 +124,7 @@ const taxChargeSchema = z.object({
   applies_to: z.enum(["all", "category", "location", "item"]),
   category: z.string().optional(),
   location: z.string().optional(),
+  menu_item_id: z.string().optional(), // stored as string in form, sent as number
   min_amount: z.union([z.coerce.number().min(0), z.literal("")]).transform((val) => val === "" ? undefined : val).optional(),
   max_amount: z.union([z.coerce.number().min(0), z.literal("")]).transform((val) => val === "" ? undefined : val).optional(),
   description: z.string().optional(),
@@ -129,20 +133,7 @@ const taxChargeSchema = z.object({
 
 type TaxChargeFormValues = z.infer<typeof taxChargeSchema>
 
-// Categories (will be fetched from API if needed)
-const categories = [
-  { value: "appetizers", label: "Appetizers" },
-  { value: "main_course", label: "Main Course" },
-  { value: "desserts", label: "Desserts" },
-  { value: "beverages", label: "Beverages" },
-]
 
-// Locations (will be fetched from airports API if needed)
-const locations = [
-  { value: "jfk", label: "JFK International Airport" },
-  { value: "lax", label: "LAX International Airport" },
-  { value: "ord", label: "O'Hare International Airport" },
-]
 
 function TaxChargesContent() {
   const [taxCharges, setTaxCharges] = React.useState<TaxCharge[]>([])
@@ -152,6 +143,10 @@ function TaxChargesContent() {
   const [isLoading, setIsLoading] = React.useState(true)
   const [isDeleting, setIsDeleting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const [airportOptions, setAirportOptions] = React.useState<{ value: string; label: string; searchText?: string }[]>([])
+  const [airportNameById, setAirportNameById] = React.useState<Map<string, string>>(new Map())
+  const [categoryOptions, setCategoryOptions] = React.useState<{ value: string; label: string }[]>([])
+  const [menuItemOptions, setMenuItemOptions] = React.useState<{ value: string; label: string }[]>([])
   
   // Pagination state
   const [page, setPage] = React.useState(1)
@@ -178,6 +173,7 @@ function TaxChargesContent() {
       applies_to: "all",
       category: "",
       location: "",
+      menu_item_id: "",
       min_amount: undefined,
       max_amount: undefined,
       description: "",
@@ -239,6 +235,27 @@ function TaxChargesContent() {
     fetchTaxCharges()
   }, [fetchTaxCharges])
 
+  // Fetch supporting data for dropdowns
+  React.useEffect(() => {
+    Promise.all([
+      fetch(`${API_BASE_URL}/airports?limit=1000`).then((r) => r.ok ? r.json() : { airports: [] }),
+      fetch(`${API_BASE_URL}/categories?is_active=true&limit=1000`).then((r) => r.ok ? r.json() : { categories: [] }),
+      fetch(`${API_BASE_URL}/menu-items?is_active=true&limit=10000`).then((r) => r.ok ? r.json() : { menu_items: [] }),
+    ]).then(([airportsData, categoriesData, menuItemsData]) => {
+      const rawAirports = airportsData.airports || []
+      const nameMap = new Map<string, string>()
+      setAirportOptions(rawAirports.map((a: any) => {
+        const codes = [a.airport_code_iata, a.airport_code_icao].filter(Boolean).join("/")
+        const label = codes ? `${codes} - ${a.airport_name}` : a.airport_name
+        nameMap.set(String(a.id), a.airport_name)
+        return { value: String(a.id), label, searchText: `${a.airport_name} ${codes}`.toLowerCase() }
+      }))
+      setAirportNameById(nameMap)
+      setCategoryOptions((categoriesData.categories || []).map((c: any) => ({ value: c.slug, label: c.name })))
+      setMenuItemOptions((menuItemsData.menu_items || []).map((m: any) => ({ value: String(m.id), label: m.item_name })))
+    }).catch(() => {/* non-critical */})
+  }, [])
+
   // Debounce search
   React.useEffect(() => {
     const timer = setTimeout(() => {
@@ -294,6 +311,7 @@ function TaxChargesContent() {
       applies_to: "all",
       category: "",
       location: "",
+      menu_item_id: "",
       min_amount: undefined,
       max_amount: undefined,
       description: "",
@@ -322,7 +340,8 @@ function TaxChargesContent() {
         is_percentage: fullItem.is_percentage,
         applies_to: fullItem.applies_to,
         category: fullItem.category || "",
-        location: fullItem.location || "",
+        location: ([...airportNameById.entries()].find(([, name]) => name === fullItem.location)?.[0]) || fullItem.location || "",
+        menu_item_id: fullItem.menu_item_id ? String(fullItem.menu_item_id) : "",
         min_amount: fullItem.min_amount || undefined,
         max_amount: fullItem.max_amount || undefined,
         description: fullItem.description || "",
@@ -359,7 +378,10 @@ function TaxChargesContent() {
         body.category = values.category
       }
       if (values.applies_to === "location" && values.location) {
-        body.location = values.location
+        body.location = airportNameById.get(values.location) || values.location
+      }
+      if (values.applies_to === "item" && values.menu_item_id) {
+        body.menu_item_id = parseInt(values.menu_item_id)
       }
       if (values.min_amount !== undefined) {
         body.min_amount = values.min_amount
@@ -751,10 +773,10 @@ function TaxChargesContent() {
                                   {item.applies_to === "all"
                                     ? "All Orders"
                                     : item.applies_to === "category"
-                                    ? `Category: ${categories.find((c) => c.value === item.category)?.label || item.category}`
+                                    ? `Category: ${item.category}`
                                     : item.applies_to === "location"
-                                    ? `Location: ${locations.find((l) => l.value === item.location)?.label || item.location}`
-                                    : "Specific Items"}
+                                    ? `Location: ${item.location}`
+                                    : `Item: ${item.menu_item_name || "—"}`}
                                 </Badge>
                               </div>
                             </TableCell>
@@ -1027,20 +1049,16 @@ function TaxChargesContent() {
                             render={({ field }) => (
                               <FormItem>
                                 <FormLabel>Category *</FormLabel>
-                                <Select onValueChange={field.onChange} value={field.value}>
-                                  <FormControl>
-                                    <SelectTrigger>
-                                      <SelectValue placeholder="Select category..." />
-                                    </SelectTrigger>
-                                  </FormControl>
-                                  <SelectContent>
-                                    {categories.map((cat) => (
-                                      <SelectItem key={cat.value} value={cat.value}>
-                                        {cat.label}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                <FormControl>
+                                  <Combobox
+                                    options={categoryOptions}
+                                    value={field.value || ""}
+                                    onValueChange={field.onChange}
+                                    placeholder="Select category..."
+                                    searchPlaceholder="Search categories..."
+                                    emptyMessage="No categories found."
+                                  />
+                                </FormControl>
                                 <FormMessage />
                               </FormItem>
                             )}
@@ -1054,20 +1072,39 @@ function TaxChargesContent() {
                             render={({ field }) => (
                               <FormItem>
                                 <FormLabel>Location *</FormLabel>
-                                <Select onValueChange={field.onChange} value={field.value}>
-                                  <FormControl>
-                                    <SelectTrigger>
-                                      <SelectValue placeholder="Select location..." />
-                                    </SelectTrigger>
-                                  </FormControl>
-                                  <SelectContent>
-                                    {locations.map((loc) => (
-                                      <SelectItem key={loc.value} value={loc.value}>
-                                        {loc.label}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                <FormControl>
+                                  <Combobox
+                                    options={airportOptions}
+                                    value={field.value || ""}
+                                    onValueChange={field.onChange}
+                                    placeholder="Select airport..."
+                                    searchPlaceholder="Search by name or code..."
+                                    emptyMessage="No airports found."
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        )}
+
+                        {appliesTo === "item" && (
+                          <FormField
+                            control={form.control}
+                            name="menu_item_id"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Menu Item *</FormLabel>
+                                <FormControl>
+                                  <Combobox
+                                    options={menuItemOptions}
+                                    value={field.value || ""}
+                                    onValueChange={field.onChange}
+                                    placeholder="Select menu item..."
+                                    searchPlaceholder="Search menu items..."
+                                    emptyMessage="No menu items found."
+                                  />
+                                </FormControl>
                                 <FormMessage />
                               </FormItem>
                             )}
@@ -1254,10 +1291,10 @@ function TaxChargesContent() {
                                 {viewingItem.applies_to === "all"
                                   ? "All Orders"
                                   : viewingItem.applies_to === "category"
-                                  ? `Category: ${categories.find((c) => c.value === viewingItem.category)?.label || viewingItem.category}`
+                                  ? `Category: ${viewingItem.category}`
                                   : viewingItem.applies_to === "location"
-                                  ? `Location: ${locations.find((l) => l.value === viewingItem.location)?.label || viewingItem.location}`
-                                  : "Specific Items"}
+                                  ? `Location: ${viewingItem.location}`
+                                  : `Item: ${viewingItem.menu_item_name || "—"}`}
                               </Badge>
                             </div>
                             {(viewingItem.min_amount || viewingItem.max_amount) && (

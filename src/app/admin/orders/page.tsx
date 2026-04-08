@@ -55,6 +55,7 @@ import {
 } from "@/components/ui/select"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Combobox } from "@/components/ui/combobox"
+import { AutocompleteInput } from "@/components/ui/autocomplete-input"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -366,7 +367,7 @@ function OrdersContent() {
   const [caterers, setCaterers] = React.useState<Caterer[]>([])
   const [airports, setAirports] = React.useState<Airport[]>([])
   const [isLoadingSupportingData, setIsLoadingSupportingData] = React.useState(false)
-  const [packagingOptions, setPackagingOptions] = React.useState<{ value: string; label: string }[]>([])
+  const [packagingOptions, setPackagingOptions] = React.useState<string[]>([])
 
   // Menu items from context
   const {
@@ -455,7 +456,7 @@ function OrdersContent() {
 
       if (packagingRes.ok) {
         const packagingData = await packagingRes.json()
-        setPackagingOptions((packagingData.packaging_options || []).map((o: any) => ({ value: o.name, label: o.name })))
+        setPackagingOptions((packagingData.packaging_options || []).map((o: any) => o.name))
       }
     } catch (err) {
       console.error("Error fetching supporting data:", err)
@@ -2169,16 +2170,12 @@ function OrdersContent() {
                                   <FormItem>
                                     <FormLabel>Packaging</FormLabel>
                                     <FormControl>
-                                      <Combobox
+                                      <AutocompleteInput
                                         options={packagingOptions}
-                                        value={packagingOptions.find(opt => opt.label === field.value)?.value || ""}
-                                        onValueChange={(value) => {
-                                          const selected = packagingOptions.find(opt => opt.value === value)
-                                          field.onChange(selected ? selected.label : "")
-                                        }}
-                                        placeholder="Select packaging..."
-                                        searchPlaceholder="Search packaging options..."
-                                        emptyMessage="No packaging options found."
+                                        value={field.value || ""}
+                                        onChange={field.onChange}
+                                        placeholder="Select or type packaging..."
+                                        className="bg-background/50"
                                       />
                                     </FormControl>
                                     <FormMessage />

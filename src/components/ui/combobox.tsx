@@ -253,9 +253,9 @@ export function Combobox({
               </CommandEmpty>
             ) : (
               <CommandGroup className="p-1.5">
-                {displayedOptions.map((option) => (
+                {displayedOptions.map((option, index) => (
                   <CommandItem
-                    key={option.value}
+                    key={`${option.value}-${index}`}
                     value={`${option.value}::${option.searchText || option.label}`}
                     onSelect={() => {
                       const shouldDeselect = allowDeselect && option.value === value

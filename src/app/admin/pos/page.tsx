@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Combobox } from "@/components/ui/combobox"
+import { AutocompleteInput } from "@/components/ui/autocomplete-input"
 import { Badge } from "@/components/ui/badge"
 import {
   Form,
@@ -559,6 +560,9 @@ function POSContent() {
   const [airportDialogOpen, setAirportDialogOpen] = React.useState(false)
   const [fboDialogOpen, setFboDialogOpen] = React.useState(false)
   const [menuItemDialogOpen, setMenuItemDialogOpen] = React.useState(false)
+  const [packagingDialogOpen, setPackagingDialogOpen] = React.useState(false)
+  const [newPackagingName, setNewPackagingName] = React.useState("")
+  const [packagingDialogItemIndex, setPackagingDialogItemIndex] = React.useState<number | null>(null)
 
   // Save loading state
   const [isSaving, setIsSaving] = React.useState(false)
@@ -653,6 +657,7 @@ function POSContent() {
   const [isSavingAirport, setIsSavingAirport] = React.useState(false)
   const [isSavingFBO, setIsSavingFBO] = React.useState(false)
   const [isSavingMenuItem, setIsSavingMenuItem] = React.useState(false)
+  const [isSavingPackaging, setIsSavingPackaging] = React.useState(false)
   
   const { state, isMobile } = useSidebar()
   const sidebarCollapsed = state === "collapsed"
@@ -1704,6 +1709,35 @@ function POSContent() {
     }
   }
 
+  // Handle add Packaging Option
+  const handleAddPackaging = async () => {
+    if (!newPackagingName.trim()) {
+      toast.error("Please enter a packaging name")
+      return
+    }
+    setIsSavingPackaging(true)
+    try {
+      await apiCallJson(`/packaging-options`, {
+        method: "POST",
+        body: JSON.stringify({ name: newPackagingName.trim() }),
+      })
+      toast.success("Packaging option added successfully")
+      await fetchPackagingOptions()
+      // Auto-fill the field that triggered this dialog
+      if (packagingDialogItemIndex !== null) {
+        form.setValue(`items.${packagingDialogItemIndex}.packaging`, newPackagingName.trim())
+      }
+      setNewPackagingName("")
+      setPackagingDialogItemIndex(null)
+      setPackagingDialogOpen(false)
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to create packaging option"
+      toast.error("Error creating packaging option", { description: errorMessage })
+    } finally {
+      setIsSavingPackaging(false)
+    }
+  }
+
   // Handle add FBO - save to backend API
   const handleAddFBO = async () => {
     if (!newStandaloneFboName.trim()) {
@@ -1787,13 +1821,13 @@ function POSContent() {
   }, [fetchCategories])
 
   // Packaging options
-  const [packagingOptions, setPackagingOptions] = React.useState<{ value: string; label: string }[]>([])
+  const [packagingOptions, setPackagingOptions] = React.useState<string[]>([])
   const fetchPackagingOptions = React.useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE_URL}/packaging-options`)
       if (!res.ok) return
       const data = await res.json()
-      setPackagingOptions((data.packaging_options || []).map((o: any) => ({ value: o.name, label: o.name })))
+      setPackagingOptions((data.packaging_options || []).map((o: any) => o.name))
     } catch {
       // Non-critical — fail silently
     }
@@ -3134,26 +3168,23 @@ function POSContent() {
                                       <FormItem>
                                         <div className="flex items-center justify-between">
                                           <FormLabel className="text-xs font-medium text-muted-foreground">Packaging</FormLabel>
-                                          <a
-                                            href="/admin/packaging"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
+                                          <button
+                                            type="button"
                                             className="text-[10px] text-primary/70 hover:text-primary transition-colors"
+                                            onClick={() => {
+                                              setPackagingDialogItemIndex(index)
+                                              setPackagingDialogOpen(true)
+                                            }}
                                           >
                                             + Add new option
-                                          </a>
+                                          </button>
                                         </div>
                                         <FormControl>
-                                          <Combobox
+                                          <AutocompleteInput
                                             options={packagingOptions}
-                                            value={packagingOptions.find(opt => opt.label === field.value)?.value || ""}
-                                            onValueChange={(value) => {
-                                              const selected = packagingOptions.find(opt => opt.value === value)
-                                              field.onChange(selected ? selected.label : "")
-                                            }}
-                                            placeholder="Select packaging..."
-                                            searchPlaceholder="Search packaging options..."
-                                            emptyMessage="No packaging options found."
+                                            value={field.value || ""}
+                                            onChange={field.onChange}
+                                            placeholder="Select or type packaging..."
                                           />
                                         </FormControl>
                                         <FormMessage />
@@ -4770,6 +4801,86 @@ function POSContent() {
                       </DialogFooter>
                     </DialogContent>
                   </Dialog>
+
+                  {/* Add Packaging Option Dialog */}
+                  <Dialog
+                    open={packagingDialogOpen}
+                    onOpenChange={(open) => {
+                      setPackagingDialogOpen(open)
+                      if (!open) {
+                        setNewPackagingName("")
+                        setPackagingDialogItemIndex(null)
+                      }
+                    }}
+                  >
+                    <DialogContent className="sm:max-w-md border-0 bg-card shadow-2xl shadow-black/50 ring-1 ring-white/[0.05]">
+                      <div className="absolute inset-0 bg-gradient-to-br from-orange-500/[0.05] via-transparent to-transparent rounded-lg pointer-events-none" />
+                      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-orange-500/30 to-transparent" />
+                      <DialogHeader className="relative pb-4 border-b border-border/30">
+                        <div className="flex items-center gap-4">
+                          <div className="relative">
+                            <div className="absolute inset-0 bg-orange-500/20 rounded-xl blur-lg" />
+                            <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 shadow-lg shadow-orange-500/25">
+                              <Package className="h-6 w-6 text-white" />
+                            </div>
+                          </div>
+                          <div>
+                            <DialogTitle className="text-xl font-bold">Add Packaging Option</DialogTitle>
+                            <DialogDescription className="text-sm">
+                              Add a new packaging option to the system
+                            </DialogDescription>
+                          </div>
+                        </div>
+                      </DialogHeader>
+                      <div className="relative py-6">
+                        <div className="space-y-2">
+                          <Label htmlFor="packaging-name" className="text-xs font-medium text-muted-foreground">Packaging Name *</Label>
+                          <Input
+                            id="packaging-name"
+                            placeholder="e.g., Standard Box, Premium Container..."
+                            value={newPackagingName}
+                            onChange={(e) => setNewPackagingName(e.target.value)}
+                            className="h-11 bg-muted/30 border-border/40 focus:border-orange-500/50 focus:ring-orange-500/20"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleAddPackaging()
+                            }}
+                            autoFocus
+                          />
+                        </div>
+                      </div>
+                      <DialogFooter className="relative pt-4 border-t border-border/30 gap-3">
+                        <Button
+                          variant="ghost"
+                          className="text-muted-foreground hover:text-foreground"
+                          onClick={() => {
+                            setPackagingDialogOpen(false)
+                            setNewPackagingName("")
+                            setPackagingDialogItemIndex(null)
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          onClick={handleAddPackaging}
+                          disabled={isSavingPackaging || !newPackagingName.trim()}
+                          className="bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400 shadow-lg shadow-orange-500/25 text-white px-6"
+                        >
+                          {isSavingPackaging ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Saving...
+                            </>
+                          ) : (
+                            <>
+                              <Plus className="mr-2 h-4 w-4" />
+                              Add Packaging
+                            </>
+                          )}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+
           </div> {/* relative container */}
         </div> {/* flex container */}
       </SidebarInset>
