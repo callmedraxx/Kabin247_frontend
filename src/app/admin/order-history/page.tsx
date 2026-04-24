@@ -572,6 +572,42 @@ function OrderHistoryContent() {
     }
   }
 
+  const handleInvoicePreview = async (order: Order) => {
+    setOrderForPdf(order)
+    setPdfPreviewOpen(true)
+    setPdfHtml("")
+    try {
+      const data = await apiCallJson<{ html: string }>(`/orders/${order.id}/preview`)
+      setPdfHtml(data.html || "")
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to load preview"
+      setPdfPreviewOpen(false)
+      setOrderForPdf(null)
+      toast.error("Error loading preview", { description: errorMessage })
+    }
+  }
+
+  const handleInvoiceDownload = async (order: Order) => {
+    toast.loading("Generating invoice PDF...", { id: `invoice-${order.id}` })
+    try {
+      const response = await apiCall(`/orders/${order.id}/pdf?regenerate=true`)
+      if (!response.ok) throw new Error("Failed to download invoice")
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `order_${order.order_number}_invoice.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      toast.success("Invoice downloaded", { id: `invoice-${order.id}` })
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to download invoice"
+      toast.error("Error downloading invoice", { id: `invoice-${order.id}`, description: errorMessage })
+    }
+  }
+
   // Handle PDF download
   const handlePdfDownload = async (order: Order) => {
     toast.loading("Generating PDF...", { id: `pdf-${order.id}` })
@@ -1008,6 +1044,14 @@ function OrderHistoryContent() {
                                     <Download className="mr-2 h-4 w-4" />
                                     Download PDF
                                   </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleInvoicePreview(order)} className="cursor-pointer">
+                                    <FileText className="mr-2 h-4 w-4" />
+                                    Preview Invoice
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleInvoiceDownload(order)} className="cursor-pointer">
+                                    <Download className="mr-2 h-4 w-4" />
+                                    Download Invoice
+                                  </DropdownMenuItem>
                                   <DropdownMenuSeparator />
                                   <DropdownMenuItem
                                     onClick={() => {
@@ -1359,6 +1403,26 @@ function OrderHistoryContent() {
                       <Button
                         variant="outline"
                         onClick={() => {
+                          if (viewingOrder) handleInvoicePreview(viewingOrder)
+                        }}
+                        className="flex-1 min-w-[100px] gap-2"
+                      >
+                        <Eye className="h-4 w-4" />
+                        Preview Invoice
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          if (viewingOrder) handleInvoiceDownload(viewingOrder)
+                        }}
+                        className="flex-1 min-w-[120px] gap-2"
+                      >
+                        <Download className="h-4 w-4" />
+                        Download Invoice
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
                           if (viewingOrder) handleSendEmail(viewingOrder)
                         }}
                         className="flex-1 min-w-[100px] gap-2"
@@ -1704,6 +1768,14 @@ function OrderHistoryContent() {
                           >
                             <Download className="h-4 w-4" />
                             Download PDF
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => handleInvoiceDownload(orderForPdf)}
+                            className="flex-1 min-w-[120px] gap-2"
+                          >
+                            <Download className="h-4 w-4" />
+                            Download Invoice
                           </Button>
                         </>
                       )}

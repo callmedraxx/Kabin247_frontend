@@ -2634,25 +2634,20 @@ function OrdersContent() {
                                     <Download className="mr-2 h-4 w-4" />
                                     {order.status === "awaiting_client_approval" ? "Download Quote" : "Download Order"}
                                   </DropdownMenuItem>
-                                  {/* Show Invoice option for delivered orders or any order that might need an invoice */}
-                                  {order.status === "delivered" && (
-                                    <>
-                                      <DropdownMenuItem
-                                        onClick={() => handleInvoicePreview(order)}
-                                        className="cursor-pointer"
-                                      >
-                                        <FileText className="mr-2 h-4 w-4" />
-                                        Preview Invoice
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem
-                                        onClick={() => handleInvoiceDownload(order)}
-                                        className="cursor-pointer"
-                                      >
-                                        <Download className="mr-2 h-4 w-4" />
-                                        Download Invoice
-                                      </DropdownMenuItem>
-                                    </>
-                                  )}
+                                  <DropdownMenuItem
+                                    onClick={() => handleInvoicePreview(order)}
+                                    className="cursor-pointer"
+                                  >
+                                    <FileText className="mr-2 h-4 w-4" />
+                                    Preview Invoice
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => handleInvoiceDownload(order)}
+                                    className="cursor-pointer"
+                                  >
+                                    <Download className="mr-2 h-4 w-4" />
+                                    Download Invoice
+                                  </DropdownMenuItem>
                                   <DropdownMenuItem
                                     onClick={() => handleEmailSend(order)}
                                     className="cursor-pointer"
@@ -3201,21 +3196,26 @@ function OrdersContent() {
                         <Download className="h-4 w-4" />
                         {viewingOrder && viewingOrder.status === "awaiting_client_approval" ? "Quote PDF" : "Order PDF"}
                       </Button>
-                      {/* Show Invoice button for delivered orders */}
-                      {viewingOrder?.status === "delivered" && (
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            if (viewingOrder) {
-                              handleInvoiceDownload(viewingOrder)
-                            }
-                          }}
-                          className="flex-1 min-w-[100px] gap-2"
-                        >
-                          <Download className="h-4 w-4" />
-                          Invoice
-                        </Button>
-                      )}
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          if (viewingOrder) handleInvoicePreview(viewingOrder)
+                        }}
+                        className="flex-1 min-w-[100px] gap-2"
+                      >
+                        <Eye className="h-4 w-4" />
+                        Preview Invoice
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          if (viewingOrder) handleInvoiceDownload(viewingOrder)
+                        }}
+                        className="flex-1 min-w-[100px] gap-2"
+                      >
+                        <Download className="h-4 w-4" />
+                        Download Invoice
+                      </Button>
                       <Button
                         variant="outline"
                         onClick={() => {
@@ -4908,17 +4908,14 @@ function OrdersContent() {
                             <Download className="h-4 w-4" />
                             {orderForPdf.status === "awaiting_client_approval" ? "Download Quote" : "Download Order"}
                           </Button>
-                          {/* Show Invoice button for delivered orders */}
-                          {orderForPdf.status === "delivered" && (
-                            <Button
-                              variant="outline"
-                              onClick={() => handleInvoiceDownload(orderForPdf)}
-                              className="flex-1 min-w-[100px] gap-2"
-                            >
-                              <Download className="h-4 w-4" />
-                              Invoice
-                            </Button>
-                          )}
+                          <Button
+                            variant="outline"
+                            onClick={() => handleInvoiceDownload(orderForPdf)}
+                            className="flex-1 min-w-[100px] gap-2"
+                          >
+                            <Download className="h-4 w-4" />
+                            Download Invoice
+                          </Button>
                         </>
                       )}
                       <DrawerClose asChild>
