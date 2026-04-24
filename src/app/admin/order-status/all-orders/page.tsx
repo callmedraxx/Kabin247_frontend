@@ -2623,51 +2623,55 @@ function OrdersContent() {
                                   <Tooltip>
                                     <TooltipTrigger asChild>
                                       <DropdownMenuItem
-                                        onClick={() => handlePdfPreview(order, "b")}
+                                        onClick={() => handlePdfPreview(order)}
                                         className="cursor-pointer"
                                       >
                                         <FileText className="mr-2 h-4 w-4" />
-                                        {order.status === "awaiting_client_approval" ? "Preview Quote" : "Preview Order"}
+                                        {order.status === "awaiting_client_approval" ? "Preview Quote" : order.status === "delivered" ? "Preview Invoice" : "Preview Order"}
                                       </DropdownMenuItem>
                                     </TooltipTrigger>
-                                    <TooltipContent side="left">No pricing — caterer copy</TooltipContent>
+                                    <TooltipContent side="left">{order.status === "awaiting_client_approval" || order.status === "delivered" ? "With pricing — client invoice" : "No pricing — caterer copy"}</TooltipContent>
                                   </Tooltip>
                                   <Tooltip>
                                     <TooltipTrigger asChild>
                                       <DropdownMenuItem
-                                        onClick={() => handlePdfDownload(order, "b")}
+                                        onClick={() => handlePdfDownload(order)}
                                         className="cursor-pointer"
                                       >
                                         <Download className="mr-2 h-4 w-4" />
-                                        {order.status === "awaiting_client_approval" ? "Download Quote" : "Download Order"}
+                                        {order.status === "awaiting_client_approval" ? "Download Quote" : order.status === "delivered" ? "Download Invoice" : "Download Order"}
                                       </DropdownMenuItem>
                                     </TooltipTrigger>
-                                    <TooltipContent side="left">No pricing — caterer copy</TooltipContent>
+                                    <TooltipContent side="left">{order.status === "awaiting_client_approval" || order.status === "delivered" ? "With pricing — client invoice" : "No pricing — caterer copy"}</TooltipContent>
                                   </Tooltip>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <DropdownMenuItem
-                                        onClick={() => handleInvoicePreview(order)}
-                                        className="cursor-pointer"
-                                      >
-                                        <FileText className="mr-2 h-4 w-4" />
-                                        Preview Invoice
-                                      </DropdownMenuItem>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="left">With pricing — client invoice</TooltipContent>
-                                  </Tooltip>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <DropdownMenuItem
-                                        onClick={() => handleInvoiceDownload(order)}
-                                        className="cursor-pointer"
-                                      >
-                                        <Download className="mr-2 h-4 w-4" />
-                                        Download Invoice
-                                      </DropdownMenuItem>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="left">With pricing — client invoice</TooltipContent>
-                                  </Tooltip>
+                                  {order.status === "caterer_confirmed" && (
+                                    <>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <DropdownMenuItem
+                                            onClick={() => handleInvoicePreview(order)}
+                                            className="cursor-pointer"
+                                          >
+                                            <FileText className="mr-2 h-4 w-4" />
+                                            Preview Invoice
+                                          </DropdownMenuItem>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="left">With pricing — client invoice</TooltipContent>
+                                      </Tooltip>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <DropdownMenuItem
+                                            onClick={() => handleInvoiceDownload(order)}
+                                            className="cursor-pointer"
+                                          >
+                                            <Download className="mr-2 h-4 w-4" />
+                                            Download Invoice
+                                          </DropdownMenuItem>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="left">With pricing — client invoice</TooltipContent>
+                                      </Tooltip>
+                                    </>
+                                  )}
                                   <DropdownMenuItem
                                     onClick={() => handleEmailSend(order)}
                                     className="cursor-pointer"
@@ -3197,65 +3201,65 @@ function OrdersContent() {
                           <Button
                             variant="outline"
                             onClick={() => {
-                              if (viewingOrder) {
-                                handlePdfPreview(viewingOrder, "b")
-                              }
+                              if (viewingOrder) handlePdfPreview(viewingOrder)
                             }}
                             className="flex-1 min-w-[100px] gap-2"
                           >
                             <Eye className="h-4 w-4" />
-                            {viewingOrder && viewingOrder.status === "awaiting_client_approval" ? "Quote" : "Preview"}
+                            {viewingOrder?.status === "awaiting_client_approval" ? "Quote" : viewingOrder?.status === "delivered" ? "Preview Invoice" : "Preview"}
                           </Button>
                         </TooltipTrigger>
-                        <TooltipContent>No pricing — caterer copy</TooltipContent>
+                        <TooltipContent>{viewingOrder?.status === "awaiting_client_approval" || viewingOrder?.status === "delivered" ? "With pricing — client invoice" : "No pricing — caterer copy"}</TooltipContent>
                       </Tooltip>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
                             variant="outline"
                             onClick={() => {
-                              if (viewingOrder) {
-                                handlePdfDownload(viewingOrder, "b")
-                              }
+                              if (viewingOrder) handlePdfDownload(viewingOrder)
                             }}
                             className="flex-1 min-w-[100px] gap-2"
                           >
                             <Download className="h-4 w-4" />
-                            {viewingOrder && viewingOrder.status === "awaiting_client_approval" ? "Quote PDF" : "Order PDF"}
+                            {viewingOrder?.status === "awaiting_client_approval" ? "Quote PDF" : viewingOrder?.status === "delivered" ? "Download Invoice" : "Order PDF"}
                           </Button>
                         </TooltipTrigger>
-                        <TooltipContent>No pricing — caterer copy</TooltipContent>
+                        <TooltipContent>{viewingOrder?.status === "awaiting_client_approval" || viewingOrder?.status === "delivered" ? "With pricing — client invoice" : "No pricing — caterer copy"}</TooltipContent>
                       </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="outline"
-                            onClick={() => {
-                              if (viewingOrder) handleInvoicePreview(viewingOrder)
-                            }}
-                            className="flex-1 min-w-[100px] gap-2"
-                          >
-                            <Eye className="h-4 w-4" />
-                            Preview Invoice
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>With pricing — client invoice</TooltipContent>
-                      </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="outline"
-                            onClick={() => {
-                              if (viewingOrder) handleInvoiceDownload(viewingOrder)
-                            }}
-                            className="flex-1 min-w-[100px] gap-2"
-                          >
-                            <Download className="h-4 w-4" />
-                            Download Invoice
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>With pricing — client invoice</TooltipContent>
-                      </Tooltip>
+                      {viewingOrder?.status === "caterer_confirmed" && (
+                        <>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  if (viewingOrder) handleInvoicePreview(viewingOrder)
+                                }}
+                                className="flex-1 min-w-[100px] gap-2"
+                              >
+                                <Eye className="h-4 w-4" />
+                                Preview Invoice
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>With pricing — client invoice</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  if (viewingOrder) handleInvoiceDownload(viewingOrder)
+                                }}
+                                className="flex-1 min-w-[100px] gap-2"
+                              >
+                                <Download className="h-4 w-4" />
+                                Download Invoice
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>With pricing — client invoice</TooltipContent>
+                          </Tooltip>
+                        </>
+                      )}
                       <Button
                         variant="outline"
                         onClick={() => {
@@ -4942,20 +4946,22 @@ function OrdersContent() {
                             Open in Tab
                           </Button>
                           <Button
-                            onClick={() => handlePdfDownload(orderForPdf, "b")}
+                            onClick={() => handlePdfDownload(orderForPdf)}
                             className="flex-1 min-w-[100px] gap-2"
                           >
                             <Download className="h-4 w-4" />
-                            {orderForPdf.status === "awaiting_client_approval" ? "Download Quote" : "Download Order"}
+                            {orderForPdf.status === "awaiting_client_approval" ? "Download Quote" : orderForPdf.status === "delivered" ? "Download Invoice" : "Download Order"}
                           </Button>
-                          <Button
-                            variant="outline"
-                            onClick={() => handleInvoiceDownload(orderForPdf)}
-                            className="flex-1 min-w-[100px] gap-2"
-                          >
-                            <Download className="h-4 w-4" />
-                            Download Invoice
-                          </Button>
+                          {orderForPdf.status === "caterer_confirmed" && (
+                            <Button
+                              variant="outline"
+                              onClick={() => handleInvoiceDownload(orderForPdf)}
+                              className="flex-1 min-w-[100px] gap-2"
+                            >
+                              <Download className="h-4 w-4" />
+                              Download Invoice
+                            </Button>
+                          )}
                         </>
                       )}
                       <DrawerClose asChild>
