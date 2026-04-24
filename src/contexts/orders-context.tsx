@@ -162,8 +162,11 @@ export function OrdersProvider({ children }: { children: React.ReactNode }) {
 
           if (isOfflineCapable) {
             const cachedOrders = await getAllOrders()
+            const serverOrderIds = new Set(mergedOrders.map((o) => o.id))
             const pendingOrders = cachedOrders.filter(
-              (o) => o._syncStatus === "pending_create"
+              (o) =>
+                o._syncStatus === "pending_create" &&
+                (o.id === 0 || !serverOrderIds.has(o.id))
             )
 
             // Add pending orders that aren't on server yet

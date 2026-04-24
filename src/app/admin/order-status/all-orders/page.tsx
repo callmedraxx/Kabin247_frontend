@@ -2421,7 +2421,7 @@ function OrdersContent() {
                       ) : (
                         orders.map((order) => (
                           <TableRow
-                            key={order.id}
+                            key={(order as any)._localId ?? order.id}
                             className="group hover:bg-muted/30 transition-colors border-b border-border/30"
                           >
                             <TableCell>
@@ -2620,34 +2620,54 @@ function OrdersContent() {
                                     <Eye className="mr-2 h-4 w-4" />
                                     View Details
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => handlePdfPreview(order, "b")}
-                                    className="cursor-pointer"
-                                  >
-                                    <FileText className="mr-2 h-4 w-4" />
-                                    {order.status === "awaiting_client_approval" ? "Preview Quote" : "Preview Order"}
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => handlePdfDownload(order, "b")}
-                                    className="cursor-pointer"
-                                  >
-                                    <Download className="mr-2 h-4 w-4" />
-                                    {order.status === "awaiting_client_approval" ? "Download Quote" : "Download Order"}
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => handleInvoicePreview(order)}
-                                    className="cursor-pointer"
-                                  >
-                                    <FileText className="mr-2 h-4 w-4" />
-                                    Preview Invoice
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => handleInvoiceDownload(order)}
-                                    className="cursor-pointer"
-                                  >
-                                    <Download className="mr-2 h-4 w-4" />
-                                    Download Invoice
-                                  </DropdownMenuItem>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <DropdownMenuItem
+                                        onClick={() => handlePdfPreview(order, "b")}
+                                        className="cursor-pointer"
+                                      >
+                                        <FileText className="mr-2 h-4 w-4" />
+                                        {order.status === "awaiting_client_approval" ? "Preview Quote" : "Preview Order"}
+                                      </DropdownMenuItem>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="left">No pricing — caterer copy</TooltipContent>
+                                  </Tooltip>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <DropdownMenuItem
+                                        onClick={() => handlePdfDownload(order, "b")}
+                                        className="cursor-pointer"
+                                      >
+                                        <Download className="mr-2 h-4 w-4" />
+                                        {order.status === "awaiting_client_approval" ? "Download Quote" : "Download Order"}
+                                      </DropdownMenuItem>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="left">No pricing — caterer copy</TooltipContent>
+                                  </Tooltip>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <DropdownMenuItem
+                                        onClick={() => handleInvoicePreview(order)}
+                                        className="cursor-pointer"
+                                      >
+                                        <FileText className="mr-2 h-4 w-4" />
+                                        Preview Invoice
+                                      </DropdownMenuItem>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="left">With pricing — client invoice</TooltipContent>
+                                  </Tooltip>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <DropdownMenuItem
+                                        onClick={() => handleInvoiceDownload(order)}
+                                        className="cursor-pointer"
+                                      >
+                                        <Download className="mr-2 h-4 w-4" />
+                                        Download Invoice
+                                      </DropdownMenuItem>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="left">With pricing — client invoice</TooltipContent>
+                                  </Tooltip>
                                   <DropdownMenuItem
                                     onClick={() => handleEmailSend(order)}
                                     className="cursor-pointer"
@@ -3172,50 +3192,70 @@ function OrdersContent() {
                   )}
                   <DrawerFooter className="border-t border-border/50 pt-4 flex-shrink-0 bg-background sticky bottom-0">
                     <div className="flex flex-wrap gap-2 w-full">
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          if (viewingOrder) {
-                            handlePdfPreview(viewingOrder, "b")
-                          }
-                        }}
-                        className="flex-1 min-w-[100px] gap-2"
-                      >
-                        <Eye className="h-4 w-4" />
-                        {viewingOrder && viewingOrder.status === "awaiting_client_approval" ? "Quote" : "Preview"}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          if (viewingOrder) {
-                            handlePdfDownload(viewingOrder, "b")
-                          }
-                        }}
-                        className="flex-1 min-w-[100px] gap-2"
-                      >
-                        <Download className="h-4 w-4" />
-                        {viewingOrder && viewingOrder.status === "awaiting_client_approval" ? "Quote PDF" : "Order PDF"}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          if (viewingOrder) handleInvoicePreview(viewingOrder)
-                        }}
-                        className="flex-1 min-w-[100px] gap-2"
-                      >
-                        <Eye className="h-4 w-4" />
-                        Preview Invoice
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          if (viewingOrder) handleInvoiceDownload(viewingOrder)
-                        }}
-                        className="flex-1 min-w-[100px] gap-2"
-                      >
-                        <Download className="h-4 w-4" />
-                        Download Invoice
-                      </Button>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              if (viewingOrder) {
+                                handlePdfPreview(viewingOrder, "b")
+                              }
+                            }}
+                            className="flex-1 min-w-[100px] gap-2"
+                          >
+                            <Eye className="h-4 w-4" />
+                            {viewingOrder && viewingOrder.status === "awaiting_client_approval" ? "Quote" : "Preview"}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>No pricing — caterer copy</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              if (viewingOrder) {
+                                handlePdfDownload(viewingOrder, "b")
+                              }
+                            }}
+                            className="flex-1 min-w-[100px] gap-2"
+                          >
+                            <Download className="h-4 w-4" />
+                            {viewingOrder && viewingOrder.status === "awaiting_client_approval" ? "Quote PDF" : "Order PDF"}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>No pricing — caterer copy</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              if (viewingOrder) handleInvoicePreview(viewingOrder)
+                            }}
+                            className="flex-1 min-w-[100px] gap-2"
+                          >
+                            <Eye className="h-4 w-4" />
+                            Preview Invoice
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>With pricing — client invoice</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              if (viewingOrder) handleInvoiceDownload(viewingOrder)
+                            }}
+                            className="flex-1 min-w-[100px] gap-2"
+                          >
+                            <Download className="h-4 w-4" />
+                            Download Invoice
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>With pricing — client invoice</TooltipContent>
+                      </Tooltip>
                       <Button
                         variant="outline"
                         onClick={() => {
