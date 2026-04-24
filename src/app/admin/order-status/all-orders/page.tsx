@@ -1941,14 +1941,52 @@ function OrdersContent() {
     }
   }
 
-  // Handle Invoice download (always uses PDF A with prices)
+  // Handle Invoice download (always uses PDF A with prices, force_pdf_a bypasses status routing)
   const handleInvoiceDownload = async (order: Order) => {
-    await handlePdfDownload(order, "a")
+    toast.loading("Generating PDF...", { id: `pdf-${order.id}` })
+    try {
+      const response = await apiCall(`/orders/${order.id}/pdf?regenerate=true&force_pdf_a=true`)
+      if (!response.ok) {
+        const errorText = await response.text()
+        let errorMessage = "Failed to download PDF"
+        try {
+          const errorData = JSON.parse(errorText)
+          errorMessage = errorData.error || errorData.message || errorMessage
+        } catch {
+          errorMessage = errorText || errorMessage
+        }
+        throw new Error(errorMessage)
+      }
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `order_${order.order_number}_invoice.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      toast.success("PDF downloaded", { id: `pdf-${order.id}`, description: `Order ${order.order_number} invoice has been downloaded.` })
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to download PDF"
+      toast.error("Error downloading PDF", { id: `pdf-${order.id}`, description: errorMessage })
+    }
   }
 
-  // Handle Invoice preview (always uses PDF A with prices)
+  // Handle Invoice preview (always uses PDF A with prices, force_pdf_a bypasses status routing)
   const handleInvoicePreview = async (order: Order) => {
-    await handlePdfPreview(order, "a")
+    setOrderForPdf(order)
+    setPdfPreviewOpen(true)
+    setPdfHtml("")
+    try {
+      const data = await apiCallJson<{ html: string }>(`/orders/${order.id}/preview?force_pdf_a=true`)
+      setPdfHtml(data.html || "")
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to load preview"
+      setPdfPreviewOpen(false)
+      setOrderForPdf(null)
+      toast.error("Error loading preview", { description: errorMessage })
+    }
   }
 
   // Handle email send
