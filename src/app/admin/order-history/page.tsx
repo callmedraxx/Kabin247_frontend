@@ -562,7 +562,7 @@ function OrderHistoryContent() {
     setPdfHtml("")
 
     try {
-      const data = await apiCallJson<{ html: string }>(`/orders/${order.id}/preview`)
+      const data = await apiCallJson<{ html: string }>(`/orders/${order.id}/preview-b`)
       setPdfHtml(data.html || "")
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to load preview"
@@ -613,8 +613,8 @@ function OrderHistoryContent() {
     toast.loading("Generating PDF...", { id: `pdf-${order.id}` })
 
     try {
-      const response = await apiCall(`/orders/${order.id}/pdf?regenerate=true`)
-      
+      const response = await apiCall(`/orders/${order.id}/pdf-b?regenerate=true`)
+
       if (!response.ok) {
         throw new Error("Failed to download PDF")
       }
@@ -1036,22 +1036,42 @@ function OrderHistoryContent() {
                                     <Eye className="mr-2 h-4 w-4" />
                                     View Details
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => handlePdfPreview(order)} className="cursor-pointer">
-                                    <FileText className="mr-2 h-4 w-4" />
-                                    Preview
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => handlePdfDownload(order)} className="cursor-pointer">
-                                    <Download className="mr-2 h-4 w-4" />
-                                    Download PDF
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => handleInvoicePreview(order)} className="cursor-pointer">
-                                    <FileText className="mr-2 h-4 w-4" />
-                                    Preview Invoice
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => handleInvoiceDownload(order)} className="cursor-pointer">
-                                    <Download className="mr-2 h-4 w-4" />
-                                    Download Invoice
-                                  </DropdownMenuItem>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <DropdownMenuItem onClick={() => handlePdfPreview(order)} className="cursor-pointer">
+                                        <FileText className="mr-2 h-4 w-4" />
+                                        Preview
+                                      </DropdownMenuItem>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="left">No pricing — caterer copy</TooltipContent>
+                                  </Tooltip>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <DropdownMenuItem onClick={() => handlePdfDownload(order)} className="cursor-pointer">
+                                        <Download className="mr-2 h-4 w-4" />
+                                        Download PDF
+                                      </DropdownMenuItem>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="left">No pricing — caterer copy</TooltipContent>
+                                  </Tooltip>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <DropdownMenuItem onClick={() => handleInvoicePreview(order)} className="cursor-pointer">
+                                        <FileText className="mr-2 h-4 w-4" />
+                                        Preview Invoice
+                                      </DropdownMenuItem>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="left">With pricing — client invoice</TooltipContent>
+                                  </Tooltip>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <DropdownMenuItem onClick={() => handleInvoiceDownload(order)} className="cursor-pointer">
+                                        <Download className="mr-2 h-4 w-4" />
+                                        Download Invoice
+                                      </DropdownMenuItem>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="left">With pricing — client invoice</TooltipContent>
+                                  </Tooltip>
                                   <DropdownMenuSeparator />
                                   <DropdownMenuItem
                                     onClick={() => {

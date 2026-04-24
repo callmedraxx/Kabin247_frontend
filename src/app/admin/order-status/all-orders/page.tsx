@@ -2621,14 +2621,14 @@ function OrdersContent() {
                                     View Details
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
-                                    onClick={() => handlePdfPreview(order)}
+                                    onClick={() => handlePdfPreview(order, "b")}
                                     className="cursor-pointer"
                                   >
                                     <FileText className="mr-2 h-4 w-4" />
                                     {order.status === "awaiting_client_approval" ? "Preview Quote" : "Preview Order"}
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
-                                    onClick={() => handlePdfDownload(order)}
+                                    onClick={() => handlePdfDownload(order, "b")}
                                     className="cursor-pointer"
                                   >
                                     <Download className="mr-2 h-4 w-4" />
@@ -3176,7 +3176,7 @@ function OrdersContent() {
                         variant="outline"
                         onClick={() => {
                           if (viewingOrder) {
-                            handlePdfPreview(viewingOrder)
+                            handlePdfPreview(viewingOrder, "b")
                           }
                         }}
                         className="flex-1 min-w-[100px] gap-2"
@@ -3188,7 +3188,7 @@ function OrdersContent() {
                         variant="outline"
                         onClick={() => {
                           if (viewingOrder) {
-                            handlePdfDownload(viewingOrder)
+                            handlePdfDownload(viewingOrder, "b")
                           }
                         }}
                         className="flex-1 min-w-[100px] gap-2"
@@ -4902,7 +4902,7 @@ function OrdersContent() {
                             Open in Tab
                           </Button>
                           <Button
-                            onClick={() => handlePdfDownload(orderForPdf)}
+                            onClick={() => handlePdfDownload(orderForPdf, "b")}
                             className="flex-1 min-w-[100px] gap-2"
                           >
                             <Download className="h-4 w-4" />
