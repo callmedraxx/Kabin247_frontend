@@ -134,6 +134,13 @@ interface Category {
   is_active: boolean
 }
 
+interface CatererAirport {
+  id: number
+  airport_name: string
+  airport_code_iata: string | null
+  airport_code_icao: string | null
+}
+
 interface Caterer {
   id: number
   caterer_name: string
@@ -143,6 +150,7 @@ interface Caterer {
   airport_code_icao: string | null
   time_zone: string | null
   additional_emails?: string[]
+  airports?: CatererAirport[]
   created_at: string
   updated_at: string
 }
@@ -259,7 +267,7 @@ function MenuItemsContent() {
   const fetchCaterers = React.useCallback(async () => {
     setIsLoadingCaterers(true)
     try {
-      const data: CaterersResponse = await apiCallJson<CaterersResponse>(`/caterers?limit=1000`)
+      const data: CaterersResponse = await apiCallJson<CaterersResponse>(`/caterers?limit=10000`)
       setCaterers(data.caterers || [])
     } catch (err) {
       console.warn("Error fetching caterers:", err)
@@ -417,11 +425,13 @@ function MenuItemsContent() {
       service_charge: undefined,
       is_active: true,
     })
+    fetchCaterers()
     setDrawerOpen(true)
   }
 
   // Handle edit
   const handleEdit = async (item: MenuItem) => {
+    fetchCaterers()
     try {
       const response = await fetch(`${API_BASE_URL}/menu-items/${item.id}`)
       
@@ -1601,17 +1611,15 @@ function MenuItemsContent() {
                                           <FormControl>
                                             <Combobox
                                               options={caterers.map((caterer) => {
-                                                const airportCodes = [
-                                                  caterer.airport_code_iata,
-                                                  caterer.airport_code_icao,
-                                                ].filter(Boolean).join("/")
+                                                const airportCodes = (caterer.airports && caterer.airports.length > 0)
+                                                  ? caterer.airports.map(a => a.airport_code_iata || a.airport_code_icao).filter(Boolean).join(", ")
+                                                  : [caterer.airport_code_iata, caterer.airport_code_icao].filter(Boolean).join("/")
                                                 const label = airportCodes
-                                                  ? `${airportCodes} - ${caterer.caterer_name}`
+                                                  ? `${caterer.caterer_name}  ·  ${airportCodes}`
                                                   : caterer.caterer_name
                                                 return {
                                                   value: caterer.id.toString(),
                                                   label,
-                                                  // Match POS behavior: searchable by name, airport codes, and caterer number
                                                   searchText: `${caterer.caterer_name} ${airportCodes} ${caterer.caterer_number || ""}`.toLowerCase(),
                                                 }
                                               })}

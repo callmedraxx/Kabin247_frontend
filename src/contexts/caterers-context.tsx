@@ -14,6 +14,13 @@ import {
 } from "@/lib/pwa/sync-queue"
 import { CACHE_DURATIONS } from "@/lib/pwa/types"
 
+interface CatererAirport {
+  id: number
+  airport_name: string
+  airport_code_iata: string | null
+  airport_code_icao: string | null
+}
+
 interface Caterer {
   id: number
   caterer_name: string
@@ -23,6 +30,7 @@ interface Caterer {
   airport_code_icao: string | null
   time_zone: string | null
   additional_emails?: string[]
+  airports?: CatererAirport[]
   created_at: string
   updated_at: string
 }
@@ -56,17 +64,13 @@ const CACHE_KEY = "caterers"
 
 function formatCatererOptions(caterers: Caterer[]): CatererOption[] {
   return caterers.map((caterer) => {
-    const airportCodes = [
-      caterer.airport_code_iata,
-      caterer.airport_code_icao,
-    ].filter(Boolean).join("/")
+    const airportCodes = (caterer.airports && caterer.airports.length > 0)
+      ? caterer.airports.map(a => a.airport_code_iata || a.airport_code_icao).filter(Boolean).join(", ")
+      : [caterer.airport_code_iata, caterer.airport_code_icao].filter(Boolean).join("/")
 
-    let label = ""
-    if (airportCodes) {
-      label = `${airportCodes} - ${caterer.caterer_name}`
-    } else {
-      label = caterer.caterer_name
-    }
+    const label = airportCodes
+      ? `${caterer.caterer_name}  ·  ${airportCodes}`
+      : caterer.caterer_name
 
     return {
       value: caterer.id.toString(),

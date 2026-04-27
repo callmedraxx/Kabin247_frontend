@@ -93,6 +93,13 @@ import { useCaterers } from "@/contexts/caterers-context"
 import { useOffline } from "@/contexts/offline-context"
 
 // Caterer data structure matching API response
+interface CatererAirport {
+  id: number
+  airport_name: string
+  airport_code_iata: string | null
+  airport_code_icao: string | null
+}
+
 interface Caterer {
   id: number
   caterer_name: string
@@ -102,6 +109,7 @@ interface Caterer {
   airport_code_icao: string | null
   time_zone: string | null
   additional_emails?: string[]
+  airports?: CatererAirport[]
   created_at: string
   updated_at: string
 }
@@ -145,8 +153,6 @@ const catererSchema = z.object({
   caterer_name: z.string().min(1, "Caterer name is required"),
   caterer_number: z.string().min(1, "Caterer number is required"),
   caterer_email: z.string().email("Invalid email address").optional().or(z.literal("")),
-  airport_code_iata: z.string().length(3, "IATA code must be exactly 3 characters").optional().or(z.literal("")),
-  airport_code_icao: z.string().length(4, "ICAO code must be exactly 4 characters").optional().or(z.literal("")),
   time_zone: z.string().optional(),
   additional_emails: z.array(z.string().email("Invalid email address")).optional(),
 })
@@ -191,7 +197,7 @@ function CaterersContent() {
   // Airport selection state
   const [airportsData, setAirportsData] = React.useState<Airport[]>([])
   const [airportOptions, setAirportOptions] = React.useState<{ value: string; label: string; searchText?: string }[]>([])
-  const [selectedAirport, setSelectedAirport] = React.useState<number | undefined>(undefined)
+  const [selectedAirports, setSelectedAirports] = React.useState<CatererAirport[]>([])
   const [airportSearch, setAirportSearch] = React.useState("")
   const [isLoadingAirports, setIsLoadingAirports] = React.useState(false)
   
@@ -211,8 +217,6 @@ function CaterersContent() {
       caterer_name: "",
       caterer_number: "",
       caterer_email: "",
-      airport_code_iata: "",
-      airport_code_icao: "",
       time_zone: "",
       additional_emails: [],
     },
@@ -383,15 +387,13 @@ function CaterersContent() {
   // Open add dialog
   const handleAdd = () => {
     setEditingCaterer(null)
-    setSelectedAirport(undefined)
+    setSelectedAirports([])
     setAdditionalEmails([])
     setNewEmailInput("")
     form.reset({
       caterer_name: "",
       caterer_number: "",
       caterer_email: "",
-      airport_code_iata: "",
-      airport_code_icao: "",
       time_zone: "",
       additional_emails: [],
     })
@@ -401,15 +403,13 @@ function CaterersContent() {
   // Open edit dialog
   const handleEdit = (caterer: Caterer) => {
     setEditingCaterer(caterer)
-    setSelectedAirport(undefined) // Reset airport selection on edit
+    setSelectedAirports(caterer.airports || [])
     setAdditionalEmails(caterer.additional_emails || [])
     setNewEmailInput("")
     form.reset({
       caterer_name: caterer.caterer_name,
       caterer_number: caterer.caterer_number,
       caterer_email: caterer.caterer_email || "",
-      airport_code_iata: caterer.airport_code_iata || "",
-      airport_code_icao: caterer.airport_code_icao || "",
       time_zone: caterer.time_zone || "",
       additional_emails: caterer.additional_emails || [],
     })
@@ -439,24 +439,23 @@ function CaterersContent() {
   // Handle save (create or update) with offline support
   const handleSave = async (values: CatererFormValues) => {
     try {
-      // Prepare body - only include non-empty optional fields
       const body: any = {
         caterer_name: values.caterer_name,
         caterer_number: values.caterer_number,
-        caterer_email: null,
-        airport_code_iata: null,
-        airport_code_icao: null,
+        caterer_email: values.caterer_email?.trim() || null,
+        time_zone: values.time_zone?.trim() || null,
+        airport_ids: selectedAirports.map(a => a.id),
       }
 
-      if (values.caterer_email && values.caterer_email.trim()) {
-        body.caterer_email = values.caterer_email.trim()
+      // Set airport_code_iata/icao from first selected airport for backward compat
+      if (selectedAirports.length > 0) {
+        body.airport_code_iata = selectedAirports[0].airport_code_iata || null
+        body.airport_code_icao = selectedAirports[0].airport_code_icao || null
+      } else {
+        body.airport_code_iata = null
+        body.airport_code_icao = null
       }
-      if (values.airport_code_iata && values.airport_code_iata.trim()) {
-        body.airport_code_iata = values.airport_code_iata.trim().toUpperCase()
-      }
-      if (values.airport_code_icao && values.airport_code_icao.trim()) {
-        body.airport_code_icao = values.airport_code_icao.trim().toUpperCase()
-      }
+
       if (additionalEmails.length > 0) {
         body.additional_emails = additionalEmails
       }
@@ -464,10 +463,8 @@ function CaterersContent() {
       let result: Caterer | null = null
 
       if (editingCaterer) {
-        // Update existing caterer using context
         result = await updateCaterer(editingCaterer.id, body)
       } else {
-        // Create new caterer using context
         result = await createCaterer(body)
       }
 
@@ -475,7 +472,6 @@ function CaterersContent() {
         throw new Error("Failed to save caterer")
       }
 
-      // Show appropriate toast based on offline status
       const isOfflineCreated = result.id < 0
       if (isOfflineCreated) {
         toast.success(editingCaterer ? "Caterer saved offline" : "Caterer created offline", {
@@ -489,7 +485,7 @@ function CaterersContent() {
 
       setDialogOpen(false)
       setEditingCaterer(null)
-      setSelectedAirport(undefined)
+      setSelectedAirports([])
       setAdditionalEmails([])
       setNewEmailInput("")
       form.reset()
@@ -926,13 +922,7 @@ function CaterersContent() {
                         <TableHead className="font-semibold">
                           <div className="flex items-center gap-2">
                             <Code className="h-4 w-4 text-muted-foreground" />
-                            IATA
-                          </div>
-                        </TableHead>
-                        <TableHead className="font-semibold">
-                          <div className="flex items-center gap-2">
-                            <Code className="h-4 w-4 text-muted-foreground" />
-                            ICAO
+                            Airports
                           </div>
                         </TableHead>
                         <TableHead className="font-semibold">
@@ -962,10 +952,7 @@ function CaterersContent() {
                               <Skeleton className="h-4 w-[200px]" />
                             </TableCell>
                             <TableCell>
-                              <Skeleton className="h-4 w-[60px]" />
-                            </TableCell>
-                            <TableCell>
-                              <Skeleton className="h-4 w-[60px]" />
+                              <Skeleton className="h-4 w-[120px]" />
                             </TableCell>
                             <TableCell>
                               <Skeleton className="h-4 w-[150px]" />
@@ -977,7 +964,7 @@ function CaterersContent() {
                         ))
                       ) : caterers.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={8} className="h-24 text-center">
+                          <TableCell colSpan={7} className="h-24 text-center">
                             <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
                               <ChefHat className="h-8 w-8 opacity-50" />
                               <p className="text-sm font-medium">No caterers found</p>
@@ -1034,19 +1021,18 @@ function CaterersContent() {
                                 <span className="text-muted-foreground">—</span>
                               )}
                             </TableCell>
-                            <TableCell>
-                              {caterer.airport_code_iata ? (
-                                <span className="inline-flex items-center px-2 py-1 rounded-md bg-primary/10 text-primary text-xs font-medium">
+                            <TableCell className="max-w-[200px]">
+                              {(caterer.airports && caterer.airports.length > 0) ? (
+                                <div className="flex flex-wrap gap-1">
+                                  {caterer.airports.map((a) => (
+                                    <span key={a.id} className="inline-flex items-center px-2 py-0.5 rounded-md bg-primary/10 text-primary text-xs font-mono font-medium">
+                                      {a.airport_code_iata || a.airport_code_icao || "—"}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : caterer.airport_code_iata ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-primary/10 text-primary text-xs font-mono font-medium">
                                   {caterer.airport_code_iata}
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground">—</span>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {caterer.airport_code_icao ? (
-                                <span className="inline-flex items-center px-2 py-1 rounded-md bg-secondary/50 text-foreground text-xs font-medium">
-                                  {caterer.airport_code_icao}
                                 </span>
                               ) : (
                                 <span className="text-muted-foreground">—</span>
@@ -1141,7 +1127,7 @@ function CaterersContent() {
             <Dialog open={dialogOpen} onOpenChange={(open) => {
               setDialogOpen(open)
               if (!open) {
-                setSelectedAirport(undefined)
+                setSelectedAirports([])
                 setEditingCaterer(null)
                 form.reset()
               }
@@ -1242,91 +1228,69 @@ function CaterersContent() {
                     <div className="space-y-4 pt-2">
                       <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                         <span className="flex h-5 w-5 items-center justify-center rounded bg-violet-500/10 text-violet-400">2</span>
-                        Airport Information
+                        Airports Served
                       </div>
-                      <div className="space-y-2">
-                        <FormLabel className="text-xs font-medium text-muted-foreground">Select Airport</FormLabel>
+
+                      {/* Selected airports as dismissible tags */}
+                      {selectedAirports.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {selectedAirports.map((airport) => {
+                            const code = airport.airport_code_iata || airport.airport_code_icao || "—"
+                            return (
+                              <div
+                                key={airport.id}
+                                className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-violet-500/10 border border-violet-500/20 text-sm font-medium text-violet-600 dark:text-violet-400"
+                              >
+                                <Code className="h-3 w-3" />
+                                <span className="font-mono">{code}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedAirports(prev => prev.filter(a => a.id !== airport.id))}
+                                  className="ml-0.5 text-violet-400 hover:text-destructive transition-colors"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+
+                      {/* Airport combobox — selecting adds to the tags list */}
+                      <div className="space-y-1">
+                        <FormLabel className="text-xs font-medium text-muted-foreground">
+                          {selectedAirports.length === 0 ? "Select Airport(s)" : "Add Another Airport"}
+                        </FormLabel>
                         <Combobox
-                          options={filteredAirportOptions}
-                          value={selectedAirport?.toString() || ""}
+                          options={filteredAirportOptions.filter(
+                            opt => !selectedAirports.some(a => a.id.toString() === opt.value)
+                          )}
+                          value=""
                           onValueChange={(value) => {
-                            if (value) {
-                              const airportId = parseInt(value)
-                              setSelectedAirport(airportId)
-                              const airport = airportsData.find((a) => a.id === airportId)
-                              if (airport) {
-                                form.setValue("airport_code_iata", airport.airport_code_iata || "")
-                                form.setValue("airport_code_icao", airport.airport_code_icao || "")
-                              }
-                            } else {
-                              setSelectedAirport(undefined)
-                              form.setValue("airport_code_iata", "")
-                              form.setValue("airport_code_icao", "")
+                            if (!value) return
+                            const airportId = parseInt(value)
+                            const airport = airportsData.find((a) => a.id === airportId)
+                            if (airport && !selectedAirports.some(a => a.id === airportId)) {
+                              setSelectedAirports(prev => [...prev, {
+                                id: airport.id,
+                                airport_name: airport.airport_name,
+                                airport_code_iata: airport.airport_code_iata,
+                                airport_code_icao: airport.airport_code_icao,
+                              }])
                             }
                           }}
-                          placeholder="Select airport to auto-fill codes..."
+                          placeholder="Search and select airports..."
                           searchPlaceholder="Search airports..."
                           emptyMessage="No airports found."
                           onSearchChange={setAirportSearch}
                           isLoading={isLoadingAirports}
                           onOpenChange={handleAirportComboboxOpen}
                         />
-                      </div>
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <FormField
-                          control={form.control}
-                          name="airport_code_iata"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs font-medium text-muted-foreground">
-                                Airport Code IATA
-                              </FormLabel>
-                              <FormControl>
-                                <Input
-                                  placeholder="e.g., JFK"
-                                  maxLength={3}
-                                  {...field}
-                                  readOnly={!!selectedAirport}
-                                  onChange={(e) => {
-                                    field.onChange(e.target.value.toUpperCase())
-                                  }}
-                                  className={`h-11 bg-muted/30 border-border/40 focus:border-violet-500/50 focus:ring-violet-500/20 font-mono uppercase ${selectedAirport ? "cursor-not-allowed opacity-60" : ""}`}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={form.control}
-                          name="airport_code_icao"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs font-medium text-muted-foreground">
-                                Airport Code ICAO
-                              </FormLabel>
-                              <FormControl>
-                                <Input
-                                  placeholder="e.g., KJFK"
-                                  maxLength={4}
-                                  {...field}
-                                  readOnly={!!selectedAirport}
-                                  onChange={(e) => {
-                                    field.onChange(e.target.value.toUpperCase())
-                                  }}
-                                  className={`h-11 bg-muted/30 border-border/40 focus:border-violet-500/50 focus:ring-violet-500/20 font-mono uppercase ${selectedAirport ? "cursor-not-allowed opacity-60" : ""}`}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                      {selectedAirport && (
                         <p className="text-xs text-muted-foreground">
-                          Airport codes are auto-filled from selected airport. Clear selection to enter manually.
+                          Add all airports this caterer serves. Each selection appears as a tag above.
                         </p>
-                      )}
+                      </div>
+
                       <FormField
                         control={form.control}
                         name="time_zone"
@@ -1416,7 +1380,7 @@ function CaterersContent() {
                         onClick={() => {
                           setDialogOpen(false)
                           setEditingCaterer(null)
-                          setSelectedAirport(undefined)
+                          setSelectedAirports([])
                           setAdditionalEmails([])
                           setNewEmailInput("")
                           form.reset()
@@ -1498,33 +1462,28 @@ function CaterersContent() {
                                 </p>
                               </div>
                             </div>
-                            <div className="grid gap-4 md:grid-cols-2">
-                              <div>
-                                <Label className="text-xs text-muted-foreground mb-1.5 block flex items-center gap-1">
-                                  <Code className="h-3 w-3" />
-                                  IATA Code
-                                </Label>
-                                {viewingCaterer.airport_code_iata ? (
-                                  <span className="inline-flex items-center px-3 py-1.5 rounded-md bg-primary/10 text-primary text-sm font-medium">
-                                    {viewingCaterer.airport_code_iata}
-                                  </span>
-                                ) : (
-                                  <span className="text-sm text-muted-foreground">Not provided</span>
-                                )}
-                              </div>
-                              <div>
-                                <Label className="text-xs text-muted-foreground mb-1.5 block flex items-center gap-1">
-                                  <Code className="h-3 w-3" />
-                                  ICAO Code
-                                </Label>
-                                {viewingCaterer.airport_code_icao ? (
-                                  <span className="inline-flex items-center px-3 py-1.5 rounded-md bg-secondary/50 text-foreground text-sm font-medium">
-                                    {viewingCaterer.airport_code_icao}
-                                  </span>
-                                ) : (
-                                  <span className="text-sm text-muted-foreground">Not provided</span>
-                                )}
-                              </div>
+                            <div>
+                              <Label className="text-xs text-muted-foreground mb-1.5 block flex items-center gap-1">
+                                <Code className="h-3 w-3" />
+                                Airports Served
+                              </Label>
+                              {(viewingCaterer.airports && viewingCaterer.airports.length > 0) ? (
+                                <div className="flex flex-wrap gap-2">
+                                  {viewingCaterer.airports.map((a) => (
+                                    <span key={a.id} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary/10 text-primary text-sm font-medium">
+                                      <span className="font-mono">{a.airport_code_iata || a.airport_code_icao}</span>
+                                      <span className="text-primary/60 text-xs">{a.airport_name}</span>
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : viewingCaterer.airport_code_iata ? (
+                                <span className="inline-flex items-center px-3 py-1.5 rounded-md bg-primary/10 text-primary text-sm font-medium font-mono">
+                                  {viewingCaterer.airport_code_iata}
+                                  {viewingCaterer.airport_code_icao && ` / ${viewingCaterer.airport_code_icao}`}
+                                </span>
+                              ) : (
+                                <span className="text-sm text-muted-foreground">No airports assigned</span>
+                              )}
                             </div>
                             <div>
                               <Label className="text-xs text-muted-foreground mb-1.5 block flex items-center gap-1">
